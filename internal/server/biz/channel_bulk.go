@@ -53,6 +53,7 @@ type BulkCreateChannelsInput struct {
 	Policies                *objects.ChannelPolicies
 	Settings                *objects.ChannelSettings
 	OrderingWeight          *int
+	Priority                *int
 	Remark                  *string
 }
 
@@ -116,6 +117,7 @@ func (svc *ChannelService) BulkCreateChannels(ctx context.Context, input BulkCre
 			Policies:                input.Policies,
 			Settings:                input.Settings,
 			OrderingWeight:          input.OrderingWeight,
+			Priority:                input.Priority,
 			Remark:                  input.Remark,
 		}
 

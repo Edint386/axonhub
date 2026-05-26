@@ -63,6 +63,8 @@ type channelModelCacheDiagnosticsChannelDB struct {
 	Status                  string                               `json:"status"`
 	UpdatedAt               string                               `json:"updatedAt"`
 	BaseURL                 string                               `json:"baseUrl"`
+	Priority                int                                  `json:"priority"`
+	OrderingWeight          int                                  `json:"orderingWeight"`
 	Tags                    []string                             `json:"tags"`
 	SupportedModels         []string                             `json:"supportedModels"`
 	DefaultTestModel        string                               `json:"defaultTestModel"`
@@ -76,6 +78,8 @@ type channelModelCacheDiagnosticsChannelCached struct {
 	Type                string                               `json:"type"`
 	Status              string                               `json:"status"`
 	UpdatedAt           string                               `json:"updatedAt"`
+	Priority            int                                  `json:"priority"`
+	OrderingWeight      int                                  `json:"orderingWeight"`
 	Tags                []string                             `json:"tags"`
 	SupportedModels     []string                             `json:"supportedModels"`
 	DefaultTestModel    string                               `json:"defaultTestModel"`
@@ -116,10 +120,12 @@ type channelModelCacheDiagnosticsModelView struct {
 }
 
 type channelModelCacheDiagnosticsCandidatePreview struct {
-	ChannelID   int                                 `json:"channelId"`
-	ChannelName string                              `json:"channelName"`
-	Priority    int                                 `json:"priority"`
-	Models      []channelModelCacheDiagnosticsEntry `json:"models"`
+	ChannelID       int                                 `json:"channelId"`
+	ChannelName     string                              `json:"channelName"`
+	Priority        int                                 `json:"priority"` // Backward-compatible alias for modelPriority.
+	ModelPriority   int                                 `json:"modelPriority"`
+	ChannelPriority int                                 `json:"channelPriority"`
+	Models          []channelModelCacheDiagnosticsEntry `json:"models"`
 }
 
 func normalizeDiagnosticsTargets(targets []DiagnosticsTarget) []DiagnosticsTarget {
@@ -146,8 +152,7 @@ func buildChannelModelCacheDiagnosticsExport(
 	targets = normalizeDiagnosticsTargets(targets)
 
 	channelsFromDB, err := client.Channel.Query().
-		Order(ent.Desc(channel.FieldOrderingWeight)).
-		Order(ent.Asc(channel.FieldID)).
+		Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight), ent.Asc(channel.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channels: %w", err)
@@ -223,6 +228,8 @@ func buildChannelDBSnapshot(ch *ent.Channel) channelModelCacheDiagnosticsChannel
 		Status:                  ch.Status.String(),
 		UpdatedAt:               ch.UpdatedAt.UTC().Format(time.RFC3339),
 		BaseURL:                 ch.BaseURL,
+		Priority:                ch.Priority,
+		OrderingWeight:          ch.OrderingWeight,
 		Tags:                    append([]string(nil), ch.Tags...),
 		SupportedModels:         append([]string(nil), ch.SupportedModels...),
 		DefaultTestModel:        ch.DefaultTestModel,
@@ -238,6 +245,8 @@ func buildChannelCachedSnapshot(ch *biz.Channel) channelModelCacheDiagnosticsCha
 		Type:                ch.Type.String(),
 		Status:              ch.Status.String(),
 		UpdatedAt:           ch.UpdatedAt.UTC().Format(time.RFC3339),
+		Priority:            ch.Priority,
+		OrderingWeight:      ch.OrderingWeight,
 		Tags:                append([]string(nil), ch.Tags...),
 		SupportedModels:     append([]string(nil), ch.SupportedModels...),
 		DefaultTestModel:    ch.DefaultTestModel,
@@ -335,9 +344,11 @@ func buildModelDiagnostics(
 func buildCandidatePreview(candidates []*orchestrator.ChannelModelsCandidate) []channelModelCacheDiagnosticsCandidatePreview {
 	return lo.Map(candidates, func(candidate *orchestrator.ChannelModelsCandidate, _ int) channelModelCacheDiagnosticsCandidatePreview {
 		return channelModelCacheDiagnosticsCandidatePreview{
-			ChannelID:   candidate.Channel.ID,
-			ChannelName: candidate.Channel.Name,
-			Priority:    candidate.Priority,
+			ChannelID:       candidate.Channel.ID,
+			ChannelName:     candidate.Channel.Name,
+			Priority:        candidate.Priority,
+			ModelPriority:   candidate.Priority,
+			ChannelPriority: candidate.Channel.Priority,
 			Models: lo.Map(candidate.Models, func(entry biz.ChannelModelEntry, _ int) channelModelCacheDiagnosticsEntry {
 				return channelModelCacheDiagnosticsEntry{
 					RequestModel: entry.RequestModel,

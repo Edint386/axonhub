@@ -111,6 +111,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			channel.FieldPolicies:                {Type: field.TypeJSON, Column: channel.FieldPolicies},
 			channel.FieldSettings:                {Type: field.TypeJSON, Column: channel.FieldSettings},
 			channel.FieldOrderingWeight:          {Type: field.TypeInt, Column: channel.FieldOrderingWeight},
+			channel.FieldPriority:                {Type: field.TypeInt, Column: channel.FieldPriority},
 			channel.FieldErrorMessage:            {Type: field.TypeString, Column: channel.FieldErrorMessage},
 			channel.FieldRemark:                  {Type: field.TypeString, Column: channel.FieldRemark},
 			channel.FieldEndpoints:               {Type: field.TypeJSON, Column: channel.FieldEndpoints},
@@ -1709,6 +1710,11 @@ func (f *ChannelFilter) WhereSettings(p entql.BytesP) {
 // WhereOrderingWeight applies the entql int predicate on the ordering_weight field.
 func (f *ChannelFilter) WhereOrderingWeight(p entql.IntP) {
 	f.Where(p.Field(channel.FieldOrderingWeight))
+}
+
+// WherePriority applies the entql int predicate on the priority field.
+func (f *ChannelFilter) WherePriority(p entql.IntP) {
+	f.Where(p.Field(channel.FieldPriority))
 }
 
 // WhereErrorMessage applies the entql string predicate on the error_message field.

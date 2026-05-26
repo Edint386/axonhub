@@ -248,7 +248,7 @@ func (_m *Channel) Node(ctx context.Context) (node *Node, err error) {
 	node = &Node{
 		ID:     _m.ID,
 		Type:   "Channel",
-		Fields: make([]*Field, 20),
+		Fields: make([]*Field, 21),
 		Edges:  make([]*Edge, 6),
 	}
 	var buf []byte
@@ -388,10 +388,18 @@ func (_m *Channel) Node(ctx context.Context) (node *Node, err error) {
 		Name:  "ordering_weight",
 		Value: string(buf),
 	}
-	if buf, err = json.Marshal(_m.ErrorMessage); err != nil {
+	if buf, err = json.Marshal(_m.Priority); err != nil {
 		return nil, err
 	}
 	node.Fields[17] = &Field{
+		Type:  "int",
+		Name:  "priority",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.ErrorMessage); err != nil {
+		return nil, err
+	}
+	node.Fields[18] = &Field{
 		Type:  "string",
 		Name:  "error_message",
 		Value: string(buf),
@@ -399,7 +407,7 @@ func (_m *Channel) Node(ctx context.Context) (node *Node, err error) {
 	if buf, err = json.Marshal(_m.Remark); err != nil {
 		return nil, err
 	}
-	node.Fields[18] = &Field{
+	node.Fields[19] = &Field{
 		Type:  "string",
 		Name:  "remark",
 		Value: string(buf),
@@ -407,7 +415,7 @@ func (_m *Channel) Node(ctx context.Context) (node *Node, err error) {
 	if buf, err = json.Marshal(_m.Endpoints); err != nil {
 		return nil, err
 	}
-	node.Fields[19] = &Field{
+	node.Fields[20] = &Field{
 		Type:  "[]objects.ChannelEndpoint",
 		Name:  "endpoints",
 		Value: string(buf),

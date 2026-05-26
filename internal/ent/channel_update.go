@@ -307,6 +307,27 @@ func (_u *ChannelUpdate) AddOrderingWeight(v int) *ChannelUpdate {
 	return _u
 }
 
+// SetPriority sets the "priority" field.
+func (_u *ChannelUpdate) SetPriority(v int) *ChannelUpdate {
+	_u.mutation.ResetPriority()
+	_u.mutation.SetPriority(v)
+	return _u
+}
+
+// SetNillablePriority sets the "priority" field if the given value is not nil.
+func (_u *ChannelUpdate) SetNillablePriority(v *int) *ChannelUpdate {
+	if v != nil {
+		_u.SetPriority(*v)
+	}
+	return _u
+}
+
+// AddPriority adds value to the "priority" field.
+func (_u *ChannelUpdate) AddPriority(v int) *ChannelUpdate {
+	_u.mutation.AddPriority(v)
+	return _u
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (_u *ChannelUpdate) SetErrorMessage(v string) *ChannelUpdate {
 	_u.mutation.SetErrorMessage(v)
@@ -747,6 +768,12 @@ func (_u *ChannelUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedOrderingWeight(); ok {
 		_spec.AddField(channel.FieldOrderingWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Priority(); ok {
+		_spec.SetField(channel.FieldPriority, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPriority(); ok {
+		_spec.AddField(channel.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(channel.FieldErrorMessage, field.TypeString, value)
@@ -1317,6 +1344,27 @@ func (_u *ChannelUpdateOne) AddOrderingWeight(v int) *ChannelUpdateOne {
 	return _u
 }
 
+// SetPriority sets the "priority" field.
+func (_u *ChannelUpdateOne) SetPriority(v int) *ChannelUpdateOne {
+	_u.mutation.ResetPriority()
+	_u.mutation.SetPriority(v)
+	return _u
+}
+
+// SetNillablePriority sets the "priority" field if the given value is not nil.
+func (_u *ChannelUpdateOne) SetNillablePriority(v *int) *ChannelUpdateOne {
+	if v != nil {
+		_u.SetPriority(*v)
+	}
+	return _u
+}
+
+// AddPriority adds value to the "priority" field.
+func (_u *ChannelUpdateOne) AddPriority(v int) *ChannelUpdateOne {
+	_u.mutation.AddPriority(v)
+	return _u
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (_u *ChannelUpdateOne) SetErrorMessage(v string) *ChannelUpdateOne {
 	_u.mutation.SetErrorMessage(v)
@@ -1787,6 +1835,12 @@ func (_u *ChannelUpdateOne) sqlSave(ctx context.Context) (_node *Channel, err er
 	}
 	if value, ok := _u.mutation.AddedOrderingWeight(); ok {
 		_spec.AddField(channel.FieldOrderingWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Priority(); ok {
+		_spec.SetField(channel.FieldPriority, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPriority(); ok {
+		_spec.AddField(channel.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(channel.FieldErrorMessage, field.TypeString, value)

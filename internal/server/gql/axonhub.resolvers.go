@@ -656,7 +656,7 @@ func (r *queryResolver) AllChannelSummarys(ctx context.Context, includeArchived 
 
 	channels, err := r.client.Channel.Query().
 		Where(channel.StatusIn(statusFilter...)).
-		Order(ent.Desc(channel.FieldOrderingWeight)).
+		Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight)).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channels: %w", err)

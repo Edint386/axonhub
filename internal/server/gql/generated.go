@@ -305,6 +305,7 @@ type ComplexityRoot struct {
 		Name                    func(childComplexity int) int
 		OrderingWeight          func(childComplexity int) int
 		Policies                func(childComplexity int) int
+		Priority                func(childComplexity int) int
 		ProviderQuotaStatus     func(childComplexity int) int
 		Remark                  func(childComplexity int) int
 		Requests                func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.RequestOrder, where *ent.RequestWhereInput) int
@@ -3099,6 +3100,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Channel.Policies(childComplexity), true
+	case "Channel.priority":
+		if e.complexity.Channel.Priority == nil {
+			break
+		}
+
+		return e.complexity.Channel.Priority(childComplexity), true
 	case "Channel.providerQuotaStatus":
 		if e.complexity.Channel.ProviderQuotaStatus == nil {
 			break
@@ -16367,6 +16374,8 @@ func (ec *executionContext) fieldContext_ApplyChannelOverrideTemplatePayload_cha
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -17340,6 +17349,8 @@ func (ec *executionContext) fieldContext_BulkImportChannelsResult_channels(_ con
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -17489,6 +17500,8 @@ func (ec *executionContext) fieldContext_BulkUpdateChannelOrderingResult_channel
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -18008,6 +18021,35 @@ func (ec *executionContext) _Channel_orderingWeight(ctx context.Context, field g
 }
 
 func (ec *executionContext) fieldContext_Channel_orderingWeight(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Channel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Channel_priority(ctx context.Context, field graphql.CollectedField, obj *ent.Channel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Channel_priority,
+		func(ctx context.Context) (any, error) {
+			return obj.Priority, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Channel_priority(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Channel",
 		Field:      field,
@@ -18899,6 +18941,8 @@ func (ec *executionContext) fieldContext_ChannelEdge_node(_ context.Context, fie
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -19603,6 +19647,8 @@ func (ec *executionContext) fieldContext_ChannelModelPrice_channel(_ context.Con
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -21479,6 +21525,8 @@ func (ec *executionContext) fieldContext_ChannelProbe_channel(_ context.Context,
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -23133,6 +23181,8 @@ func (ec *executionContext) fieldContext_ClearChannelOverrideTemplatesPayload_ch
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -27581,6 +27631,8 @@ func (ec *executionContext) fieldContext_ModelChannelConnection_channel(_ contex
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -28651,6 +28703,8 @@ func (ec *executionContext) fieldContext_Mutation_createChannel(ctx context.Cont
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -28754,6 +28808,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateChannels(ctx context
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -28857,6 +28913,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannel(ctx context.Cont
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -28960,6 +29018,8 @@ func (ec *executionContext) fieldContext_Mutation_saveChannelEndpoints(ctx conte
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -29063,6 +29123,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelStatus(ctx contex
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -38702,6 +38764,8 @@ func (ec *executionContext) fieldContext_ProviderQuotaStatus_channel(_ context.C
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -39941,6 +40005,8 @@ func (ec *executionContext) fieldContext_Query_allChannelSummarys(ctx context.Co
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -43681,6 +43747,8 @@ func (ec *executionContext) fieldContext_Request_channel(_ context.Context, fiel
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -44760,6 +44828,8 @@ func (ec *executionContext) fieldContext_RequestExecution_channel(_ context.Cont
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -51960,6 +52030,8 @@ func (ec *executionContext) fieldContext_UnassociatedChannel_channel(_ context.C
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -53037,6 +53109,8 @@ func (ec *executionContext) fieldContext_UsageLog_channel(_ context.Context, fie
 				return ec.fieldContext_Channel_settings(ctx, field)
 			case "orderingWeight":
 				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
 			case "errorMessage":
 				return ec.fieldContext_Channel_errorMessage(ctx, field)
 			case "remark":
@@ -59303,7 +59377,7 @@ func (ec *executionContext) unmarshalInputBulkCreateChannelsInput(ctx context.Co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"type", "name", "tags", "baseURL", "apiKeys", "supportedModels", "autoSyncSupportedModels", "defaultTestModel", "settings", "policies", "orderingWeight", "remark"}
+	fieldsInOrder := [...]string{"type", "name", "tags", "baseURL", "apiKeys", "supportedModels", "autoSyncSupportedModels", "defaultTestModel", "settings", "policies", "orderingWeight", "priority", "remark"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -59387,6 +59461,13 @@ func (ec *executionContext) unmarshalInputBulkCreateChannelsInput(ctx context.Co
 				return it, err
 			}
 			it.OrderingWeight = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
 		case "remark":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("remark"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -62412,7 +62493,7 @@ func (ec *executionContext) unmarshalInputChannelWhereInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "type", "typeNEQ", "typeIn", "typeNotIn", "baseURL", "baseURLNEQ", "baseURLIn", "baseURLNotIn", "baseURLGT", "baseURLGTE", "baseURLLT", "baseURLLTE", "baseURLContains", "baseURLHasPrefix", "baseURLHasSuffix", "baseURLIsNil", "baseURLNotNil", "baseURLEqualFold", "baseURLContainsFold", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "autoSyncSupportedModels", "autoSyncSupportedModelsNEQ", "autoSyncModelPattern", "autoSyncModelPatternNEQ", "autoSyncModelPatternIn", "autoSyncModelPatternNotIn", "autoSyncModelPatternGT", "autoSyncModelPatternGTE", "autoSyncModelPatternLT", "autoSyncModelPatternLTE", "autoSyncModelPatternContains", "autoSyncModelPatternHasPrefix", "autoSyncModelPatternHasSuffix", "autoSyncModelPatternIsNil", "autoSyncModelPatternNotNil", "autoSyncModelPatternEqualFold", "autoSyncModelPatternContainsFold", "defaultTestModel", "defaultTestModelNEQ", "defaultTestModelIn", "defaultTestModelNotIn", "defaultTestModelGT", "defaultTestModelGTE", "defaultTestModelLT", "defaultTestModelLTE", "defaultTestModelContains", "defaultTestModelHasPrefix", "defaultTestModelHasSuffix", "defaultTestModelEqualFold", "defaultTestModelContainsFold", "orderingWeight", "orderingWeightNEQ", "orderingWeightIn", "orderingWeightNotIn", "orderingWeightGT", "orderingWeightGTE", "orderingWeightLT", "orderingWeightLTE", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "remark", "remarkNEQ", "remarkIn", "remarkNotIn", "remarkGT", "remarkGTE", "remarkLT", "remarkLTE", "remarkContains", "remarkHasPrefix", "remarkHasSuffix", "remarkIsNil", "remarkNotNil", "remarkEqualFold", "remarkContainsFold", "hasRequests", "hasRequestsWith", "hasExecutions", "hasExecutionsWith", "hasUsageLogs", "hasUsageLogsWith", "hasChannelProbes", "hasChannelProbesWith", "hasChannelModelPrices", "hasChannelModelPricesWith", "hasProviderQuotaStatus", "hasProviderQuotaStatusWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "type", "typeNEQ", "typeIn", "typeNotIn", "baseURL", "baseURLNEQ", "baseURLIn", "baseURLNotIn", "baseURLGT", "baseURLGTE", "baseURLLT", "baseURLLTE", "baseURLContains", "baseURLHasPrefix", "baseURLHasSuffix", "baseURLIsNil", "baseURLNotNil", "baseURLEqualFold", "baseURLContainsFold", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "autoSyncSupportedModels", "autoSyncSupportedModelsNEQ", "autoSyncModelPattern", "autoSyncModelPatternNEQ", "autoSyncModelPatternIn", "autoSyncModelPatternNotIn", "autoSyncModelPatternGT", "autoSyncModelPatternGTE", "autoSyncModelPatternLT", "autoSyncModelPatternLTE", "autoSyncModelPatternContains", "autoSyncModelPatternHasPrefix", "autoSyncModelPatternHasSuffix", "autoSyncModelPatternIsNil", "autoSyncModelPatternNotNil", "autoSyncModelPatternEqualFold", "autoSyncModelPatternContainsFold", "defaultTestModel", "defaultTestModelNEQ", "defaultTestModelIn", "defaultTestModelNotIn", "defaultTestModelGT", "defaultTestModelGTE", "defaultTestModelLT", "defaultTestModelLTE", "defaultTestModelContains", "defaultTestModelHasPrefix", "defaultTestModelHasSuffix", "defaultTestModelEqualFold", "defaultTestModelContainsFold", "orderingWeight", "orderingWeightNEQ", "orderingWeightIn", "orderingWeightNotIn", "orderingWeightGT", "orderingWeightGTE", "orderingWeightLT", "orderingWeightLTE", "priority", "priorityNEQ", "priorityIn", "priorityNotIn", "priorityGT", "priorityGTE", "priorityLT", "priorityLTE", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "remark", "remarkNEQ", "remarkIn", "remarkNotIn", "remarkGT", "remarkGTE", "remarkLT", "remarkLTE", "remarkContains", "remarkHasPrefix", "remarkHasSuffix", "remarkIsNil", "remarkNotNil", "remarkEqualFold", "remarkContainsFold", "hasRequests", "hasRequestsWith", "hasExecutions", "hasExecutionsWith", "hasUsageLogs", "hasUsageLogsWith", "hasChannelProbes", "hasChannelProbesWith", "hasChannelModelPrices", "hasChannelModelPricesWith", "hasProviderQuotaStatus", "hasProviderQuotaStatusWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -63158,6 +63239,62 @@ func (ec *executionContext) unmarshalInputChannelWhereInput(ctx context.Context,
 				return it, err
 			}
 			it.OrderingWeightLTE = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
+		case "priorityNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityNEQ"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PriorityNEQ = data
+		case "priorityIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityIn"))
+			data, err := ec.unmarshalOInt2ᚕintᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PriorityIn = data
+		case "priorityNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityNotIn"))
+			data, err := ec.unmarshalOInt2ᚕintᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PriorityNotIn = data
+		case "priorityGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityGT"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PriorityGT = data
+		case "priorityGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityGTE"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PriorityGTE = data
+		case "priorityLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityLT"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PriorityLT = data
+		case "priorityLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityLTE"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PriorityLTE = data
 		case "errorMessage":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessage"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -63813,7 +63950,7 @@ func (ec *executionContext) unmarshalInputCreateChannelInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"type", "baseURL", "name", "credentials", "supportedModels", "manualModels", "autoSyncSupportedModels", "autoSyncModelPattern", "tags", "defaultTestModel", "policies", "settings", "orderingWeight", "remark", "endpoints"}
+	fieldsInOrder := [...]string{"type", "baseURL", "name", "credentials", "supportedModels", "manualModels", "autoSyncSupportedModels", "autoSyncModelPattern", "tags", "defaultTestModel", "policies", "settings", "orderingWeight", "priority", "remark", "endpoints"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -63911,6 +64048,13 @@ func (ec *executionContext) unmarshalInputCreateChannelInput(ctx context.Context
 				return it, err
 			}
 			it.OrderingWeight = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
 		case "remark":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("remark"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -77253,7 +77397,7 @@ func (ec *executionContext) unmarshalInputUpdateChannelInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"type", "baseURL", "clearBaseURL", "name", "status", "credentials", "supportedModels", "appendSupportedModels", "manualModels", "appendManualModels", "clearManualModels", "autoSyncSupportedModels", "autoSyncModelPattern", "clearAutoSyncModelPattern", "tags", "appendTags", "clearTags", "defaultTestModel", "policies", "clearPolicies", "settings", "clearSettings", "orderingWeight", "errorMessage", "clearErrorMessage", "remark", "clearRemark", "endpoints", "appendEndpoints", "clearEndpoints"}
+	fieldsInOrder := [...]string{"type", "baseURL", "clearBaseURL", "name", "status", "credentials", "supportedModels", "appendSupportedModels", "manualModels", "appendManualModels", "clearManualModels", "autoSyncSupportedModels", "autoSyncModelPattern", "clearAutoSyncModelPattern", "tags", "appendTags", "clearTags", "defaultTestModel", "policies", "clearPolicies", "settings", "clearSettings", "orderingWeight", "priority", "errorMessage", "clearErrorMessage", "remark", "clearRemark", "endpoints", "appendEndpoints", "clearEndpoints"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -77421,6 +77565,13 @@ func (ec *executionContext) unmarshalInputUpdateChannelInput(ctx context.Context
 				return it, err
 			}
 			it.OrderingWeight = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
 		case "errorMessage":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessage"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -84764,6 +84915,11 @@ func (ec *executionContext) _Channel(ctx context.Context, sel ast.SelectionSet, 
 			out.Values[i] = ec._Channel_settings(ctx, field, obj)
 		case "orderingWeight":
 			out.Values[i] = ec._Channel_orderingWeight(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "priority":
+			out.Values[i] = ec._Channel_priority(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

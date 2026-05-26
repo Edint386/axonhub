@@ -55,6 +55,8 @@ const (
 	FieldSettings = "settings"
 	// FieldOrderingWeight holds the string denoting the ordering_weight field in the database.
 	FieldOrderingWeight = "ordering_weight"
+	// FieldPriority holds the string denoting the priority field in the database.
+	FieldPriority = "priority"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
 	// FieldRemark holds the string denoting the remark field in the database.
@@ -140,6 +142,7 @@ var Columns = []string{
 	FieldPolicies,
 	FieldSettings,
 	FieldOrderingWeight,
+	FieldPriority,
 	FieldErrorMessage,
 	FieldRemark,
 	FieldEndpoints,
@@ -188,6 +191,8 @@ var (
 	DefaultSettings *objects.ChannelSettings
 	// DefaultOrderingWeight holds the default value on creation for the "ordering_weight" field.
 	DefaultOrderingWeight int
+	// DefaultPriority holds the default value on creation for the "priority" field.
+	DefaultPriority int
 	// DefaultEndpoints holds the default value on creation for the "endpoints" field.
 	DefaultEndpoints []objects.ChannelEndpoint
 )
@@ -356,6 +361,11 @@ func ByDefaultTestModel(opts ...sql.OrderTermOption) OrderOption {
 // ByOrderingWeight orders the results by the ordering_weight field.
 func ByOrderingWeight(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOrderingWeight, opts...).ToFunc()
+}
+
+// ByPriority orders the results by the priority field.
+func ByPriority(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPriority, opts...).ToFunc()
 }
 
 // ByErrorMessage orders the results by the error_message field.

@@ -947,6 +947,16 @@ type ChannelWhereInput struct {
 	OrderingWeightLT    *int  `json:"orderingWeightLT,omitempty"`
 	OrderingWeightLTE   *int  `json:"orderingWeightLTE,omitempty"`
 
+	// "priority" field predicates.
+	Priority      *int  `json:"priority,omitempty"`
+	PriorityNEQ   *int  `json:"priorityNEQ,omitempty"`
+	PriorityIn    []int `json:"priorityIn,omitempty"`
+	PriorityNotIn []int `json:"priorityNotIn,omitempty"`
+	PriorityGT    *int  `json:"priorityGT,omitempty"`
+	PriorityGTE   *int  `json:"priorityGTE,omitempty"`
+	PriorityLT    *int  `json:"priorityLT,omitempty"`
+	PriorityLTE   *int  `json:"priorityLTE,omitempty"`
+
 	// "error_message" field predicates.
 	ErrorMessage             *string  `json:"errorMessage,omitempty"`
 	ErrorMessageNEQ          *string  `json:"errorMessageNEQ,omitempty"`
@@ -1370,6 +1380,30 @@ func (i *ChannelWhereInput) P() (predicate.Channel, error) {
 	}
 	if i.OrderingWeightLTE != nil {
 		predicates = append(predicates, channel.OrderingWeightLTE(*i.OrderingWeightLTE))
+	}
+	if i.Priority != nil {
+		predicates = append(predicates, channel.PriorityEQ(*i.Priority))
+	}
+	if i.PriorityNEQ != nil {
+		predicates = append(predicates, channel.PriorityNEQ(*i.PriorityNEQ))
+	}
+	if len(i.PriorityIn) > 0 {
+		predicates = append(predicates, channel.PriorityIn(i.PriorityIn...))
+	}
+	if len(i.PriorityNotIn) > 0 {
+		predicates = append(predicates, channel.PriorityNotIn(i.PriorityNotIn...))
+	}
+	if i.PriorityGT != nil {
+		predicates = append(predicates, channel.PriorityGT(*i.PriorityGT))
+	}
+	if i.PriorityGTE != nil {
+		predicates = append(predicates, channel.PriorityGTE(*i.PriorityGTE))
+	}
+	if i.PriorityLT != nil {
+		predicates = append(predicates, channel.PriorityLT(*i.PriorityLT))
+	}
+	if i.PriorityLTE != nil {
+		predicates = append(predicates, channel.PriorityLTE(*i.PriorityLTE))
 	}
 	if i.ErrorMessage != nil {
 		predicates = append(predicates, channel.ErrorMessageEQ(*i.ErrorMessage))

@@ -531,6 +531,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             defaultTestModel: currentRow.defaultTestModel,
             tags: currentRow.tags || [],
             remark: currentRow.remark || '',
+            priority: currentRow.priority ?? 0,
             credentials: {
               // OAuth 类型 (codex/claudecode/antigravity) 的凭据存储在 apiKey 字段，不放入 apiKeys
               apiKey: currentRow.credentials?.apiKey || undefined,
@@ -555,6 +556,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               defaultTestModel: duplicateFromRow.defaultTestModel,
               tags: duplicateFromRow.tags || [],
               remark: duplicateFromRow.remark || '',
+              priority: duplicateFromRow.priority ?? 0,
               settings: duplicateFromRow.settings ?? undefined,
               credentials: {
                 // OAuth 类型 (codex/claudecode/antigravity) 的凭据存储在 apiKey 字段，不放入 apiKeys
@@ -584,6 +586,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               defaultTestModel: '',
               tags: [],
               remark: '',
+              priority: 0,
               settings: undefined,
             },
   });
@@ -2369,6 +2372,31 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                           )}
                         </div>
                       </FormItem>
+
+                      <FormField
+                        control={form.control}
+                        name='priority'
+                        render={({ field }) => (
+                          <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                            <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                              {t('channels.dialogs.fields.priority.label')}
+                            </FormLabel>
+                            <div className='space-y-1 md:col-span-6'>
+                              <Input
+                                type='number'
+                                inputMode='numeric'
+                                step='1'
+                                placeholder={t('channels.dialogs.fields.priority.placeholder')}
+                                {...field}
+                                value={field.value ?? ''}
+                                onChange={(e) => field.onChange(e.target.value)}
+                              />
+                              <p className='text-muted-foreground text-xs'>{t('channels.dialogs.fields.priority.description')}</p>
+                              <FormMessage />
+                            </div>
+                          </FormItem>
+                        )}
+                      />
 
                       <FormField
                         control={form.control}

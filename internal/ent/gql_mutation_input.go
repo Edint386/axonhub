@@ -146,6 +146,7 @@ type CreateChannelInput struct {
 	Policies                *objects.ChannelPolicies
 	Settings                *objects.ChannelSettings
 	OrderingWeight          *int
+	Priority                *int
 	Remark                  *string
 	Endpoints               []objects.ChannelEndpoint
 }
@@ -182,6 +183,9 @@ func (i *CreateChannelInput) Mutate(m *ChannelMutation) {
 	}
 	if v := i.OrderingWeight; v != nil {
 		m.SetOrderingWeight(*v)
+	}
+	if v := i.Priority; v != nil {
+		m.SetPriority(*v)
 	}
 	if v := i.Remark; v != nil {
 		m.SetRemark(*v)
@@ -222,6 +226,7 @@ type UpdateChannelInput struct {
 	ClearSettings             bool
 	Settings                  *objects.ChannelSettings
 	OrderingWeight            *int
+	Priority                  *int
 	ClearErrorMessage         bool
 	ErrorMessage              *string
 	ClearRemark               bool
@@ -301,6 +306,9 @@ func (i *UpdateChannelInput) Mutate(m *ChannelMutation) {
 	}
 	if v := i.OrderingWeight; v != nil {
 		m.SetOrderingWeight(*v)
+	}
+	if v := i.Priority; v != nil {
+		m.SetPriority(*v)
 	}
 	if i.ClearErrorMessage {
 		m.ClearErrorMessage()

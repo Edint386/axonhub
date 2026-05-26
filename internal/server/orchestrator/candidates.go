@@ -30,6 +30,11 @@ type ChannelModelsCandidate struct {
 	APIFormat string // selected endpoint API format for this candidate
 }
 
+type candidatePriorityTier struct {
+	modelPriority   int
+	channelPriority int
+}
+
 // resolvedAssociationCandidate keeps the association-level metadata produced by
 // resolution so request-dependent filtering can run afterwards without mixing
 // conditional logic into association matching.
@@ -654,28 +659,81 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 		requiredCount = 1 + retryPolicy.MaxChannelRetries
 	}
 
-	// Group candidates by priority first (lower priority value = higher priority)
-	priorityGroups := make(map[int][]*ChannelModelsCandidate)
+	// Group candidates by model association priority first, then channel priority.
+	// Model association priority keeps its existing semantics: lower value runs first.
+	// Channel priority uses the new channel-level semantics: higher value runs first.
+	priorityGroups := make(map[candidatePriorityTier][]*ChannelModelsCandidate)
 	for _, c := range candidates {
-		priorityGroups[c.Priority] = append(priorityGroups[c.Priority], c)
+		if c == nil || c.Channel == nil {
+			continue
+		}
+
+		tier := candidatePriorityTier{
+			modelPriority:   c.Priority,
+			channelPriority: c.Channel.Priority,
+		}
+		priorityGroups[tier] = append(priorityGroups[tier], c)
 	}
 
-	// Get sorted priority keys (lower priority value = higher priority)
+	// Get sorted priority tiers.
 	priorities := lo.Keys(priorityGroups)
 
-	// Sort priorities: lower value = higher priority
-	slices.Sort(priorities)
+	slices.SortFunc(priorities, func(a, b candidatePriorityTier) int {
+		if a.modelPriority < b.modelPriority {
+			return -1
+		}
+		if a.modelPriority > b.modelPriority {
+			return 1
+		}
+
+		if a.channelPriority > b.channelPriority {
+			return -1
+		}
+		if a.channelPriority < b.channelPriority {
+			return 1
+		}
+
+		return 0
+	})
 
 	// For each priority group, apply load balancing to sort candidates within the group
 	// Stop early if we have collected enough candidates
-	var result []*ChannelModelsCandidate
+	result := make([]*ChannelModelsCandidate, 0, min(requiredCount, len(candidates)))
+	deferredUnavailable := make([]*ChannelModelsCandidate, 0)
+	skippedByHardUnavailable := 0
+
+	useStream := req.Stream != nil && *req.Stream
+	ctx = contextWithQuotaLimitType(ctx, string(provider_quota.RequestModality(req.Image != nil)))
 
 	for _, p := range priorities {
-		group := priorityGroups[p]
+		group := make([]*ChannelModelsCandidate, 0, len(priorityGroups[p]))
+		for _, candidate := range priorityGroups[p] {
+			reason, unavailable := s.loadBalancer.HardUnavailableReason(ctx, candidate.Channel)
+			if unavailable {
+				skippedByHardUnavailable++
+				deferredUnavailable = append(deferredUnavailable, candidate)
+
+				if log.DebugEnabled(ctx) {
+					log.Debug(ctx, "deferred hard-unavailable channel candidate",
+						log.String("model", req.Model),
+						log.Int("channel_id", candidate.Channel.ID),
+						log.String("channel_name", candidate.Channel.Name),
+						log.Int("model_priority", p.modelPriority),
+						log.Int("channel_priority", p.channelPriority),
+						log.String("reason", reason))
+				}
+
+				continue
+			}
+
+			group = append(group, candidate)
+		}
+
+		if len(group) == 0 {
+			continue
+		}
 
 		// Apply load balancing to sort candidates within this priority group.
-		useStream := req.Stream != nil && *req.Stream
-		ctx = contextWithQuotaLimitType(ctx, string(provider_quota.RequestModality(req.Image != nil)))
 		sortedCandidates := s.loadBalancer.Sort(ctx, group, req.Model, useStream)
 
 		// Add candidates, but stop if we have enough
@@ -692,12 +750,23 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 		}
 	}
 
+	if len(result) < requiredCount && len(deferredUnavailable) > 0 {
+		remaining := requiredCount - len(result)
+		if len(deferredUnavailable) <= remaining {
+			result = append(result, deferredUnavailable...)
+		} else {
+			result = append(result, deferredUnavailable[:remaining]...)
+		}
+	}
+
 	if log.DebugEnabled(ctx) {
 		log.Debug(ctx, "Load balanced candidates for model",
 			log.String("model", req.Model),
 			log.Int("total_candidates", len(candidates)),
 			log.Int("sorted_candidates", len(result)),
-			log.Int("required_count", requiredCount))
+			log.Int("required_count", requiredCount),
+			log.Int("hard_unavailable_candidates", skippedByHardUnavailable),
+			log.Any("priority_tiers", priorities))
 	}
 
 	return result, nil

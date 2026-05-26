@@ -498,7 +498,7 @@ func (svc *ModelService) QueryModelChannelConnections(ctx context.Context, assoc
 	// Query all enabled/disabled channels
 	channels, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusIn(channel.StatusEnabled, channel.StatusDisabled)).
-		Order(channel.ByOrderingWeight(sql.OrderDesc())).
+		Order(channel.ByPriority(sql.OrderDesc()), channel.ByOrderingWeight(sql.OrderDesc())).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channels: %w", err)

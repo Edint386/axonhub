@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -148,12 +149,12 @@ func TestDefaultChannelSelector_Select_WithChannelFailures(t *testing.T) {
 	// Record failures for the high weight channel to test error awareness
 	for range 3 {
 		perf := &biz.PerformanceRecord{
-			ChannelID:        channels[0].ID,
-			StartTime:        time.Now().Add(-time.Minute),
-			EndTime:          time.Now(),
-			Success:          false,
-			RequestCompleted: true,
-			ResponseStatusCode:  500,
+			ChannelID:          channels[0].ID,
+			StartTime:          time.Now().Add(-time.Minute),
+			EndTime:            time.Now(),
+			Success:            false,
+			RequestCompleted:   true,
+			ResponseStatusCode: 500,
 		}
 		channelService.RecordPerformance(ctx, perf)
 	}
@@ -499,4 +500,74 @@ func TestLoadBalancedSelector_Select_SingleChannel(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	require.Equal(t, ch.ID, result[0].Channel.ID)
+}
+
+func TestLoadBalancedSelector_Select_ChannelPriorityWithinModelPriority(t *testing.T) {
+	ctx := context.Background()
+
+	candidates := []*ChannelModelsCandidate{
+		{
+			Channel:  &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "model-priority-wins", Priority: 1, OrderingWeight: 1}},
+			Priority: 0,
+		},
+		{
+			Channel:  &biz.Channel{Channel: &ent.Channel{ID: 2, Name: "channel-high", Priority: 100, OrderingWeight: 1}},
+			Priority: 1,
+		},
+		{
+			Channel:  &biz.Channel{Channel: &ent.Channel{ID: 3, Name: "channel-low", Priority: 1, OrderingWeight: 1}},
+			Priority: 1,
+		},
+	}
+
+	selector := WithLoadBalancedSelector(
+		&staticChannelSelector{candidates: candidates},
+		NewLoadBalancer(&mockSystemService{retryPolicy: &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 2}}, nil),
+		&mockSystemService{retryPolicy: &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 2}},
+	)
+
+	result, err := selector.Select(ctx, &llm.Request{Model: "gpt-4"})
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+	require.Equal(t, 1, result[0].Channel.ID, "model association priority should still be evaluated first")
+	require.Equal(t, 2, result[1].Channel.ID, "channel priority should sort descending inside the same model priority")
+	require.Equal(t, 3, result[2].Channel.ID)
+}
+
+func TestLoadBalancedSelector_Select_RateLimitedHighPriorityFallsThrough(t *testing.T) {
+	ctx := context.Background()
+
+	rpm := int64(1)
+	candidates := []*ChannelModelsCandidate{
+		{
+			Channel: &biz.Channel{Channel: &ent.Channel{
+				ID:       1,
+				Name:     "rate-limited-high-priority",
+				Priority: 100,
+				Settings: &objects.ChannelSettings{
+					RateLimit: &objects.ChannelRateLimit{RPM: &rpm},
+				},
+			}},
+			Priority: 0,
+		},
+		{
+			Channel:  &biz.Channel{Channel: &ent.Channel{ID: 2, Name: "fallback", Priority: 10}},
+			Priority: 0,
+		},
+	}
+
+	tracker := NewChannelRequestTracker()
+	tracker.IncrementRequest(1)
+	systemService := &mockSystemService{retryPolicy: &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 1}}
+	selector := WithLoadBalancedSelector(
+		&staticChannelSelector{candidates: candidates},
+		NewLoadBalancer(systemService, nil, NewRateLimitAwareStrategy(tracker, nil)),
+		systemService,
+	)
+
+	result, err := selector.Select(ctx, &llm.Request{Model: "gpt-4"})
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	require.Equal(t, 2, result[0].Channel.ID, "exhausted higher-priority channel should not block the next priority")
+	require.Equal(t, 1, result[1].Channel.ID, "exhausted channel remains as last-resort retry candidate")
 }

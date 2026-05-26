@@ -2030,6 +2030,8 @@ type ChannelMutation struct {
 	settings                     **objects.ChannelSettings
 	ordering_weight              *int
 	addordering_weight           *int
+	priority                     *int
+	addpriority                  *int
 	error_message                *string
 	remark                       *string
 	endpoints                    *[]objects.ChannelEndpoint
@@ -2997,6 +2999,62 @@ func (m *ChannelMutation) ResetOrderingWeight() {
 	m.addordering_weight = nil
 }
 
+// SetPriority sets the "priority" field.
+func (m *ChannelMutation) SetPriority(i int) {
+	m.priority = &i
+	m.addpriority = nil
+}
+
+// Priority returns the value of the "priority" field in the mutation.
+func (m *ChannelMutation) Priority() (r int, exists bool) {
+	v := m.priority
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPriority returns the old "priority" field's value of the Channel entity.
+// If the Channel object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMutation) OldPriority(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPriority is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPriority requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPriority: %w", err)
+	}
+	return oldValue.Priority, nil
+}
+
+// AddPriority adds i to the "priority" field.
+func (m *ChannelMutation) AddPriority(i int) {
+	if m.addpriority != nil {
+		*m.addpriority += i
+	} else {
+		m.addpriority = &i
+	}
+}
+
+// AddedPriority returns the value that was added to the "priority" field in this mutation.
+func (m *ChannelMutation) AddedPriority() (r int, exists bool) {
+	v := m.addpriority
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPriority resets all changes to the "priority" field.
+func (m *ChannelMutation) ResetPriority() {
+	m.priority = nil
+	m.addpriority = nil
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (m *ChannelMutation) SetErrorMessage(s string) {
 	m.error_message = &s
@@ -3503,7 +3561,7 @@ func (m *ChannelMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 22)
 	if m.created_at != nil {
 		fields = append(fields, channel.FieldCreatedAt)
 	}
@@ -3558,6 +3616,9 @@ func (m *ChannelMutation) Fields() []string {
 	if m.ordering_weight != nil {
 		fields = append(fields, channel.FieldOrderingWeight)
 	}
+	if m.priority != nil {
+		fields = append(fields, channel.FieldPriority)
+	}
 	if m.error_message != nil {
 		fields = append(fields, channel.FieldErrorMessage)
 	}
@@ -3611,6 +3672,8 @@ func (m *ChannelMutation) Field(name string) (ent.Value, bool) {
 		return m.Settings()
 	case channel.FieldOrderingWeight:
 		return m.OrderingWeight()
+	case channel.FieldPriority:
+		return m.Priority()
 	case channel.FieldErrorMessage:
 		return m.ErrorMessage()
 	case channel.FieldRemark:
@@ -3662,6 +3725,8 @@ func (m *ChannelMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldSettings(ctx)
 	case channel.FieldOrderingWeight:
 		return m.OldOrderingWeight(ctx)
+	case channel.FieldPriority:
+		return m.OldPriority(ctx)
 	case channel.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
 	case channel.FieldRemark:
@@ -3803,6 +3868,13 @@ func (m *ChannelMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetOrderingWeight(v)
 		return nil
+	case channel.FieldPriority:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPriority(v)
+		return nil
 	case channel.FieldErrorMessage:
 		v, ok := value.(string)
 		if !ok {
@@ -3838,6 +3910,9 @@ func (m *ChannelMutation) AddedFields() []string {
 	if m.addordering_weight != nil {
 		fields = append(fields, channel.FieldOrderingWeight)
 	}
+	if m.addpriority != nil {
+		fields = append(fields, channel.FieldPriority)
+	}
 	return fields
 }
 
@@ -3850,6 +3925,8 @@ func (m *ChannelMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDeletedAt()
 	case channel.FieldOrderingWeight:
 		return m.AddedOrderingWeight()
+	case channel.FieldPriority:
+		return m.AddedPriority()
 	}
 	return nil, false
 }
@@ -3872,6 +3949,13 @@ func (m *ChannelMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddOrderingWeight(v)
+		return nil
+	case channel.FieldPriority:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPriority(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Channel numeric field %s", name)
@@ -4016,6 +4100,9 @@ func (m *ChannelMutation) ResetField(name string) error {
 		return nil
 	case channel.FieldOrderingWeight:
 		m.ResetOrderingWeight()
+		return nil
+	case channel.FieldPriority:
+		m.ResetPriority()
 		return nil
 	case channel.FieldErrorMessage:
 		m.ResetErrorMessage()

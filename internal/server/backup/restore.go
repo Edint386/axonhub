@@ -610,7 +610,8 @@ func (svc *BackupService) restoreChannels(ctx context.Context, db *ent.Client, c
 					SetTags(chData.Tags).
 					SetDefaultTestModel(chData.DefaultTestModel).
 					SetSettings(chData.Settings).
-					SetOrderingWeight(chData.OrderingWeight)
+					SetOrderingWeight(chData.OrderingWeight).
+					SetPriority(chData.Priority)
 
 				if chData.Remark != nil {
 					update.SetRemark(*chData.Remark)
@@ -640,7 +641,8 @@ func (svc *BackupService) restoreChannels(ctx context.Context, db *ent.Client, c
 				SetTags(chData.Tags).
 				SetDefaultTestModel(chData.DefaultTestModel).
 				SetSettings(chData.Settings).
-				SetOrderingWeight(chData.OrderingWeight)
+				SetOrderingWeight(chData.OrderingWeight).
+				SetPriority(chData.Priority)
 
 			if chData.Remark != nil {
 				create.SetRemark(*chData.Remark)

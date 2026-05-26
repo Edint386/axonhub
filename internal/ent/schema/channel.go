@@ -137,6 +137,10 @@ func (Channel) Fields() []ent.Field {
 			Annotations(
 				entgql.OrderField("ORDERING_WEIGHT"),
 			),
+		field.Int("priority").Default(0).Comment("Channel selection priority; higher values are selected first within the same model association priority").
+			Annotations(
+				entgql.OrderField("PRIORITY"),
+			),
 		field.String("error_message").
 			Optional().Nillable().
 			Annotations(

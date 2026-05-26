@@ -219,7 +219,7 @@ func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []
 
 	entities, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusEQ(channel.StatusEnabled)).
-		Order(ent.Desc(channel.FieldOrderingWeight)).
+		Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight)).
 		All(ctx)
 	if err != nil {
 		return current, lastUpdate, false, err
@@ -475,6 +475,7 @@ func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateCh
 		SetSupportedModels(input.SupportedModels).
 		SetManualModels(input.ManualModels).
 		SetDefaultTestModel(input.DefaultTestModel).
+		SetNillablePriority(input.Priority).
 		SetNillableAutoSyncSupportedModels(input.AutoSyncSupportedModels).
 		SetNillableAutoSyncModelPattern(input.AutoSyncModelPattern).
 		SetSettings(input.Settings)
@@ -550,6 +551,7 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 		SetNillableName(input.Name).
 		SetNillableDefaultTestModel(input.DefaultTestModel).
 		SetNillableOrderingWeight(input.OrderingWeight).
+		SetNillablePriority(input.Priority).
 		SetNillableAutoSyncSupportedModels(input.AutoSyncSupportedModels)
 
 	if input.SupportedModels != nil {

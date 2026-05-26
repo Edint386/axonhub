@@ -100,6 +100,11 @@ func OrderingWeight(v int) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldOrderingWeight, v))
 }
 
+// Priority applies equality check predicate on the "priority" field. It's identical to PriorityEQ.
+func Priority(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldPriority, v))
+}
+
 // ErrorMessage applies equality check predicate on the "error_message" field. It's identical to ErrorMessageEQ.
 func ErrorMessage(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldErrorMessage, v))
@@ -648,6 +653,46 @@ func OrderingWeightLT(v int) predicate.Channel {
 // OrderingWeightLTE applies the LTE predicate on the "ordering_weight" field.
 func OrderingWeightLTE(v int) predicate.Channel {
 	return predicate.Channel(sql.FieldLTE(FieldOrderingWeight, v))
+}
+
+// PriorityEQ applies the EQ predicate on the "priority" field.
+func PriorityEQ(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldPriority, v))
+}
+
+// PriorityNEQ applies the NEQ predicate on the "priority" field.
+func PriorityNEQ(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldNEQ(FieldPriority, v))
+}
+
+// PriorityIn applies the In predicate on the "priority" field.
+func PriorityIn(vs ...int) predicate.Channel {
+	return predicate.Channel(sql.FieldIn(FieldPriority, vs...))
+}
+
+// PriorityNotIn applies the NotIn predicate on the "priority" field.
+func PriorityNotIn(vs ...int) predicate.Channel {
+	return predicate.Channel(sql.FieldNotIn(FieldPriority, vs...))
+}
+
+// PriorityGT applies the GT predicate on the "priority" field.
+func PriorityGT(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldGT(FieldPriority, v))
+}
+
+// PriorityGTE applies the GTE predicate on the "priority" field.
+func PriorityGTE(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldGTE(FieldPriority, v))
+}
+
+// PriorityLT applies the LT predicate on the "priority" field.
+func PriorityLT(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldLT(FieldPriority, v))
+}
+
+// PriorityLTE applies the LTE predicate on the "priority" field.
+func PriorityLTE(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldLTE(FieldPriority, v))
 }
 
 // ErrorMessageEQ applies the EQ predicate on the "error_message" field.

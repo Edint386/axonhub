@@ -107,6 +107,7 @@ const CREATE_CHANNEL_MUTATION = `
           passThroughBody
         }
       orderingWeight
+      priority
       remark
       defaultEndpoints {
         apiFormat
@@ -166,6 +167,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           passThroughBody
         }
       orderingWeight
+      priority
       remark
       defaultEndpoints {
         apiFormat
@@ -225,6 +227,7 @@ const UPDATE_CHANNEL_MUTATION = `
           passThroughBody
         }
       orderingWeight
+      priority
       errorMessage
       remark
       defaultEndpoints {
@@ -540,6 +543,7 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
         manualModels
         defaultTestModel
         orderingWeight
+        priority
         defaultEndpoints {
           apiFormat
           path
@@ -582,6 +586,7 @@ const ALL_CHANNEL_SUMMARYS_QUERY = `
       status
       baseURL
       orderingWeight
+      priority
       tags
       endpoints {
         apiFormat
@@ -705,6 +710,7 @@ const QUERY_CHANNELS_QUERY = `
             }
           }
           orderingWeight
+          priority
           errorMessage
           remark
           defaultEndpoints {
@@ -791,7 +797,7 @@ export function useSaveChannelModelPrices() {
 }
 
 // Use this hook to query channels with pagination and filtering
-export type ChannelOrderField = 'CREATED_AT' | 'UPDATED_AT' | 'ORDERING_WEIGHT' | 'NAME' | 'STATUS' | 'TYPE';
+export type ChannelOrderField = 'CREATED_AT' | 'UPDATED_AT' | 'ORDERING_WEIGHT' | 'PRIORITY' | 'NAME' | 'STATUS' | 'TYPE';
 
 export function useQueryChannels(
   variables?: {
@@ -920,6 +926,7 @@ export interface BulkCreateChannelsInput {
   settings?: ChannelSettings;
   policies?: ChannelPolicies;
   orderingWeight?: number;
+  priority?: number;
   remark?: string;
 }
 

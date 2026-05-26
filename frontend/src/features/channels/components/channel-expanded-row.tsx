@@ -52,6 +52,10 @@ export const ChannelExpandedRow = memo(({ channel, columnsLength, getApiFormatLa
               <h4 className='text-sm font-semibold'>{t('channels.expandedRow.additional')}</h4>
               <div className='space-y-2 text-sm'>
                 <div className='flex items-center justify-between'>
+                  <span className='text-muted-foreground'>{t('channels.columns.priority')}:</span>
+                  <span className='font-mono text-xs'>{channel.priority ?? 0}</span>
+                </div>
+                <div className='flex items-center justify-between'>
                   <span className='text-muted-foreground'>{t('channels.columns.orderingWeight')}:</span>
                   <span className='font-mono text-xs'>{channel.orderingWeight ?? 0}</span>
                 </div>

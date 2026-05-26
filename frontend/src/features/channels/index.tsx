@@ -111,6 +111,8 @@ function ChannelsContent() {
     }
     const [primary] = sorting;
     switch (primary.id) {
+      case 'priority':
+        return { field: 'PRIORITY', direction: primary.desc ? 'DESC' : 'ASC' } as const;
       case 'orderingWeight':
         return { field: 'ORDERING_WEIGHT', direction: primary.desc ? 'DESC' : 'ASC' } as const;
       case 'name':

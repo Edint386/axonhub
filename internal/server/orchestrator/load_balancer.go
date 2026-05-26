@@ -42,6 +42,12 @@ type LoadBalanceStrategy interface {
 	Name() string
 }
 
+// HardUnavailableStrategy lets a strategy mark a channel as unavailable for
+// the current request before priority-tier selection happens.
+type HardUnavailableStrategy interface {
+	HardUnavailable(ctx context.Context, channel *biz.Channel) (bool, string)
+}
+
 // StrategyScore holds the detailed scoring information from a single strategy.
 type StrategyScore struct {
 	// StrategyName is the name of the strategy
@@ -148,6 +154,32 @@ func NewLoadBalancer(systemService RetryPolicyProvider, selectionTracker Channel
 type candidateScore struct {
 	candidate *ChannelModelsCandidate
 	score     float64
+}
+
+func (lb *LoadBalancer) HardUnavailableReason(ctx context.Context, channel *biz.Channel) (string, bool) {
+	if lb == nil || channel == nil {
+		return "", false
+	}
+
+	for _, strategy := range lb.strategies {
+		checker, ok := strategy.(HardUnavailableStrategy)
+		if !ok {
+			continue
+		}
+
+		unavailable, reason := checker.HardUnavailable(ctx, channel)
+		if unavailable {
+			if reason == "" {
+				reason = strategy.Name()
+			} else {
+				reason = strategy.Name() + ":" + reason
+			}
+
+			return reason, true
+		}
+	}
+
+	return "", false
 }
 
 // Sort sorts candidates according to the configured strategies.

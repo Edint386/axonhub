@@ -1042,6 +1042,20 @@ var (
 			}
 		},
 	}
+	// ChannelOrderFieldPriority orders Channel by priority.
+	ChannelOrderFieldPriority = &ChannelOrderField{
+		Value: func(_m *Channel) (ent.Value, error) {
+			return _m.Priority, nil
+		},
+		column: channel.FieldPriority,
+		toTerm: channel.ByPriority,
+		toCursor: func(_m *Channel) Cursor {
+			return Cursor{
+				ID:    _m.ID,
+				Value: _m.Priority,
+			}
+		},
+	}
 )
 
 // String implement fmt.Stringer interface.
@@ -1060,6 +1074,8 @@ func (f ChannelOrderField) String() string {
 		str = "STATUS"
 	case ChannelOrderFieldOrderingWeight.column:
 		str = "ORDERING_WEIGHT"
+	case ChannelOrderFieldPriority.column:
+		str = "PRIORITY"
 	}
 	return str
 }
@@ -1088,6 +1104,8 @@ func (f *ChannelOrderField) UnmarshalGQL(v interface{}) error {
 		*f = *ChannelOrderFieldStatus
 	case "ORDERING_WEIGHT":
 		*f = *ChannelOrderFieldOrderingWeight
+	case "PRIORITY":
+		*f = *ChannelOrderFieldPriority
 	default:
 		return fmt.Errorf("%s is not a valid ChannelOrderField", str)
 	}

@@ -818,6 +818,11 @@ func (_q *ChannelQuery) collectField(ctx context.Context, oneNode bool, opCtx *g
 				selectedFields = append(selectedFields, channel.FieldOrderingWeight)
 				fieldSeen[channel.FieldOrderingWeight] = struct{}{}
 			}
+		case "priority":
+			if _, ok := fieldSeen[channel.FieldPriority]; !ok {
+				selectedFields = append(selectedFields, channel.FieldPriority)
+				fieldSeen[channel.FieldPriority] = struct{}{}
+			}
 		case "errorMessage":
 			if _, ok := fieldSeen[channel.FieldErrorMessage]; !ok {
 				selectedFields = append(selectedFields, channel.FieldErrorMessage)

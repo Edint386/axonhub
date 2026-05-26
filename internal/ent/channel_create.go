@@ -209,6 +209,20 @@ func (_c *ChannelCreate) SetNillableOrderingWeight(v *int) *ChannelCreate {
 	return _c
 }
 
+// SetPriority sets the "priority" field.
+func (_c *ChannelCreate) SetPriority(v int) *ChannelCreate {
+	_c.mutation.SetPriority(v)
+	return _c
+}
+
+// SetNillablePriority sets the "priority" field if the given value is not nil.
+func (_c *ChannelCreate) SetNillablePriority(v *int) *ChannelCreate {
+	if v != nil {
+		_c.SetPriority(*v)
+	}
+	return _c
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (_c *ChannelCreate) SetErrorMessage(v string) *ChannelCreate {
 	_c.mutation.SetErrorMessage(v)
@@ -428,6 +442,10 @@ func (_c *ChannelCreate) defaults() error {
 		v := channel.DefaultOrderingWeight
 		_c.mutation.SetOrderingWeight(v)
 	}
+	if _, ok := _c.mutation.Priority(); !ok {
+		v := channel.DefaultPriority
+		_c.mutation.SetPriority(v)
+	}
 	if _, ok := _c.mutation.Endpoints(); !ok {
 		v := channel.DefaultEndpoints
 		_c.mutation.SetEndpoints(v)
@@ -473,6 +491,9 @@ func (_c *ChannelCreate) check() error {
 	}
 	if _, ok := _c.mutation.OrderingWeight(); !ok {
 		return &ValidationError{Name: "ordering_weight", err: errors.New(`ent: missing required field "Channel.ordering_weight"`)}
+	}
+	if _, ok := _c.mutation.Priority(); !ok {
+		return &ValidationError{Name: "priority", err: errors.New(`ent: missing required field "Channel.priority"`)}
 	}
 	return nil
 }
@@ -572,6 +593,10 @@ func (_c *ChannelCreate) createSpec() (*Channel, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.OrderingWeight(); ok {
 		_spec.SetField(channel.FieldOrderingWeight, field.TypeInt, value)
 		_node.OrderingWeight = value
+	}
+	if value, ok := _c.mutation.Priority(); ok {
+		_spec.SetField(channel.FieldPriority, field.TypeInt, value)
+		_node.Priority = value
 	}
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(channel.FieldErrorMessage, field.TypeString, value)
@@ -991,6 +1016,24 @@ func (u *ChannelUpsert) AddOrderingWeight(v int) *ChannelUpsert {
 	return u
 }
 
+// SetPriority sets the "priority" field.
+func (u *ChannelUpsert) SetPriority(v int) *ChannelUpsert {
+	u.Set(channel.FieldPriority, v)
+	return u
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *ChannelUpsert) UpdatePriority() *ChannelUpsert {
+	u.SetExcluded(channel.FieldPriority)
+	return u
+}
+
+// AddPriority adds v to the "priority" field.
+func (u *ChannelUpsert) AddPriority(v int) *ChannelUpsert {
+	u.Add(channel.FieldPriority, v)
+	return u
+}
+
 // SetErrorMessage sets the "error_message" field.
 func (u *ChannelUpsert) SetErrorMessage(v string) *ChannelUpsert {
 	u.Set(channel.FieldErrorMessage, v)
@@ -1388,6 +1431,27 @@ func (u *ChannelUpsertOne) AddOrderingWeight(v int) *ChannelUpsertOne {
 func (u *ChannelUpsertOne) UpdateOrderingWeight() *ChannelUpsertOne {
 	return u.Update(func(s *ChannelUpsert) {
 		s.UpdateOrderingWeight()
+	})
+}
+
+// SetPriority sets the "priority" field.
+func (u *ChannelUpsertOne) SetPriority(v int) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetPriority(v)
+	})
+}
+
+// AddPriority adds v to the "priority" field.
+func (u *ChannelUpsertOne) AddPriority(v int) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.AddPriority(v)
+	})
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *ChannelUpsertOne) UpdatePriority() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdatePriority()
 	})
 }
 
@@ -1963,6 +2027,27 @@ func (u *ChannelUpsertBulk) AddOrderingWeight(v int) *ChannelUpsertBulk {
 func (u *ChannelUpsertBulk) UpdateOrderingWeight() *ChannelUpsertBulk {
 	return u.Update(func(s *ChannelUpsert) {
 		s.UpdateOrderingWeight()
+	})
+}
+
+// SetPriority sets the "priority" field.
+func (u *ChannelUpsertBulk) SetPriority(v int) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetPriority(v)
+	})
+}
+
+// AddPriority adds v to the "priority" field.
+func (u *ChannelUpsertBulk) AddPriority(v int) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.AddPriority(v)
+	})
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *ChannelUpsertBulk) UpdatePriority() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdatePriority()
 	})
 }
 

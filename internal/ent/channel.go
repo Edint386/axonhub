@@ -56,6 +56,8 @@ type Channel struct {
 	Settings *objects.ChannelSettings `json:"settings,omitempty"`
 	// Ordering weight for display sorting
 	OrderingWeight int `json:"ordering_weight,omitempty"`
+	// Channel selection priority; higher values are selected first within the same model association priority
+	Priority int `json:"priority,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// User-defined remark or note for the channel
@@ -160,7 +162,7 @@ func (*Channel) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case channel.FieldAutoSyncSupportedModels:
 			values[i] = new(sql.NullBool)
-		case channel.FieldID, channel.FieldDeletedAt, channel.FieldOrderingWeight:
+		case channel.FieldID, channel.FieldDeletedAt, channel.FieldOrderingWeight, channel.FieldPriority:
 			values[i] = new(sql.NullInt64)
 		case channel.FieldType, channel.FieldBaseURL, channel.FieldName, channel.FieldStatus, channel.FieldAutoSyncModelPattern, channel.FieldDefaultTestModel, channel.FieldErrorMessage, channel.FieldRemark:
 			values[i] = new(sql.NullString)
@@ -309,6 +311,12 @@ func (_m *Channel) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.OrderingWeight = int(value.Int64)
 			}
+		case channel.FieldPriority:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field priority", values[i])
+			} else if value.Valid {
+				_m.Priority = int(value.Int64)
+			}
 		case channel.FieldErrorMessage:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field error_message", values[i])
@@ -448,6 +456,9 @@ func (_m *Channel) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("ordering_weight=")
 	builder.WriteString(fmt.Sprintf("%v", _m.OrderingWeight))
+	builder.WriteString(", ")
+	builder.WriteString("priority=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Priority))
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")

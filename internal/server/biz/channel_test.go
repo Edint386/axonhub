@@ -227,6 +227,7 @@ func TestChannelService_CreateChannel_PersistsAutoSyncModelPatternAndManualModel
 		AutoSyncModelPattern:    new("^gpt-"),
 		Tags:                    []string{"tag-1"},
 		DefaultTestModel:        "gpt-4",
+		Priority:                lo.ToPtr(42),
 	})
 	require.NoError(t, err)
 
@@ -235,6 +236,7 @@ func TestChannelService_CreateChannel_PersistsAutoSyncModelPatternAndManualModel
 	require.Equal(t, []string{"manual-1"}, got.ManualModels)
 	require.Equal(t, "^gpt-", got.AutoSyncModelPattern)
 	require.Equal(t, true, got.AutoSyncSupportedModels)
+	require.Equal(t, 42, got.Priority)
 }
 
 func setupTestChannelService(t *testing.T) (*ChannelService, *ent.Client) {

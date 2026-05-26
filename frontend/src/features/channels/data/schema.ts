@@ -283,6 +283,7 @@ export const channelSchema = z.object({
   defaultTestModel: z.string(),
   settings: channelSettingsSchema.optional().nullable(),
   orderingWeight: z.number().optional().default(0),
+  priority: z.number().optional().default(0),
   errorMessage: z.string().optional().nullable(),
   remark: z.string().optional().nullable(),
   allModelEntries: z.array(channelModelEntrySchema).optional(),
@@ -319,6 +320,25 @@ export const testChannelAPIKeysPayloadSchema = z.object({
   results: z.array(testAPIKeyResultSchema),
 });
 export type TestChannelAPIKeysPayload = z.infer<typeof testChannelAPIKeysPayloadSchema>;
+
+const optionalIntInputSchema = z.preprocess((value) => {
+  if (value === null || typeof value === 'undefined') {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return undefined;
+    }
+
+    if (/^[+-]?\d+$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+  }
+
+  return value;
+}, z.number().int().optional());
 
 // Pricing Schemas
 export const pricingModeSchema = z.enum(['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume']);
@@ -437,6 +457,7 @@ export const createChannelInputSchema = z
     defaultTestModel: z.string().min(1, 'Please select a default test model'),
     remark: z.string().optional(),
     orderingWeight: z.number().int().optional(),
+    priority: optionalIntInputSchema,
     settings: channelSettingsSchema.optional(),
     endpoints: z.array(channelEndpointSchema).optional(),
     credentials: z.object({
@@ -542,6 +563,7 @@ export const updateChannelInputSchema = z
       })
       .optional(),
     orderingWeight: z.number().optional(),
+    priority: optionalIntInputSchema,
   })
   .superRefine((data, ctx) => {
     const effectiveType = data.type;
@@ -669,6 +691,7 @@ export const channelOrderingItemSchema = z.object({
   status: channelStatusSchema,
   baseURL: z.string(),
   orderingWeight: z.number(),
+  priority: z.number(),
   tags: z.array(z.string()).optional().default([]).nullable(),
   supportedModels: z.array(z.string()).optional().default([]).nullable(),
   allModelEntries: z.array(channelModelEntrySchema).optional(),
@@ -692,6 +715,7 @@ export const channelSummarySchema = z.object({
   status: channelStatusSchema,
   baseURL: z.string(),
   orderingWeight: z.number(),
+  priority: z.number(),
   tags: z.array(z.string()).optional().default([]).nullable(),
   allModelEntries: z.array(channelModelEntrySchema).optional().default([]),
 });

@@ -421,6 +421,10 @@ type Channel implements Node {
   Ordering weight for display sorting
   """
   orderingWeight: Int!
+  """
+  Channel selection priority; higher values are selected first within the same model association priority
+  """
+  priority: Int!
   errorMessage: String
   """
   User-defined remark or note for the channel
@@ -949,6 +953,7 @@ enum ChannelOrderField {
   NAME
   STATUS
   ORDERING_WEIGHT
+  PRIORITY
 }
 type ChannelOverrideTemplate implements Node {
   id: ID!
@@ -1449,6 +1454,17 @@ input ChannelWhereInput {
   orderingWeightLT: Int
   orderingWeightLTE: Int
   """
+  priority field predicates
+  """
+  priority: Int
+  priorityNEQ: Int
+  priorityIn: [Int!]
+  priorityNotIn: [Int!]
+  priorityGT: Int
+  priorityGTE: Int
+  priorityLT: Int
+  priorityLTE: Int
+  """
   error_message field predicates
   """
   errorMessage: String
@@ -1570,6 +1586,10 @@ input CreateChannelInput {
   Ordering weight for display sorting
   """
   orderingWeight: Int
+  """
+  Channel selection priority; higher values are selected first within the same model association priority
+  """
+  priority: Int
   """
   User-defined remark or note for the channel
   """
@@ -5981,6 +6001,10 @@ input UpdateChannelInput {
   Ordering weight for display sorting
   """
   orderingWeight: Int
+  """
+  Channel selection priority; higher values are selected first within the same model association priority
+  """
+  priority: Int
   errorMessage: String
   clearErrorMessage: Boolean
   """
