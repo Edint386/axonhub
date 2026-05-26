@@ -46,6 +46,11 @@ func (s *RateLimitAwareStrategy) Name() string {
 	return "RateLimitAware"
 }
 
+func (s *RateLimitAwareStrategy) HardUnavailable(ctx context.Context, channel *biz.Channel) (bool, string) {
+	_, reason := s.score(channel, nil)
+	return reason != "", reason
+}
+
 // Score is the production-path scorer with minimal overhead.
 func (s *RateLimitAwareStrategy) Score(ctx context.Context, channel *biz.Channel) float64 {
 	score, _ := s.score(channel, nil)
@@ -214,7 +219,15 @@ func (s *RateLimitAwareStrategy) scoreConcurrency(channel *biz.Channel, details 
 
 	// Defensive: a stale entry can briefly outlive a "limit disabled" config
 	// change before the next GetOrCreate call drops it. Treat it as unlimited
-	// rather than dereferencing nil rate-limit pointers.
+	// rather than dereferencing nil settings or rate-limit pointers.
+	if channel.Settings == nil {
+		if details != nil {
+			details["concurrency_reason"] = "channel_limiter_disabled"
+		}
+
+		return s.maxScore, false
+	}
+
 	rl := channel.Settings.RateLimit
 	if rl == nil || rl.MaxConcurrent == nil || *rl.MaxConcurrent <= 0 {
 		if details != nil {

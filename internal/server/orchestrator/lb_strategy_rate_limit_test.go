@@ -287,33 +287,58 @@ func TestRateLimitAwareStrategy_Score_HardMode_Monotonic(t *testing.T) {
 }
 
 func TestRateLimitAwareStrategy_Score_StaleEntryAfterLimiterDisabled(t *testing.T) {
-	tracker := NewChannelRequestTracker()
-	mgr := NewChannelLimiterManager()
-	strategy := NewRateLimitAwareStrategy(tracker, mgr)
-
-	channel := &biz.Channel{
-		Channel: &ent.Channel{
-			ID:   1,
-			Name: "test",
-			Settings: &objects.ChannelSettings{
-				RateLimit: &objects.ChannelRateLimit{
-					MaxConcurrent: lo.ToPtr(int64(5)),
-				},
+	tests := []struct {
+		name   string
+		mutate func(channel *biz.Channel)
+	}{
+		{
+			name: "rate_limit_nil",
+			mutate: func(channel *biz.Channel) {
+				channel.Settings.RateLimit = nil
+			},
+		},
+		{
+			name: "settings_nil",
+			mutate: func(channel *biz.Channel) {
+				channel.Settings = nil
 			},
 		},
 	}
 
-	require.NotNil(t, mgr.GetOrCreate(channel))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := NewChannelRequestTracker()
+			mgr := NewChannelLimiterManager()
+			strategy := NewRateLimitAwareStrategy(tracker, mgr)
 
-	// Simulate the user clearing the rate limit between GetOrCreate (which
-	// admits a request) and the next Score call (which still sees the
-	// stale manager entry until the next admission triggers cleanup).
-	channel.Settings.RateLimit = nil
+			channel := &biz.Channel{
+				Channel: &ent.Channel{
+					ID:   1,
+					Name: "test",
+					Settings: &objects.ChannelSettings{
+						RateLimit: &objects.ChannelRateLimit{
+							MaxConcurrent: lo.ToPtr(int64(5)),
+						},
+					},
+				},
+			}
 
-	ctx := context.Background()
+			require.NotNil(t, mgr.GetOrCreate(channel))
 
-	// Must not panic and must treat the channel as unlimited.
-	assert.Equal(t, 100.0, strategy.Score(ctx, channel))
+			// Simulate the user clearing rate-limit config after a limiter
+			// entry already exists. The next admission will drop the stale
+			// entry, but scoring may observe it first.
+			tt.mutate(channel)
+
+			ctx := context.Background()
+
+			// Must not panic and must treat the channel as unlimited.
+			assert.Equal(t, 100.0, strategy.Score(ctx, channel))
+			unavailable, reason := strategy.HardUnavailable(ctx, channel)
+			assert.False(t, unavailable)
+			assert.Empty(t, reason)
+		})
+	}
 }
 
 func TestRateLimitAwareStrategy_Score_MinOfRPMAndConcurrency(t *testing.T) {
