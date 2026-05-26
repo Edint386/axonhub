@@ -161,5 +161,5 @@ locales_backup
 config.schema.json
 *.db-shm
 *.db-wal
-*.agent/summary
+.agent/
 .factory
