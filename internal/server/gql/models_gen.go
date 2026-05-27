@@ -132,6 +132,13 @@ type ChannelPerformanceStat struct {
 	RequestCount int      `json:"requestCount"`
 }
 
+type ChannelQuotaUsage struct {
+	ChannelID objects.GUID         `json:"channelID"`
+	Quota     *objects.APIKeyQuota `json:"quota"`
+	Window    *APIKeyQuotaWindow   `json:"window"`
+	Usage     *APIKeyQuotaUsage    `json:"usage"`
+}
+
 type ChannelSuccessRate struct {
 	ChannelID       objects.GUID `json:"channelId"`
 	ChannelName     string       `json:"channelName"`

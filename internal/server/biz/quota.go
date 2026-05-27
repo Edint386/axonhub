@@ -47,6 +47,48 @@ func NewQuotaService(entClient *ent.Client, systemService *SystemService) *Quota
 }
 
 func (s *QuotaService) CheckAPIKeyQuota(ctx context.Context, apiKeyID int, quota *objects.APIKeyQuota) (QuotaCheckResult, error) {
+	return s.checkQuota(ctx, quota, "quota-api-key", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID)), window)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		usageAgg, err := s.usageAgg(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID)), window, needTokens, needCost)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		return QuotaUsage{
+			RequestCount: reqCount,
+			TotalTokens:  usageAgg.TotalTokens,
+			TotalCost:    usageAgg.TotalCost,
+		}, nil
+	})
+}
+
+func (s *QuotaService) CheckChannelQuota(ctx context.Context, channelID int, quota *objects.APIKeyQuota) (QuotaCheckResult, error) {
+	return s.checkQuota(ctx, quota, "quota-channel", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.ChannelIDEQ(channelID)), window)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		usageAgg, err := s.usageAgg(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.ChannelIDEQ(channelID)), window, needTokens, needCost)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		return QuotaUsage{
+			RequestCount: reqCount,
+			TotalTokens:  usageAgg.TotalTokens,
+			TotalCost:    usageAgg.TotalCost,
+		}, nil
+	})
+}
+
+type quotaUsageLoader func(ctx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error)
+
+func (s *QuotaService) checkQuota(ctx context.Context, quota *objects.APIKeyQuota, bypassReason string, loadUsage quotaUsageLoader) (QuotaCheckResult, error) {
 	if quota == nil {
 		return QuotaCheckResult{Allowed: true}, nil
 	}
@@ -58,49 +100,33 @@ func (s *QuotaService) CheckAPIKeyQuota(ctx context.Context, apiKeyID int, quota
 		return QuotaCheckResult{}, err
 	}
 
-	if quota.Requests != nil {
-		reqCount, err := authz.RunWithSystemBypass(ctx, "quota-request-count", func(bypassCtx context.Context) (int64, error) {
-			return s.requestCount(bypassCtx, apiKeyID, window)
-		})
-		if err != nil {
-			return QuotaCheckResult{}, err
-		}
-
-		if reqCount >= *quota.Requests {
-			return QuotaCheckResult{
-				Allowed: false,
-				Message: fmt.Sprintf("requests quota exceeded: %d/%d", reqCount, *quota.Requests),
-				Window:  window,
-			}, nil
-		}
-	}
-
-	if quota.TotalTokens == nil && quota.Cost == nil {
-		return QuotaCheckResult{
-			Allowed: true,
-			Window:  window,
-		}, nil
-	}
-
-	usageAgg, err := authz.RunWithSystemBypass(ctx, "quota-usage-agg", func(bypassCtx context.Context) (usageAggResult, error) {
-		return s.usageAgg(bypassCtx, apiKeyID, window, quota.TotalTokens != nil, quota.Cost != nil)
+	usage, err := authz.RunWithSystemBypass(ctx, bypassReason, func(bypassCtx context.Context) (QuotaUsage, error) {
+		return loadUsage(bypassCtx, window, quota.TotalTokens != nil, quota.Cost != nil)
 	})
 	if err != nil {
 		return QuotaCheckResult{}, err
 	}
 
-	if quota.TotalTokens != nil && usageAgg.TotalTokens >= *quota.TotalTokens {
+	if quota.Requests != nil && usage.RequestCount >= *quota.Requests {
 		return QuotaCheckResult{
 			Allowed: false,
-			Message: fmt.Sprintf("total_tokens quota exceeded: %d/%d", usageAgg.TotalTokens, *quota.TotalTokens),
+			Message: fmt.Sprintf("requests quota exceeded: %d/%d", usage.RequestCount, *quota.Requests),
 			Window:  window,
 		}, nil
 	}
 
-	if quota.Cost != nil && usageAgg.TotalCost.GreaterThanOrEqual(*quota.Cost) {
+	if quota.TotalTokens != nil && usage.TotalTokens >= *quota.TotalTokens {
 		return QuotaCheckResult{
 			Allowed: false,
-			Message: fmt.Sprintf("cost quota exceeded: %s/%s", usageAgg.TotalCost.String(), quota.Cost.String()),
+			Message: fmt.Sprintf("total_tokens quota exceeded: %d/%d", usage.TotalTokens, *quota.TotalTokens),
+			Window:  window,
+		}, nil
+	}
+
+	if quota.Cost != nil && usage.TotalCost.GreaterThanOrEqual(*quota.Cost) {
+		return QuotaCheckResult{
+			Allowed: false,
+			Message: fmt.Sprintf("cost quota exceeded: %s/%s", usage.TotalCost.String(), quota.Cost.String()),
 			Window:  window,
 		}, nil
 	}
@@ -112,6 +138,46 @@ func (s *QuotaService) CheckAPIKeyQuota(ctx context.Context, apiKeyID int, quota
 }
 
 func (s *QuotaService) GetQuota(ctx context.Context, apiKeyID int, quota *objects.APIKeyQuota) (QuotaResult, error) {
+	return s.getQuota(ctx, quota, "quota-api-key", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID)), window)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		usageAgg, err := s.usageAgg(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID)), window, needTokens, needCost)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		return QuotaUsage{
+			RequestCount: reqCount,
+			TotalTokens:  usageAgg.TotalTokens,
+			TotalCost:    usageAgg.TotalCost,
+		}, nil
+	})
+}
+
+func (s *QuotaService) GetChannelQuota(ctx context.Context, channelID int, quota *objects.APIKeyQuota) (QuotaResult, error) {
+	return s.getQuota(ctx, quota, "quota-channel", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.ChannelIDEQ(channelID)), window)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		usageAgg, err := s.usageAgg(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.ChannelIDEQ(channelID)), window, needTokens, needCost)
+		if err != nil {
+			return QuotaUsage{}, err
+		}
+
+		return QuotaUsage{
+			RequestCount: reqCount,
+			TotalTokens:  usageAgg.TotalTokens,
+			TotalCost:    usageAgg.TotalCost,
+		}, nil
+	})
+}
+
+func (s *QuotaService) getQuota(ctx context.Context, quota *objects.APIKeyQuota, bypassReason string, loadUsage quotaUsageLoader) (QuotaResult, error) {
 	if quota == nil {
 		return QuotaResult{}, nil
 	}
@@ -123,15 +189,8 @@ func (s *QuotaService) GetQuota(ctx context.Context, apiKeyID int, quota *object
 		return QuotaResult{}, err
 	}
 
-	reqCount, err := authz.RunWithSystemBypass(ctx, "quota-request-count", func(bypassCtx context.Context) (int64, error) {
-		return s.requestCount(bypassCtx, apiKeyID, window)
-	})
-	if err != nil {
-		return QuotaResult{}, err
-	}
-
-	usageAgg, err := authz.RunWithSystemBypass(ctx, "quota-usage-agg", func(bypassCtx context.Context) (usageAggResult, error) {
-		return s.usageAgg(bypassCtx, apiKeyID, window, true, true)
+	usage, err := authz.RunWithSystemBypass(ctx, bypassReason, func(bypassCtx context.Context) (QuotaUsage, error) {
+		return loadUsage(bypassCtx, window, true, true)
 	})
 	if err != nil {
 		return QuotaResult{}, err
@@ -139,12 +198,62 @@ func (s *QuotaService) GetQuota(ctx context.Context, apiKeyID int, quota *object
 
 	return QuotaResult{
 		Window: window,
-		Usage: QuotaUsage{
-			RequestCount: reqCount,
-			TotalTokens:  usageAgg.TotalTokens,
-			TotalCost:    usageAgg.TotalCost,
-		},
+		Usage:  usage,
 	}, nil
+}
+
+func ValidateQuota(q *objects.APIKeyQuota) error {
+	if q == nil {
+		return nil
+	}
+
+	if q.Requests == nil && q.TotalTokens == nil && q.Cost == nil {
+		return fmt.Errorf("must set at least one limit")
+	}
+
+	if q.Requests != nil && *q.Requests <= 0 {
+		return fmt.Errorf("requests must be positive")
+	}
+
+	if q.TotalTokens != nil && *q.TotalTokens <= 0 {
+		return fmt.Errorf("totalTokens must be positive")
+	}
+
+	if q.Cost != nil && q.Cost.IsNegative() {
+		return fmt.Errorf("cost must be non-negative")
+	}
+
+	switch q.Period.Type {
+	case objects.APIKeyQuotaPeriodTypeAllTime:
+	case objects.APIKeyQuotaPeriodTypePastDuration:
+		if q.Period.PastDuration == nil {
+			return fmt.Errorf("period.pastDuration is required")
+		}
+
+		if q.Period.PastDuration.Value <= 0 {
+			return fmt.Errorf("period.pastDuration.value must be positive")
+		}
+
+		switch q.Period.PastDuration.Unit {
+		case objects.APIKeyQuotaPastDurationUnitMinute, objects.APIKeyQuotaPastDurationUnitHour, objects.APIKeyQuotaPastDurationUnitDay:
+		default:
+			return fmt.Errorf("period.pastDuration.unit is invalid")
+		}
+	case objects.APIKeyQuotaPeriodTypeCalendarDuration:
+		if q.Period.CalendarDuration == nil {
+			return fmt.Errorf("period.calendarDuration is required")
+		}
+
+		switch q.Period.CalendarDuration.Unit {
+		case objects.APIKeyQuotaCalendarDurationUnitDay, objects.APIKeyQuotaCalendarDurationUnitMonth:
+		default:
+			return fmt.Errorf("period.calendarDuration.unit is invalid")
+		}
+	default:
+		return fmt.Errorf("period.type is invalid")
+	}
+
+	return nil
 }
 
 func quotaWindow(now time.Time, period objects.APIKeyQuotaPeriod, loc *time.Location) (QuotaWindow, error) {
@@ -212,9 +321,7 @@ func quotaWindow(now time.Time, period objects.APIKeyQuotaPeriod, loc *time.Loca
 	}
 }
 
-func (s *QuotaService) requestCount(ctx context.Context, apiKeyID int, window QuotaWindow) (int64, error) {
-	q := s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID))
-
+func (s *QuotaService) requestCount(ctx context.Context, q *ent.UsageLogQuery, window QuotaWindow) (int64, error) {
 	if window.Start != nil {
 		q = q.Where(usagelog.CreatedAtGTE(*window.Start))
 	}
@@ -236,7 +343,7 @@ type usageAggResult struct {
 	TotalCost   decimal.Decimal
 }
 
-func (s *QuotaService) usageAgg(ctx context.Context, apiKeyID int, window QuotaWindow, needTokens bool, needCost bool) (usageAggResult, error) {
+func (s *QuotaService) usageAgg(ctx context.Context, baseQuery *ent.UsageLogQuery, window QuotaWindow, needTokens bool, needCost bool) (usageAggResult, error) {
 	if !needTokens && !needCost {
 		return usageAggResult{}, nil
 	}
@@ -322,7 +429,7 @@ func (s *QuotaService) usageAgg(ctx context.Context, apiKeyID int, window QuotaW
 		}
 	}
 
-	agg1, err := queryAgg(s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID)))
+	agg1, err := queryAgg(baseQuery)
 	if err != nil {
 		return usageAggResult{}, err
 	}

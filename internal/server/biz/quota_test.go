@@ -240,6 +240,128 @@ func TestQuotaService_PastDurationMinute_RequestCountExceeded(t *testing.T) {
 	require.Contains(t, res.Message, "requests quota exceeded")
 }
 
+func TestQuotaService_ChannelQuota_UsesChannelUsage(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	p, err := client.Project.Create().
+		SetName("p").
+		SetStatus(project.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	apiKeyID := 11
+	channelID := 7
+
+	req1, err := client.Request.Create().
+		SetProjectID(p.ID).
+		SetAPIKeyID(apiKeyID).
+		SetModelID("m").
+		SetFormat("openai/chat_completions").
+		SetStatus(request.StatusCompleted).
+		SetRequestBody(objects.JSONRawMessage([]byte(`{}`))).
+		SetCreatedAt(now.Add(-10 * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Create().
+		SetRequestID(req1.ID).
+		SetAPIKeyID(apiKeyID).
+		SetProjectID(p.ID).
+		SetChannelID(channelID).
+		SetModelID("m").
+		SetSource(usagelog.SourceAPI).
+		SetFormat("openai/chat_completions").
+		SetPromptTokens(10).
+		SetCompletionTokens(20).
+		SetTotalTokens(30).
+		SetTotalCost(1.25).
+		SetCreatedAt(now.Add(-10 * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	req2, err := client.Request.Create().
+		SetProjectID(p.ID).
+		SetAPIKeyID(apiKeyID).
+		SetModelID("m").
+		SetFormat("openai/chat_completions").
+		SetStatus(request.StatusCompleted).
+		SetRequestBody(objects.JSONRawMessage([]byte(`{}`))).
+		SetCreatedAt(now.Add(-5 * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Create().
+		SetRequestID(req2.ID).
+		SetAPIKeyID(apiKeyID).
+		SetProjectID(p.ID).
+		SetChannelID(channelID).
+		SetModelID("m").
+		SetSource(usagelog.SourceAPI).
+		SetFormat("openai/chat_completions").
+		SetPromptTokens(15).
+		SetCompletionTokens(25).
+		SetTotalTokens(40).
+		SetTotalCost(2.50).
+		SetCreatedAt(now.Add(-5 * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	reqOtherChannel, err := client.Request.Create().
+		SetProjectID(p.ID).
+		SetAPIKeyID(apiKeyID).
+		SetModelID("m").
+		SetFormat("openai/chat_completions").
+		SetStatus(request.StatusCompleted).
+		SetRequestBody(objects.JSONRawMessage([]byte(`{}`))).
+		SetCreatedAt(now.Add(-3 * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Create().
+		SetRequestID(reqOtherChannel.ID).
+		SetAPIKeyID(apiKeyID).
+		SetProjectID(p.ID).
+		SetChannelID(channelID + 1).
+		SetModelID("m").
+		SetSource(usagelog.SourceAPI).
+		SetFormat("openai/chat_completions").
+		SetPromptTokens(100).
+		SetCompletionTokens(100).
+		SetTotalTokens(200).
+		SetTotalCost(9.99).
+		SetCreatedAt(now.Add(-3 * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	systemService := NewSystemService(SystemServiceParams{Ent: client})
+	svc := NewQuotaService(client, systemService)
+	quota := &objects.APIKeyQuota{
+		Requests:    lo.ToPtr(int64(2)),
+		TotalTokens: lo.ToPtr(int64(70)),
+		Cost:        lo.ToPtr(decimal.NewFromFloat(3.75)),
+		Period: objects.APIKeyQuotaPeriod{
+			Type: objects.APIKeyQuotaPeriodTypeAllTime,
+		},
+	}
+
+	usage, err := svc.GetChannelQuota(ctx, channelID, quota)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, usage.Usage.RequestCount)
+	require.EqualValues(t, 70, usage.Usage.TotalTokens)
+	require.True(t, decimal.NewFromFloat(3.75).Equal(usage.Usage.TotalCost))
+
+	res, err := svc.CheckChannelQuota(ctx, channelID, quota)
+	require.NoError(t, err)
+	require.False(t, res.Allowed)
+	require.Contains(t, res.Message, "requests quota exceeded")
+}
+
 func TestQuotaWindow_PastDurationMinute(t *testing.T) {
 	now := time.Date(2026, 1, 20, 1, 2, 3, 0, time.UTC)
 	window, err := quotaWindow(now, objects.APIKeyQuotaPeriod{

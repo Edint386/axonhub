@@ -458,6 +458,10 @@ func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateCh
 		if err := ValidateRateLimit(input.Settings.RateLimit); err != nil {
 			return nil, fmt.Errorf("invalid rate limit: %w", err)
 		}
+
+		if err := ValidateQuota(input.Settings.Quota); err != nil {
+			return nil, fmt.Errorf("invalid quota: %w", err)
+		}
 	}
 
 	if input.Endpoints != nil {
@@ -582,6 +586,10 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 
 		if err := ValidateRateLimit(input.Settings.RateLimit); err != nil {
 			return nil, fmt.Errorf("invalid rate limit: %w", err)
+		}
+
+		if err := ValidateQuota(input.Settings.Quota); err != nil {
+			return nil, fmt.Errorf("invalid quota: %w", err)
 		}
 
 		mut.SetSettings(input.Settings)

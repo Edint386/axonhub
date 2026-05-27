@@ -190,6 +190,63 @@ export const channelRateLimitSchema = z.object({
 });
 export type ChannelRateLimit = z.infer<typeof channelRateLimitSchema>;
 
+// Channel Quota
+export const channelQuotaPeriodTypeSchema = z.enum(['all_time', 'past_duration', 'calendar_duration']);
+export type ChannelQuotaPeriodType = z.infer<typeof channelQuotaPeriodTypeSchema>;
+
+export const channelQuotaPastDurationUnitSchema = z.enum(['minute', 'hour', 'day']);
+export type ChannelQuotaPastDurationUnit = z.infer<typeof channelQuotaPastDurationUnitSchema>;
+
+export const channelQuotaCalendarDurationUnitSchema = z.enum(['day', 'month']);
+export type ChannelQuotaCalendarDurationUnit = z.infer<typeof channelQuotaCalendarDurationUnitSchema>;
+
+export const channelQuotaPeriodSchema = z.object({
+  type: channelQuotaPeriodTypeSchema,
+  pastDuration: z
+    .object({
+      value: z.number().int().positive(),
+      unit: channelQuotaPastDurationUnitSchema,
+    })
+    .optional()
+    .nullable(),
+  calendarDuration: z
+    .object({
+      unit: channelQuotaCalendarDurationUnitSchema,
+    })
+    .optional()
+    .nullable(),
+});
+export type ChannelQuotaPeriod = z.infer<typeof channelQuotaPeriodSchema>;
+
+export const channelQuotaSchema = z.object({
+  requests: z.number().int().positive().optional().nullable(),
+  totalTokens: z.number().int().positive().optional().nullable(),
+  cost: z.coerce.number().nonnegative().optional().nullable(),
+  period: channelQuotaPeriodSchema,
+});
+export type ChannelQuota = z.infer<typeof channelQuotaSchema>;
+
+export const channelQuotaWindowSchema = z.object({
+  start: z.coerce.date().optional().nullable(),
+  end: z.coerce.date().optional().nullable(),
+});
+export type ChannelQuotaWindow = z.infer<typeof channelQuotaWindowSchema>;
+
+export const channelQuotaUsageValueSchema = z.object({
+  requestCount: z.number(),
+  totalTokens: z.number(),
+  totalCost: z.coerce.number(),
+});
+export type ChannelQuotaUsageValue = z.infer<typeof channelQuotaUsageValueSchema>;
+
+export const channelQuotaUsageSchema = z.object({
+  channelID: z.string(),
+  quota: channelQuotaSchema,
+  window: channelQuotaWindowSchema,
+  usage: channelQuotaUsageValueSchema,
+});
+export type ChannelQuotaUsage = z.infer<typeof channelQuotaUsageSchema>;
+
 // Live snapshot of the per-channel concurrency limiter.
 // Returned from the backend only when MaxConcurrent is configured.
 export const channelLimiterStatsSchema = z.object({
@@ -215,6 +272,7 @@ export const channelSettingsSchema = z.object({
   passThroughUserAgent: z.boolean().optional().nullable(),
   passThroughBody: z.boolean().optional().nullable(),
   rateLimit: channelRateLimitSchema.optional().nullable(),
+  quota: channelQuotaSchema.optional().nullable(),
 });
 
 export type ChannelSettings = z.infer<typeof channelSettingsSchema>;

@@ -28,6 +28,8 @@ import {
   channelModelPriceSchema,
   TestChannelAPIKeysPayload,
   testChannelAPIKeysPayloadSchema,
+  ChannelQuotaUsage,
+  channelQuotaUsageSchema,
 } from './schema';
 
 const QUERY_CHANNEL_NAMES_QUERY = `
@@ -61,6 +63,34 @@ const channelNamesConnectionSchema = z.object({
     endCursor: true,
   }),
 });
+
+const CHANNEL_RATE_LIMIT_FIELDS = `
+          rateLimit {
+            rpm
+            tpm
+            maxConcurrent
+            queueSize
+            queueTimeoutMs
+          }
+`;
+
+const CHANNEL_QUOTA_FIELDS = `
+          quota {
+            requests
+            totalTokens
+            cost
+            period {
+              type
+              pastDuration {
+                value
+                unit
+              }
+              calendarDuration {
+                unit
+              }
+            }
+          }
+`;
 
 const CREATE_CHANNEL_MUTATION = `
   mutation CreateChannel($input: CreateChannelInput!) {
@@ -105,6 +135,8 @@ const CREATE_CHANNEL_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
+          ${CHANNEL_RATE_LIMIT_FIELDS}
+          ${CHANNEL_QUOTA_FIELDS}
         }
       orderingWeight
       priority
@@ -165,6 +197,8 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
+          ${CHANNEL_RATE_LIMIT_FIELDS}
+          ${CHANNEL_QUOTA_FIELDS}
         }
       orderingWeight
       priority
@@ -225,6 +259,8 @@ const UPDATE_CHANNEL_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
+          ${CHANNEL_RATE_LIMIT_FIELDS}
+          ${CHANNEL_QUOTA_FIELDS}
         }
       orderingWeight
       priority
@@ -386,6 +422,8 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
+          ${CHANNEL_RATE_LIMIT_FIELDS}
+          ${CHANNEL_QUOTA_FIELDS}
         }
       }
     }
@@ -571,6 +609,8 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
+          ${CHANNEL_RATE_LIMIT_FIELDS}
+          ${CHANNEL_QUOTA_FIELDS}
         }
       }
     }
@@ -701,13 +741,8 @@ const QUERY_CHANNELS_QUERY = `
             }
             passThroughUserAgent
             passThroughBody
-            rateLimit {
-              rpm
-              tpm
-              maxConcurrent
-              queueSize
-              queueTimeoutMs
-            }
+            ${CHANNEL_RATE_LIMIT_FIELDS}
+            ${CHANNEL_QUOTA_FIELDS}
           }
           orderingWeight
           priority
@@ -745,6 +780,38 @@ const QUERY_CHANNELS_QUERY = `
         endCursor
       }
       totalCount
+    }
+  }
+`;
+
+const CHANNEL_QUOTA_USAGE_QUERY = `
+  query ChannelQuotaUsage($channelID: ID!) {
+    channelQuotaUsage(channelID: $channelID) {
+      channelID
+      quota {
+        requests
+        totalTokens
+        cost
+        period {
+          type
+          pastDuration {
+            value
+            unit
+          }
+          calendarDuration {
+            unit
+          }
+        }
+      }
+      window {
+        start
+        end
+      }
+      usage {
+        requestCount
+        totalTokens
+        totalCost
+      }
     }
   }
 `;
@@ -847,6 +914,34 @@ export function useQueryChannels(
     // 5s is light traffic; pause when the tab is hidden.
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
+  });
+}
+
+export function useChannelQuotaUsage(
+  channelID: string,
+  options?: {
+    enabled?: boolean;
+    refetchInterval?: number;
+  }
+) {
+  const { handleError } = useErrorHandler();
+  const { t } = useTranslation();
+
+  return useQuery({
+    queryKey: ['channelQuotaUsage', channelID],
+    queryFn: async () => {
+      try {
+        const data = await graphqlRequest<{ channelQuotaUsage: ChannelQuotaUsage | null }>(CHANNEL_QUOTA_USAGE_QUERY, {
+          channelID,
+        });
+        return channelQuotaUsageSchema.nullable().parse(data.channelQuotaUsage);
+      } catch (error) {
+        handleError(error, t('common.errors.internalServerError'));
+        throw error;
+      }
+    },
+    enabled: !!channelID && (options?.enabled ?? true),
+    refetchInterval: options?.refetchInterval,
   });
 }
 
@@ -965,6 +1060,7 @@ export function useUpdateChannel() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       queryClient.invalidateQueries({ queryKey: ['channel', data.id] });
+      queryClient.invalidateQueries({ queryKey: ['channelQuotaUsage', data.id] });
       toast.success(t('channels.messages.updateSuccess'));
     },
     onError: (error) => {

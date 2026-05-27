@@ -170,6 +170,10 @@ type ChannelSettings struct {
 	// RateLimit configures the upstream rate limit for the channel.
 	// When configured, the load balancer will skip channels that have exceeded their rate limits.
 	RateLimit *ChannelRateLimit `json:"rateLimit,omitempty"`
+
+	// Quota configures usage quota for this channel based on persisted usage logs.
+	// When exhausted, the channel is skipped during candidate selection.
+	Quota *APIKeyQuota `json:"quota,omitempty"`
 }
 
 type ChannelRateLimit struct {

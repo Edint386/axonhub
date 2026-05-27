@@ -480,6 +480,13 @@ type ComplexityRoot struct {
 		Frequency func(childComplexity int) int
 	}
 
+	ChannelQuotaUsage struct {
+		ChannelID func(childComplexity int) int
+		Quota     func(childComplexity int) int
+		Usage     func(childComplexity int) int
+		Window    func(childComplexity int) int
+	}
+
 	ChannelRateLimit struct {
 		MaxConcurrent  func(childComplexity int) int
 		QueueSize      func(childComplexity int) int
@@ -505,6 +512,7 @@ type ComplexityRoot struct {
 		PassThroughBody          func(childComplexity int) int
 		PassThroughUserAgent     func(childComplexity int) int
 		Proxy                    func(childComplexity int) int
+		Quota                    func(childComplexity int) int
 		RateLimit                func(childComplexity int) int
 		TransformOptions         func(childComplexity int) int
 	}
@@ -1219,6 +1227,7 @@ type ComplexityRoot struct {
 		ChannelOverrideTemplates     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOverrideTemplateOrder, where *ent.ChannelOverrideTemplateWhereInput) int
 		ChannelPerformanceStats      func(childComplexity int) int
 		ChannelProbeData             func(childComplexity int, input biz.GetChannelProbeDataInput) int
+		ChannelQuotaUsage            func(childComplexity int, channelID objects.GUID) int
 		ChannelSuccessRates          func(childComplexity int, timeWindow *string, limit *int) int
 		Channels                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOrder, where *ent.ChannelWhereInput) int
 		CheckForUpdate               func(childComplexity int) int
@@ -2157,6 +2166,7 @@ type QueryResolver interface {
 	CountChannelsByType(ctx context.Context, input CountChannelsByTypeInput) ([]*ChannelTypeCount, error)
 	QueryChannels(ctx context.Context, input biz.QueryChannelsInput) (*ent.ChannelConnection, error)
 	APIKeyQuotaUsages(ctx context.Context, apiKeyID objects.GUID) ([]*APIKeyProfileQuotaUsage, error)
+	ChannelQuotaUsage(ctx context.Context, channelID objects.GUID) (*ChannelQuotaUsage, error)
 	DashboardOverview(ctx context.Context) (*DashboardOverview, error)
 	RequestStats(ctx context.Context) (*RequestStats, error)
 	RequestStatsByChannel(ctx context.Context, timeWindow *string) ([]*RequestStatsByChannel, error)
@@ -3758,6 +3768,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.ChannelProbeSetting.Frequency(childComplexity), true
 
+	case "ChannelQuotaUsage.channelID":
+		if e.complexity.ChannelQuotaUsage.ChannelID == nil {
+			break
+		}
+
+		return e.complexity.ChannelQuotaUsage.ChannelID(childComplexity), true
+	case "ChannelQuotaUsage.quota":
+		if e.complexity.ChannelQuotaUsage.Quota == nil {
+			break
+		}
+
+		return e.complexity.ChannelQuotaUsage.Quota(childComplexity), true
+	case "ChannelQuotaUsage.usage":
+		if e.complexity.ChannelQuotaUsage.Usage == nil {
+			break
+		}
+
+		return e.complexity.ChannelQuotaUsage.Usage(childComplexity), true
+	case "ChannelQuotaUsage.window":
+		if e.complexity.ChannelQuotaUsage.Window == nil {
+			break
+		}
+
+		return e.complexity.ChannelQuotaUsage.Window(childComplexity), true
+
 	case "ChannelRateLimit.maxConcurrent":
 		if e.complexity.ChannelRateLimit.MaxConcurrent == nil {
 			break
@@ -3868,6 +3903,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.Proxy(childComplexity), true
+	case "ChannelSettings.quota":
+		if e.complexity.ChannelSettings.Quota == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.Quota(childComplexity), true
 	case "ChannelSettings.rateLimit":
 		if e.complexity.ChannelSettings.RateLimit == nil {
 			break
@@ -7320,6 +7361,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.ChannelProbeData(childComplexity, args["input"].(biz.GetChannelProbeDataInput)), true
+	case "Query.channelQuotaUsage":
+		if e.complexity.Query.ChannelQuotaUsage == nil {
+			break
+		}
+
+		args, err := ec.field_Query_channelQuotaUsage_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ChannelQuotaUsage(childComplexity, args["channelID"].(objects.GUID)), true
 	case "Query.channelSuccessRates":
 		if e.complexity.Query.ChannelSuccessRates == nil {
 			break
@@ -12843,6 +12895,17 @@ func (ec *executionContext) field_Query_channelProbeData_args(ctx context.Contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_channelQuotaUsage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "channelID", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["channelID"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_channelSuccessRates_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -17997,6 +18060,8 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_passThroughBody(ctx, field)
 			case "rateLimit":
 				return ec.fieldContext_ChannelSettings_rateLimit(ctx, field)
+			case "quota":
+				return ec.fieldContext_ChannelSettings_quota(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelSettings", field.Name)
 		},
@@ -21835,6 +21900,146 @@ func (ec *executionContext) fieldContext_ChannelProbeSetting_frequency(_ context
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelQuotaUsage_channelID(ctx context.Context, field graphql.CollectedField, obj *ChannelQuotaUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelQuotaUsage_channelID,
+		func(ctx context.Context) (any, error) {
+			return obj.ChannelID, nil
+		},
+		nil,
+		ec.marshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelQuotaUsage_channelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelQuotaUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelQuotaUsage_quota(ctx context.Context, field graphql.CollectedField, obj *ChannelQuotaUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelQuotaUsage_quota,
+		func(ctx context.Context) (any, error) {
+			return obj.Quota, nil
+		},
+		nil,
+		ec.marshalNAPIKeyQuota2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐAPIKeyQuota,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelQuotaUsage_quota(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelQuotaUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "requests":
+				return ec.fieldContext_APIKeyQuota_requests(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_APIKeyQuota_totalTokens(ctx, field)
+			case "cost":
+				return ec.fieldContext_APIKeyQuota_cost(ctx, field)
+			case "period":
+				return ec.fieldContext_APIKeyQuota_period(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APIKeyQuota", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelQuotaUsage_window(ctx context.Context, field graphql.CollectedField, obj *ChannelQuotaUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelQuotaUsage_window,
+		func(ctx context.Context) (any, error) {
+			return obj.Window, nil
+		},
+		nil,
+		ec.marshalNAPIKeyQuotaWindow2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAPIKeyQuotaWindow,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelQuotaUsage_window(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelQuotaUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "start":
+				return ec.fieldContext_APIKeyQuotaWindow_start(ctx, field)
+			case "end":
+				return ec.fieldContext_APIKeyQuotaWindow_end(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APIKeyQuotaWindow", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelQuotaUsage_usage(ctx context.Context, field graphql.CollectedField, obj *ChannelQuotaUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelQuotaUsage_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalNAPIKeyQuotaUsage2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAPIKeyQuotaUsage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelQuotaUsage_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelQuotaUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "requestCount":
+				return ec.fieldContext_APIKeyQuotaUsage_requestCount(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_APIKeyQuotaUsage_totalTokens(ctx, field)
+			case "totalCost":
+				return ec.fieldContext_APIKeyQuotaUsage_totalCost(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APIKeyQuotaUsage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelRateLimit_rpm(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelRateLimit) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22482,6 +22687,45 @@ func (ec *executionContext) fieldContext_ChannelSettings_rateLimit(_ context.Con
 				return ec.fieldContext_ChannelRateLimit_queueTimeoutMs(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelRateLimit", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelSettings_quota(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_quota,
+		func(ctx context.Context) (any, error) {
+			return obj.Quota, nil
+		},
+		nil,
+		ec.marshalOAPIKeyQuota2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐAPIKeyQuota,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_quota(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "requests":
+				return ec.fieldContext_APIKeyQuota_requests(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_APIKeyQuota_totalTokens(ctx, field)
+			case "cost":
+				return ec.fieldContext_APIKeyQuota_cost(ctx, field)
+			case "period":
+				return ec.fieldContext_APIKeyQuota_period(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APIKeyQuota", field.Name)
 		},
 	}
 	return fc, nil
@@ -40223,6 +40467,57 @@ func (ec *executionContext) fieldContext_Query_apiKeyQuotaUsages(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_apiKeyQuotaUsages_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_channelQuotaUsage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_channelQuotaUsage,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ChannelQuotaUsage(ctx, fc.Args["channelID"].(objects.GUID))
+		},
+		nil,
+		ec.marshalOChannelQuotaUsage2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelQuotaUsage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_channelQuotaUsage(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "channelID":
+				return ec.fieldContext_ChannelQuotaUsage_channelID(ctx, field)
+			case "quota":
+				return ec.fieldContext_ChannelQuotaUsage_quota(ctx, field)
+			case "window":
+				return ec.fieldContext_ChannelQuotaUsage_window(ctx, field)
+			case "usage":
+				return ec.fieldContext_ChannelQuotaUsage_usage(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelQuotaUsage", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_channelQuotaUsage_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -62314,7 +62609,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -62412,6 +62707,13 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.RateLimit = data
+		case "quota":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("quota"))
+			data, err := ec.unmarshalOAPIKeyQuotaInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐAPIKeyQuota(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Quota = data
 		}
 	}
 
@@ -86989,6 +87291,60 @@ func (ec *executionContext) _ChannelProbeSetting(ctx context.Context, sel ast.Se
 	return out
 }
 
+var channelQuotaUsageImplementors = []string{"ChannelQuotaUsage"}
+
+func (ec *executionContext) _ChannelQuotaUsage(ctx context.Context, sel ast.SelectionSet, obj *ChannelQuotaUsage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelQuotaUsageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelQuotaUsage")
+		case "channelID":
+			out.Values[i] = ec._ChannelQuotaUsage_channelID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "quota":
+			out.Values[i] = ec._ChannelQuotaUsage_quota(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "window":
+			out.Values[i] = ec._ChannelQuotaUsage_window(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "usage":
+			out.Values[i] = ec._ChannelQuotaUsage_usage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var channelRateLimitImplementors = []string{"ChannelRateLimit"}
 
 func (ec *executionContext) _ChannelRateLimit(ctx context.Context, sel ast.SelectionSet, obj *objects.ChannelRateLimit) graphql.Marshaler {
@@ -87182,6 +87538,8 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_passThroughBody(ctx, field, obj)
 		case "rateLimit":
 			out.Values[i] = ec._ChannelSettings_rateLimit(ctx, field, obj)
+		case "quota":
+			out.Values[i] = ec._ChannelSettings_quota(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -93560,6 +93918,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "channelQuotaUsage":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_channelQuotaUsage(ctx, field)
 				return res
 			}
 
@@ -109178,6 +109555,13 @@ func (ec *executionContext) unmarshalOChannelProbeWhereInput2ᚖgithubᚗcomᚋl
 	}
 	res, err := ec.unmarshalInputChannelProbeWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOChannelQuotaUsage2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelQuotaUsage(ctx context.Context, sel ast.SelectionSet, v *ChannelQuotaUsage) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ChannelQuotaUsage(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOChannelRateLimit2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelRateLimit(ctx context.Context, sel ast.SelectionSet, v *objects.ChannelRateLimit) graphql.Marshaler {

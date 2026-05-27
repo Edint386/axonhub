@@ -108,6 +108,7 @@ type ChannelSettings {
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
   rateLimit: ChannelRateLimit
+  quota: APIKeyQuota
 }
 
 enum CapabilityPolicy {
@@ -143,6 +144,7 @@ input ChannelSettingsInput {
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
   rateLimit: ChannelRateLimitInput
+  quota: APIKeyQuotaInput
 }
 
 input ChannelRateLimitInput {
@@ -453,6 +455,13 @@ type APIKeyQuotaWindow {
 
 type APIKeyProfileQuotaUsage {
   profileName: String!
+  quota: APIKeyQuota!
+  window: APIKeyQuotaWindow!
+  usage: APIKeyQuotaUsage!
+}
+
+type ChannelQuotaUsage {
+  channelID: ID!
   quota: APIKeyQuota!
   window: APIKeyQuotaWindow!
   usage: APIKeyQuotaUsage!
@@ -912,4 +921,9 @@ extend type Query {
   Returns quota usage for profiles that have quota enabled for an API key.
   """
   apiKeyQuotaUsages(apiKeyId: ID!): [APIKeyProfileQuotaUsage!]!
+
+  """
+  Returns quota usage for a channel when channel quota is configured.
+  """
+  channelQuotaUsage(channelID: ID!): ChannelQuotaUsage
 }

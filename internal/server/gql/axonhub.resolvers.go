@@ -788,6 +788,38 @@ func (r *queryResolver) APIKeyQuotaUsages(ctx context.Context, apiKeyID objects.
 	return result, nil
 }
 
+// ChannelQuotaUsage is the resolver for the channelQuotaUsage field.
+func (r *queryResolver) ChannelQuotaUsage(ctx context.Context, channelID objects.GUID) (*ChannelQuotaUsage, error) {
+	ch, err := r.client.Channel.Get(ctx, channelID.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get channel: %w", err)
+	}
+
+	if ch.Settings == nil || ch.Settings.Quota == nil {
+		return nil, nil
+	}
+
+	quotaService := biz.NewQuotaService(r.client, r.systemService)
+	quotaRes, err := quotaService.GetChannelQuota(ctx, ch.ID, ch.Settings.Quota)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get channel quota usage: %w", err)
+	}
+
+	return &ChannelQuotaUsage{
+		ChannelID: objects.GUID{Type: ent.TypeChannel, ID: ch.ID},
+		Quota:     ch.Settings.Quota,
+		Window: &APIKeyQuotaWindow{
+			Start: quotaRes.Window.Start,
+			End:   quotaRes.Window.End,
+		},
+		Usage: &APIKeyQuotaUsage{
+			RequestCount: int(quotaRes.Usage.RequestCount),
+			TotalTokens:  int(quotaRes.Usage.TotalTokens),
+			TotalCost:    quotaRes.Usage.TotalCost,
+		},
+	}, nil
+}
+
 // ID is the resolver for the id field.
 func (r *segmentResolver) ID(ctx context.Context, obj *biz.Segment) (*objects.GUID, error) {
 	return &objects.GUID{Type: ent.TypeRequest, ID: obj.ID}, nil
