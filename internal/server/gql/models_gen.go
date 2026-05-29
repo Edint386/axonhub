@@ -256,6 +256,10 @@ type FetchModelsPayload struct {
 	Error  *string              `json:"error,omitempty"`
 }
 
+type ForwardUnsupportedToolsAcrossFormatsSettings struct {
+	Enabled bool `json:"enabled"`
+}
+
 type GetCacheDiagnosticsInput struct {
 	Targets []DiagnosticsTarget `json:"targets,omitempty"`
 }
@@ -324,6 +328,10 @@ type OnboardingInfo struct {
 }
 
 type PassThroughSettings struct {
+	Enabled bool `json:"enabled"`
+}
+
+type PreserveUnsupportedToolsSettings struct {
 	Enabled bool `json:"enabled"`
 }
 
@@ -521,6 +529,10 @@ type UpdateDefaultDataStorageInput struct {
 	DataStorageID objects.GUID `json:"dataStorageID"`
 }
 
+type UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput struct {
+	Enabled bool `json:"enabled"`
+}
+
 type UpdateMeInput struct {
 	FirstName      *string `json:"firstName,omitempty"`
 	LastName       *string `json:"lastName,omitempty"`
@@ -534,6 +546,10 @@ type UpdateMyPasswordInput struct {
 }
 
 type UpdatePassThroughSettingsInput struct {
+	Enabled bool `json:"enabled"`
+}
+
+type UpdatePreserveUnsupportedToolsSettingsInput struct {
 	Enabled bool `json:"enabled"`
 }
 

@@ -189,8 +189,11 @@ func TestOutboundTransformer_TransformRequest_Integration(t *testing.T) {
 			actualRequest, err := xjson.To[Request](actualResult.Body)
 			require.NoError(t, err)
 
-			if !xtest.Equal(expectedRequest, actualRequest) {
-				t.Errorf("diff: %v", cmp.Diff(expectedRequest, actualRequest))
+			opts := []cmp.Option{
+				cmpopts.IgnoreUnexported(Tool{}),
+			}
+			if !xtest.Equal(expectedRequest, actualRequest, opts...) {
+				t.Errorf("diff: %v", cmp.Diff(expectedRequest, actualRequest, opts...))
 			}
 		})
 	}

@@ -272,6 +272,26 @@ func (r *mutationResolver) UpdatePassThroughSettings(ctx context.Context, input 
 	return true, nil
 }
 
+// UpdatePreserveUnsupportedToolsSettings is the resolver for the updatePreserveUnsupportedToolsSettings field.
+func (r *mutationResolver) UpdatePreserveUnsupportedToolsSettings(ctx context.Context, input UpdatePreserveUnsupportedToolsSettingsInput) (bool, error) {
+	err := r.systemService.SetPreserveUnsupportedTools(ctx, input.Enabled)
+	if err != nil {
+		return false, fmt.Errorf("failed to update preserve unsupported tools settings: %w", err)
+	}
+
+	return true, nil
+}
+
+// UpdateForwardUnsupportedToolsAcrossFormatsSettings is the resolver for the updateForwardUnsupportedToolsAcrossFormatsSettings field.
+func (r *mutationResolver) UpdateForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, input UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput) (bool, error) {
+	err := r.systemService.SetForwardUnsupportedToolsAcrossFormats(ctx, input.Enabled)
+	if err != nil {
+		return false, fmt.Errorf("failed to update forward unsupported tools across formats settings: %w", err)
+	}
+
+	return true, nil
+}
+
 // ClearCache is the resolver for the clearCache field.
 func (r *mutationResolver) ClearCache(ctx context.Context, input ClearCacheInput) (*ClearCachePayload, error) {
 	user, ok := contexts.GetUser(ctx)
@@ -497,6 +517,30 @@ func (r *queryResolver) PassThroughSettings(ctx context.Context) (*PassThroughSe
 	}
 
 	return &PassThroughSettings{
+		Enabled: enabled,
+	}, nil
+}
+
+// PreserveUnsupportedToolsSettings is the resolver for the preserveUnsupportedToolsSettings field.
+func (r *queryResolver) PreserveUnsupportedToolsSettings(ctx context.Context) (*PreserveUnsupportedToolsSettings, error) {
+	enabled, err := r.systemService.PreserveUnsupportedTools(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get preserve unsupported tools settings: %w", err)
+	}
+
+	return &PreserveUnsupportedToolsSettings{
+		Enabled: enabled,
+	}, nil
+}
+
+// ForwardUnsupportedToolsAcrossFormatsSettings is the resolver for the forwardUnsupportedToolsAcrossFormatsSettings field.
+func (r *queryResolver) ForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context) (*ForwardUnsupportedToolsAcrossFormatsSettings, error) {
+	enabled, err := r.systemService.ForwardUnsupportedToolsAcrossFormats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get forward unsupported tools across formats settings: %w", err)
+	}
+
+	return &ForwardUnsupportedToolsAcrossFormatsSettings{
 		Enabled: enabled,
 	}, nil
 }

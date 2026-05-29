@@ -56,7 +56,7 @@ import { ProxyConfig, useOAuthFlow } from '../hooks/use-oauth-flow';
 import { ManualModelBadge } from './manual-model-badge';
 import { CopilotDeviceFlow } from './copilot-device-flow';
 import { ProxyType } from './channels-proxy-dialog';
-import { useProxyPresets, useSaveProxyPreset } from '@/features/system/data/system';
+import { usePreserveUnsupportedToolsSettings, useProxyPresets, useSaveProxyPreset } from '@/features/system/data/system';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
 import { matchesModelPattern } from '../utils/pattern';
 
@@ -247,6 +247,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const { data: allChannelNames = [], isSuccess: allChannelNamesLoaded } = useAllChannelNames({ enabled: open && isDuplicate });
   const { data: allTags = [], isLoading: isLoadingTags } = useAllChannelTags();
   const { data: proxyPresets = [] } = useProxyPresets();
+  const { data: globalPreserveUnsupportedToolsSettings } = usePreserveUnsupportedToolsSettings();
   const saveProxyPreset = useSaveProxyPreset();
   const [supportedModels, setSupportedModels] = useState<string[]>(() => initialRow?.supportedModels || []);
   const [manualModels, setManualModels] = useState<string[]>(() => initialRow?.manualModels || []);
@@ -304,6 +305,14 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [passThroughBody, setPassThroughBody] = useState<boolean | null>(() => {
     return initialRow?.settings?.passThroughBody ?? null;
   });
+  const [preserveUnsupportedTools, setPreserveUnsupportedTools] = useState<boolean | null>(() => {
+    return initialRow?.settings?.preserveUnsupportedTools ?? null;
+  });
+  const [forwardUnsupportedToolsAcrossFormats, setForwardUnsupportedToolsAcrossFormats] = useState<boolean | null>(() => {
+    return initialRow?.settings?.forwardUnsupportedToolsAcrossFormats ?? null;
+  });
+
+  const effectivePreserveUnsupportedTools = preserveUnsupportedTools ?? globalPreserveUnsupportedToolsSettings?.enabled ?? false;
 
   // Memoized proxy config for OAuth exchange
   const proxyConfig: ProxyConfig | undefined = useMemo(() => {
@@ -987,6 +996,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         const nextSettings = mergeChannelSettingsForUpdate(values.settings, {
           passThroughUserAgent,
           passThroughBody,
+          preserveUnsupportedTools,
+          forwardUnsupportedToolsAcrossFormats,
         });
 
         const updateInput = {
@@ -1029,6 +1040,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           proxy: proxyConfig,
           passThroughUserAgent,
           passThroughBody,
+          preserveUnsupportedTools,
+          forwardUnsupportedToolsAcrossFormats,
         });
 
         await createChannel.mutateAsync({
@@ -1444,6 +1457,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             setProxyPassword(initialRow?.settings?.proxy?.password || '');
             setPassThroughUserAgent(initialRow?.settings?.passThroughUserAgent ?? null);
             setPassThroughBody(initialRow?.settings?.passThroughBody ?? null);
+            setPreserveUnsupportedTools(initialRow?.settings?.preserveUnsupportedTools ?? null);
+            setForwardUnsupportedToolsAcrossFormats(initialRow?.settings?.forwardUnsupportedToolsAcrossFormats ?? null);
             // Reset provider and API format state
             if (initialRow) {
               setSelectedProvider(getProviderFromChannelType(initialRow.type) || 'openai');
@@ -2372,6 +2387,62 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                           )}
                         </div>
                       </FormItem>
+
+                      <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                        <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                          {t('channels.dialogs.preserveUnsupportedTools.label')}
+                        </FormLabel>
+                        <div className='space-y-2 md:col-span-6'>
+                          <Select
+                            value={preserveUnsupportedTools === null ? 'inherit' : preserveUnsupportedTools ? 'enabled' : 'disabled'}
+                            onValueChange={(value) => setPreserveUnsupportedTools(value === 'inherit' ? null : value === 'enabled')}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('channels.dialogs.preserveUnsupportedTools.inherit')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value='inherit'>{t('channels.dialogs.preserveUnsupportedTools.inherit')}</SelectItem>
+                              <SelectItem value='enabled'>{t('channels.dialogs.preserveUnsupportedTools.enabled')}</SelectItem>
+                              <SelectItem value='disabled'>{t('channels.dialogs.preserveUnsupportedTools.disabled')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className='text-muted-foreground text-xs'>{t('channels.dialogs.preserveUnsupportedTools.helpText')}</p>
+                        </div>
+                      </FormItem>
+
+                      {effectivePreserveUnsupportedTools && (
+                        <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                          <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                            {t('channels.dialogs.forwardUnsupportedToolsAcrossFormats.label')}
+                          </FormLabel>
+                          <div className='space-y-2 md:col-span-6'>
+                            <Select
+                              value={
+                                forwardUnsupportedToolsAcrossFormats === null
+                                  ? 'inherit'
+                                  : forwardUnsupportedToolsAcrossFormats
+                                    ? 'enabled'
+                                    : 'disabled'
+                              }
+                              onValueChange={(value) =>
+                                setForwardUnsupportedToolsAcrossFormats(value === 'inherit' ? null : value === 'enabled')
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('channels.dialogs.forwardUnsupportedToolsAcrossFormats.inherit')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='inherit'>{t('channels.dialogs.forwardUnsupportedToolsAcrossFormats.inherit')}</SelectItem>
+                                <SelectItem value='enabled'>{t('channels.dialogs.forwardUnsupportedToolsAcrossFormats.enabled')}</SelectItem>
+                                <SelectItem value='disabled'>{t('channels.dialogs.forwardUnsupportedToolsAcrossFormats.disabled')}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className='text-amber-600 dark:text-amber-400 text-xs'>
+                              {t('channels.dialogs.forwardUnsupportedToolsAcrossFormats.warning')}
+                            </p>
+                          </div>
+                        </FormItem>
+                      )}
 
                       <FormField
                         control={form.control}

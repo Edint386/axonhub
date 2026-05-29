@@ -22,6 +22,9 @@ type ImageGeneration struct {
 }
 
 type Tool struct {
+	raw           json.RawMessage
+	parametersRaw json.RawMessage
+
 	// Any of "function", "image_generation", "custom", "web_search".
 	Type        string `json:"type,omitempty"`
 	Name        string `json:"name,omitempty"`
@@ -57,6 +60,41 @@ type Tool struct {
 	Quality string `json:"quality,omitempty"`
 	// This field is for ImageGeneration
 	Size string `json:"size,omitempty"`
+}
+
+type toolAlias Tool
+
+func (t *Tool) UnmarshalJSON(data []byte) error {
+	type alias toolAlias
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*t = Tool(raw)
+	t.raw = append(t.raw[:0], data...)
+
+	var rawFields struct {
+		Parameters json.RawMessage `json:"parameters"`
+	}
+	if err := json.Unmarshal(data, &rawFields); err == nil && len(rawFields.Parameters) > 0 {
+		t.parametersRaw = append(t.parametersRaw[:0], rawFields.Parameters...)
+	}
+
+	return nil
+}
+
+func (t Tool) rawJSON() json.RawMessage {
+	if len(t.raw) > 0 {
+		return append(json.RawMessage(nil), t.raw...)
+	}
+
+	data, err := json.Marshal(t)
+	if err != nil {
+		return nil
+	}
+
+	return data
 }
 
 type WebSearchFilters struct {

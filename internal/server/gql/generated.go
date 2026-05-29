@@ -501,20 +501,22 @@ type ComplexityRoot struct {
 	}
 
 	ChannelSettings struct {
-		AutoTrimedModelPrefixes  func(childComplexity int) int
-		BodyOverrideOperations   func(childComplexity int) int
-		ExtraModelPrefix         func(childComplexity int) int
-		HeaderOverrideOperations func(childComplexity int) int
-		HideMappedModels         func(childComplexity int) int
-		HideOriginalModels       func(childComplexity int) int
-		LowercaseModelID         func(childComplexity int) int
-		ModelMappings            func(childComplexity int) int
-		PassThroughBody          func(childComplexity int) int
-		PassThroughUserAgent     func(childComplexity int) int
-		Proxy                    func(childComplexity int) int
-		Quota                    func(childComplexity int) int
-		RateLimit                func(childComplexity int) int
-		TransformOptions         func(childComplexity int) int
+		AutoTrimedModelPrefixes              func(childComplexity int) int
+		BodyOverrideOperations               func(childComplexity int) int
+		ExtraModelPrefix                     func(childComplexity int) int
+		ForwardUnsupportedToolsAcrossFormats func(childComplexity int) int
+		HeaderOverrideOperations             func(childComplexity int) int
+		HideMappedModels                     func(childComplexity int) int
+		HideOriginalModels                   func(childComplexity int) int
+		LowercaseModelID                     func(childComplexity int) int
+		ModelMappings                        func(childComplexity int) int
+		PassThroughBody                      func(childComplexity int) int
+		PassThroughUserAgent                 func(childComplexity int) int
+		PreserveUnsupportedTools             func(childComplexity int) int
+		Proxy                                func(childComplexity int) int
+		Quota                                func(childComplexity int) int
+		RateLimit                            func(childComplexity int) int
+		TransformOptions                     func(childComplexity int) int
 	}
 
 	ChannelSuccessRate struct {
@@ -687,6 +689,10 @@ type ComplexityRoot struct {
 		Operator   func(childComplexity int) int
 		Type       func(childComplexity int) int
 		Value      func(childComplexity int) int
+	}
+
+	ForwardUnsupportedToolsAcrossFormatsSettings struct {
+		Enabled func(childComplexity int) int
 	}
 
 	GCPCredential struct {
@@ -867,114 +873,116 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		AddUserToProject                     func(childComplexity int, input AddUserToProjectInput) int
-		ApplyChannelOverrideTemplate         func(childComplexity int, input ApplyChannelOverrideTemplateInput) int
-		Backup                               func(childComplexity int, input backup.BackupOptions) int
-		BulkArchiveAPIKeys                   func(childComplexity int, ids []*objects.GUID) int
-		BulkArchiveChannels                  func(childComplexity int, ids []*objects.GUID) int
-		BulkArchiveModels                    func(childComplexity int, ids []*objects.GUID) int
-		BulkCreateChannels                   func(childComplexity int, input biz.BulkCreateChannelsInput) int
-		BulkCreateModels                     func(childComplexity int, inputs []*ent.CreateModelInput) int
-		BulkDeleteChannels                   func(childComplexity int, ids []*objects.GUID) int
-		BulkDeleteModels                     func(childComplexity int, ids []*objects.GUID) int
-		BulkDeletePromptProtectionRules      func(childComplexity int, ids []*objects.GUID) int
-		BulkDeletePrompts                    func(childComplexity int, ids []*objects.GUID) int
-		BulkDeleteRoles                      func(childComplexity int, ids []*objects.GUID) int
-		BulkDisableAPIKeys                   func(childComplexity int, ids []*objects.GUID) int
-		BulkDisableChannels                  func(childComplexity int, ids []*objects.GUID) int
-		BulkDisableModels                    func(childComplexity int, ids []*objects.GUID) int
-		BulkDisablePromptProtectionRules     func(childComplexity int, ids []*objects.GUID) int
-		BulkDisablePrompts                   func(childComplexity int, ids []*objects.GUID) int
-		BulkEnableAPIKeys                    func(childComplexity int, ids []*objects.GUID) int
-		BulkEnableChannels                   func(childComplexity int, ids []*objects.GUID) int
-		BulkEnableModels                     func(childComplexity int, ids []*objects.GUID) int
-		BulkEnablePromptProtectionRules      func(childComplexity int, ids []*objects.GUID) int
-		BulkEnablePrompts                    func(childComplexity int, ids []*objects.GUID) int
-		BulkImportChannels                   func(childComplexity int, input BulkImportChannelsInput) int
-		BulkRecoverChannels                  func(childComplexity int, ids []*objects.GUID) int
-		BulkUpdateChannelOrdering            func(childComplexity int, input BulkUpdateChannelOrderingInput) int
-		CheckProviderQuotas                  func(childComplexity int) int
-		ClearCache                           func(childComplexity int, input ClearCacheInput) int
-		ClearChannelOverrideTemplates        func(childComplexity int, input ClearChannelOverrideTemplatesInput) int
-		CompleteAutoDisableChannelOnboarding func(childComplexity int, input CompleteAutoDisableChannelOnboardingInput) int
-		CompleteOnboarding                   func(childComplexity int, input CompleteOnboardingInput) int
-		CompleteSystemModelSettingOnboarding func(childComplexity int, input CompleteSystemModelSettingOnboardingInput) int
-		CreateAPIKey                         func(childComplexity int, input ent.CreateAPIKeyInput) int
-		CreateAPIKeyProfileTemplate          func(childComplexity int, input ent.CreateAPIKeyProfileTemplateInput, profile objects.APIKeyProfile) int
-		CreateChannel                        func(childComplexity int, input ent.CreateChannelInput) int
-		CreateChannelOverrideTemplate        func(childComplexity int, input ent.CreateChannelOverrideTemplateInput) int
-		CreateDataStorage                    func(childComplexity int, input ent.CreateDataStorageInput) int
-		CreateModel                          func(childComplexity int, input ent.CreateModelInput) int
-		CreateProject                        func(childComplexity int, input ent.CreateProjectInput) int
-		CreatePrompt                         func(childComplexity int, input ent.CreatePromptInput) int
-		CreatePromptProtectionRule           func(childComplexity int, input ent.CreatePromptProtectionRuleInput) int
-		CreateRole                           func(childComplexity int, input ent.CreateRoleInput) int
-		CreateUser                           func(childComplexity int, input ent.CreateUserInput) int
-		DeleteAPIKeyProfileTemplate          func(childComplexity int, id objects.GUID) int
-		DeleteChannel                        func(childComplexity int, id objects.GUID) int
-		DeleteChannelOverrideTemplate        func(childComplexity int, id objects.GUID) int
-		DeleteDisabledChannelAPIKeys         func(childComplexity int, channelID objects.GUID, keys []string) int
-		DeleteModel                          func(childComplexity int, id objects.GUID) int
-		DeleteProject                        func(childComplexity int, id objects.GUID) int
-		DeletePrompt                         func(childComplexity int, id objects.GUID) int
-		DeletePromptProtectionRule           func(childComplexity int, id objects.GUID) int
-		DeleteProxyPreset                    func(childComplexity int, url string) int
-		DeleteRole                           func(childComplexity int, id objects.GUID) int
-		DeleteUser                           func(childComplexity int, id objects.GUID) int
-		DisableChannelAPIKey                 func(childComplexity int, channelID objects.GUID, key string) int
-		EnableAllChannelAPIKeys              func(childComplexity int, channelID objects.GUID) int
-		EnableChannelAPIKey                  func(childComplexity int, channelID objects.GUID, key string) int
-		EnableSelectedChannelAPIKeys         func(childComplexity int, channelID objects.GUID, keys []string) int
-		LoadAPIKeyProfileTemplate            func(childComplexity int, input LoadAPIKeyProfileTemplateInput) int
-		PreviewPromptProtectionRule          func(childComplexity int, input PromptProtectionRulePreviewInput) int
-		RemoveUserFromProject                func(childComplexity int, input RemoveUserFromProjectInput) int
-		Restore                              func(childComplexity int, file graphql.Upload, input backup.RestoreOptions) int
-		RotateAPIKey                         func(childComplexity int, id objects.GUID) int
-		SaveChannelEndpoints                 func(childComplexity int, input biz.SaveChannelEndpointsInput) int
-		SaveChannelModelPrices               func(childComplexity int, channelID objects.GUID, input []*biz.SaveChannelModelPriceInput) int
-		SaveProxyPreset                      func(childComplexity int, input biz.ProxyPreset) int
-		SyncChannelModels                    func(childComplexity int, channelID objects.GUID, pattern *string) int
-		TestChannel                          func(childComplexity int, input TestChannelInput) int
-		TestChannelAPIKeys                   func(childComplexity int, channelID objects.GUID, modelID *string) int
-		TriggerAutoBackup                    func(childComplexity int) int
-		TriggerGcCleanup                     func(childComplexity int, input gc.TriggerGcCleanupInput) int
-		UnlinkOIDCIdentity                   func(childComplexity int, id objects.GUID) int
-		UpdateAPIKey                         func(childComplexity int, id objects.GUID, input ent.UpdateAPIKeyInput) int
-		UpdateAPIKeyProfileTemplate          func(childComplexity int, id objects.GUID, input ent.UpdateAPIKeyProfileTemplateInput, profile *objects.APIKeyProfile) int
-		UpdateAPIKeyProfiles                 func(childComplexity int, id objects.GUID, input objects.APIKeyProfiles) int
-		UpdateAPIKeyStatus                   func(childComplexity int, id objects.GUID, status apikey.Status) int
-		UpdateAutoBackupSettings             func(childComplexity int, input UpdateAutoBackupSettingsInput) int
-		UpdateBrandSettings                  func(childComplexity int, input UpdateBrandSettingsInput) int
-		UpdateChannel                        func(childComplexity int, id objects.GUID, input ent.UpdateChannelInput) int
-		UpdateChannelOverrideTemplate        func(childComplexity int, id objects.GUID, input ent.UpdateChannelOverrideTemplateInput) int
-		UpdateChannelStatus                  func(childComplexity int, id objects.GUID, status channel.Status) int
-		UpdateDataStorage                    func(childComplexity int, id objects.GUID, input ent.UpdateDataStorageInput) int
-		UpdateDefaultDataStorage             func(childComplexity int, input UpdateDefaultDataStorageInput) int
-		UpdateMe                             func(childComplexity int, input UpdateMeInput) int
-		UpdateModel                          func(childComplexity int, id objects.GUID, input ent.UpdateModelInput) int
-		UpdateModelStatus                    func(childComplexity int, id objects.GUID, status model.Status) int
-		UpdateMyPassword                     func(childComplexity int, input UpdateMyPasswordInput) int
-		UpdatePassThroughSettings            func(childComplexity int, input UpdatePassThroughSettingsInput) int
-		UpdateProject                        func(childComplexity int, id objects.GUID, input ent.UpdateProjectInput) int
-		UpdateProjectProfiles                func(childComplexity int, id objects.GUID, input objects.ProjectProfiles) int
-		UpdateProjectStatus                  func(childComplexity int, id objects.GUID, status project.Status) int
-		UpdateProjectUser                    func(childComplexity int, input UpdateProjectUserInput) int
-		UpdatePrompt                         func(childComplexity int, id objects.GUID, input ent.UpdatePromptInput) int
-		UpdatePromptProtectionRule           func(childComplexity int, id objects.GUID, input ent.UpdatePromptProtectionRuleInput) int
-		UpdatePromptProtectionRuleStatus     func(childComplexity int, id objects.GUID, status promptprotectionrule.Status) int
-		UpdatePromptStatus                   func(childComplexity int, id objects.GUID, status prompt.Status) int
-		UpdateQuotaEnforcementSettings       func(childComplexity int, input UpdateQuotaEnforcementSettingsInput) int
-		UpdateRetryPolicy                    func(childComplexity int, input biz.RetryPolicy) int
-		UpdateRole                           func(childComplexity int, id objects.GUID, input ent.UpdateRoleInput) int
-		UpdateStoragePolicy                  func(childComplexity int, input biz.StoragePolicy) int
-		UpdateSystemChannelSettings          func(childComplexity int, input biz.SystemChannelSettings) int
-		UpdateSystemGeneralSettings          func(childComplexity int, input biz.SystemGeneralSettings) int
-		UpdateSystemModelSettings            func(childComplexity int, input biz.SystemModelSettings) int
-		UpdateUser                           func(childComplexity int, id objects.GUID, input ent.UpdateUserInput) int
-		UpdateUserAgentPassThroughSettings   func(childComplexity int, input UpdateUserAgentPassThroughSettingsInput) int
-		UpdateUserStatus                     func(childComplexity int, id objects.GUID, status user.Status) int
-		UpdateVideoStorageSettings           func(childComplexity int, input biz.VideoStorageSettings) int
-		UpdateWebhookNotifierConfig          func(childComplexity int, input biz.WebhookNotifierConfig) int
+		AddUserToProject                                   func(childComplexity int, input AddUserToProjectInput) int
+		ApplyChannelOverrideTemplate                       func(childComplexity int, input ApplyChannelOverrideTemplateInput) int
+		Backup                                             func(childComplexity int, input backup.BackupOptions) int
+		BulkArchiveAPIKeys                                 func(childComplexity int, ids []*objects.GUID) int
+		BulkArchiveChannels                                func(childComplexity int, ids []*objects.GUID) int
+		BulkArchiveModels                                  func(childComplexity int, ids []*objects.GUID) int
+		BulkCreateChannels                                 func(childComplexity int, input biz.BulkCreateChannelsInput) int
+		BulkCreateModels                                   func(childComplexity int, inputs []*ent.CreateModelInput) int
+		BulkDeleteChannels                                 func(childComplexity int, ids []*objects.GUID) int
+		BulkDeleteModels                                   func(childComplexity int, ids []*objects.GUID) int
+		BulkDeletePromptProtectionRules                    func(childComplexity int, ids []*objects.GUID) int
+		BulkDeletePrompts                                  func(childComplexity int, ids []*objects.GUID) int
+		BulkDeleteRoles                                    func(childComplexity int, ids []*objects.GUID) int
+		BulkDisableAPIKeys                                 func(childComplexity int, ids []*objects.GUID) int
+		BulkDisableChannels                                func(childComplexity int, ids []*objects.GUID) int
+		BulkDisableModels                                  func(childComplexity int, ids []*objects.GUID) int
+		BulkDisablePromptProtectionRules                   func(childComplexity int, ids []*objects.GUID) int
+		BulkDisablePrompts                                 func(childComplexity int, ids []*objects.GUID) int
+		BulkEnableAPIKeys                                  func(childComplexity int, ids []*objects.GUID) int
+		BulkEnableChannels                                 func(childComplexity int, ids []*objects.GUID) int
+		BulkEnableModels                                   func(childComplexity int, ids []*objects.GUID) int
+		BulkEnablePromptProtectionRules                    func(childComplexity int, ids []*objects.GUID) int
+		BulkEnablePrompts                                  func(childComplexity int, ids []*objects.GUID) int
+		BulkImportChannels                                 func(childComplexity int, input BulkImportChannelsInput) int
+		BulkRecoverChannels                                func(childComplexity int, ids []*objects.GUID) int
+		BulkUpdateChannelOrdering                          func(childComplexity int, input BulkUpdateChannelOrderingInput) int
+		CheckProviderQuotas                                func(childComplexity int) int
+		ClearCache                                         func(childComplexity int, input ClearCacheInput) int
+		ClearChannelOverrideTemplates                      func(childComplexity int, input ClearChannelOverrideTemplatesInput) int
+		CompleteAutoDisableChannelOnboarding               func(childComplexity int, input CompleteAutoDisableChannelOnboardingInput) int
+		CompleteOnboarding                                 func(childComplexity int, input CompleteOnboardingInput) int
+		CompleteSystemModelSettingOnboarding               func(childComplexity int, input CompleteSystemModelSettingOnboardingInput) int
+		CreateAPIKey                                       func(childComplexity int, input ent.CreateAPIKeyInput) int
+		CreateAPIKeyProfileTemplate                        func(childComplexity int, input ent.CreateAPIKeyProfileTemplateInput, profile objects.APIKeyProfile) int
+		CreateChannel                                      func(childComplexity int, input ent.CreateChannelInput) int
+		CreateChannelOverrideTemplate                      func(childComplexity int, input ent.CreateChannelOverrideTemplateInput) int
+		CreateDataStorage                                  func(childComplexity int, input ent.CreateDataStorageInput) int
+		CreateModel                                        func(childComplexity int, input ent.CreateModelInput) int
+		CreateProject                                      func(childComplexity int, input ent.CreateProjectInput) int
+		CreatePrompt                                       func(childComplexity int, input ent.CreatePromptInput) int
+		CreatePromptProtectionRule                         func(childComplexity int, input ent.CreatePromptProtectionRuleInput) int
+		CreateRole                                         func(childComplexity int, input ent.CreateRoleInput) int
+		CreateUser                                         func(childComplexity int, input ent.CreateUserInput) int
+		DeleteAPIKeyProfileTemplate                        func(childComplexity int, id objects.GUID) int
+		DeleteChannel                                      func(childComplexity int, id objects.GUID) int
+		DeleteChannelOverrideTemplate                      func(childComplexity int, id objects.GUID) int
+		DeleteDisabledChannelAPIKeys                       func(childComplexity int, channelID objects.GUID, keys []string) int
+		DeleteModel                                        func(childComplexity int, id objects.GUID) int
+		DeleteProject                                      func(childComplexity int, id objects.GUID) int
+		DeletePrompt                                       func(childComplexity int, id objects.GUID) int
+		DeletePromptProtectionRule                         func(childComplexity int, id objects.GUID) int
+		DeleteProxyPreset                                  func(childComplexity int, url string) int
+		DeleteRole                                         func(childComplexity int, id objects.GUID) int
+		DeleteUser                                         func(childComplexity int, id objects.GUID) int
+		DisableChannelAPIKey                               func(childComplexity int, channelID objects.GUID, key string) int
+		EnableAllChannelAPIKeys                            func(childComplexity int, channelID objects.GUID) int
+		EnableChannelAPIKey                                func(childComplexity int, channelID objects.GUID, key string) int
+		EnableSelectedChannelAPIKeys                       func(childComplexity int, channelID objects.GUID, keys []string) int
+		LoadAPIKeyProfileTemplate                          func(childComplexity int, input LoadAPIKeyProfileTemplateInput) int
+		PreviewPromptProtectionRule                        func(childComplexity int, input PromptProtectionRulePreviewInput) int
+		RemoveUserFromProject                              func(childComplexity int, input RemoveUserFromProjectInput) int
+		Restore                                            func(childComplexity int, file graphql.Upload, input backup.RestoreOptions) int
+		RotateAPIKey                                       func(childComplexity int, id objects.GUID) int
+		SaveChannelEndpoints                               func(childComplexity int, input biz.SaveChannelEndpointsInput) int
+		SaveChannelModelPrices                             func(childComplexity int, channelID objects.GUID, input []*biz.SaveChannelModelPriceInput) int
+		SaveProxyPreset                                    func(childComplexity int, input biz.ProxyPreset) int
+		SyncChannelModels                                  func(childComplexity int, channelID objects.GUID, pattern *string) int
+		TestChannel                                        func(childComplexity int, input TestChannelInput) int
+		TestChannelAPIKeys                                 func(childComplexity int, channelID objects.GUID, modelID *string) int
+		TriggerAutoBackup                                  func(childComplexity int) int
+		TriggerGcCleanup                                   func(childComplexity int, input gc.TriggerGcCleanupInput) int
+		UnlinkOIDCIdentity                                 func(childComplexity int, id objects.GUID) int
+		UpdateAPIKey                                       func(childComplexity int, id objects.GUID, input ent.UpdateAPIKeyInput) int
+		UpdateAPIKeyProfileTemplate                        func(childComplexity int, id objects.GUID, input ent.UpdateAPIKeyProfileTemplateInput, profile *objects.APIKeyProfile) int
+		UpdateAPIKeyProfiles                               func(childComplexity int, id objects.GUID, input objects.APIKeyProfiles) int
+		UpdateAPIKeyStatus                                 func(childComplexity int, id objects.GUID, status apikey.Status) int
+		UpdateAutoBackupSettings                           func(childComplexity int, input UpdateAutoBackupSettingsInput) int
+		UpdateBrandSettings                                func(childComplexity int, input UpdateBrandSettingsInput) int
+		UpdateChannel                                      func(childComplexity int, id objects.GUID, input ent.UpdateChannelInput) int
+		UpdateChannelOverrideTemplate                      func(childComplexity int, id objects.GUID, input ent.UpdateChannelOverrideTemplateInput) int
+		UpdateChannelStatus                                func(childComplexity int, id objects.GUID, status channel.Status) int
+		UpdateDataStorage                                  func(childComplexity int, id objects.GUID, input ent.UpdateDataStorageInput) int
+		UpdateDefaultDataStorage                           func(childComplexity int, input UpdateDefaultDataStorageInput) int
+		UpdateForwardUnsupportedToolsAcrossFormatsSettings func(childComplexity int, input UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput) int
+		UpdateMe                                           func(childComplexity int, input UpdateMeInput) int
+		UpdateModel                                        func(childComplexity int, id objects.GUID, input ent.UpdateModelInput) int
+		UpdateModelStatus                                  func(childComplexity int, id objects.GUID, status model.Status) int
+		UpdateMyPassword                                   func(childComplexity int, input UpdateMyPasswordInput) int
+		UpdatePassThroughSettings                          func(childComplexity int, input UpdatePassThroughSettingsInput) int
+		UpdatePreserveUnsupportedToolsSettings             func(childComplexity int, input UpdatePreserveUnsupportedToolsSettingsInput) int
+		UpdateProject                                      func(childComplexity int, id objects.GUID, input ent.UpdateProjectInput) int
+		UpdateProjectProfiles                              func(childComplexity int, id objects.GUID, input objects.ProjectProfiles) int
+		UpdateProjectStatus                                func(childComplexity int, id objects.GUID, status project.Status) int
+		UpdateProjectUser                                  func(childComplexity int, input UpdateProjectUserInput) int
+		UpdatePrompt                                       func(childComplexity int, id objects.GUID, input ent.UpdatePromptInput) int
+		UpdatePromptProtectionRule                         func(childComplexity int, id objects.GUID, input ent.UpdatePromptProtectionRuleInput) int
+		UpdatePromptProtectionRuleStatus                   func(childComplexity int, id objects.GUID, status promptprotectionrule.Status) int
+		UpdatePromptStatus                                 func(childComplexity int, id objects.GUID, status prompt.Status) int
+		UpdateQuotaEnforcementSettings                     func(childComplexity int, input UpdateQuotaEnforcementSettingsInput) int
+		UpdateRetryPolicy                                  func(childComplexity int, input biz.RetryPolicy) int
+		UpdateRole                                         func(childComplexity int, id objects.GUID, input ent.UpdateRoleInput) int
+		UpdateStoragePolicy                                func(childComplexity int, input biz.StoragePolicy) int
+		UpdateSystemChannelSettings                        func(childComplexity int, input biz.SystemChannelSettings) int
+		UpdateSystemGeneralSettings                        func(childComplexity int, input biz.SystemGeneralSettings) int
+		UpdateSystemModelSettings                          func(childComplexity int, input biz.SystemModelSettings) int
+		UpdateUser                                         func(childComplexity int, id objects.GUID, input ent.UpdateUserInput) int
+		UpdateUserAgentPassThroughSettings                 func(childComplexity int, input UpdateUserAgentPassThroughSettingsInput) int
+		UpdateUserStatus                                   func(childComplexity int, id objects.GUID, status user.Status) int
+		UpdateVideoStorageSettings                         func(childComplexity int, input biz.VideoStorageSettings) int
+		UpdateWebhookNotifierConfig                        func(childComplexity int, input biz.WebhookNotifierConfig) int
 	}
 
 	OAuthCredentials struct {
@@ -1044,6 +1052,10 @@ type ComplexityRoot struct {
 	}
 
 	PassThroughSettings struct {
+		Enabled func(childComplexity int) int
+	}
+
+	PreserveUnsupportedToolsSettings struct {
 		Enabled func(childComplexity int) int
 	}
 
@@ -1215,79 +1227,81 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		APIKeyProfileTemplates       func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.APIKeyProfileTemplateOrder, where *ent.APIKeyProfileTemplateWhereInput) int
-		APIKeyQuotaUsages            func(childComplexity int, apiKeyID objects.GUID) int
-		APIKeyTokenUsageStats        func(childComplexity int, input *APIKeyTokenUsageStatsInput) int
-		APIKeys                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.APIKeyOrder, where *ent.APIKeyWhereInput) int
-		AllChannelSummarys           func(childComplexity int, includeArchived *bool) int
-		AllChannelTags               func(childComplexity int) int
-		AllScopes                    func(childComplexity int, level *string) int
-		AutoBackupSettings           func(childComplexity int) int
-		BrandSettings                func(childComplexity int) int
-		ChannelOverrideTemplates     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOverrideTemplateOrder, where *ent.ChannelOverrideTemplateWhereInput) int
-		ChannelPerformanceStats      func(childComplexity int) int
-		ChannelProbeData             func(childComplexity int, input biz.GetChannelProbeDataInput) int
-		ChannelQuotaUsage            func(childComplexity int, channelID objects.GUID) int
-		ChannelSuccessRates          func(childComplexity int, timeWindow *string, limit *int) int
-		Channels                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOrder, where *ent.ChannelWhereInput) int
-		CheckForUpdate               func(childComplexity int) int
-		CostStatsByAPIKey            func(childComplexity int, timeWindow *string) int
-		CostStatsByChannel           func(childComplexity int, timeWindow *string) int
-		CostStatsByModel             func(childComplexity int, timeWindow *string) int
-		CountChannelsByType          func(childComplexity int, input CountChannelsByTypeInput) int
-		DailyRequestStats            func(childComplexity int) int
-		DashboardOverview            func(childComplexity int) int
-		DataStorages                 func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.DataStorageOrder, where *ent.DataStorageWhereInput) int
-		DefaultDataStorageID         func(childComplexity int) int
-		FastestChannels              func(childComplexity int, input FastestChannelsInput) int
-		FastestModels                func(childComplexity int, input FastestChannelsInput) int
-		FetchModels                  func(childComplexity int, input biz.FetchModelsInput) int
-		GetCacheDiagnostics          func(childComplexity int, input *GetCacheDiagnosticsInput) int
-		Me                           func(childComplexity int) int
-		ModelPerformanceStats        func(childComplexity int) int
-		Models                       func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ModelOrder, where *ent.ModelWhereInput) int
-		MyProjects                   func(childComplexity int) int
-		Node                         func(childComplexity int, id objects.GUID) int
-		Nodes                        func(childComplexity int, ids []*objects.GUID) int
-		OidcIdentities               func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.OIDCIdentityOrder, where *ent.OIDCIdentityWhereInput) int
-		OnboardingInfo               func(childComplexity int) int
-		PassThroughSettings          func(childComplexity int) int
-		PreviewGcCleanup             func(childComplexity int, input gc.TriggerGcCleanupInput) int
-		Projects                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ProjectOrder, where *ent.ProjectWhereInput) int
-		PromptProtectionRules        func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.PromptProtectionRuleOrder, where *ent.PromptProtectionRuleWhereInput) int
-		Prompts                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.PromptOrder, where *ent.PromptWhereInput) int
-		ProxyPresets                 func(childComplexity int) int
-		QueryChannels                func(childComplexity int, input biz.QueryChannelsInput) int
-		QueryModelChannelConnections func(childComplexity int, associations []*objects.ModelAssociation) int
-		QueryModels                  func(childComplexity int, input QueryModelsInput) int
-		QueryUnassociatedChannels    func(childComplexity int) int
-		QuotaEnforcementSettings     func(childComplexity int) int
-		RequestStats                 func(childComplexity int) int
-		RequestStatsByAPIKey         func(childComplexity int, timeWindow *string) int
-		RequestStatsByChannel        func(childComplexity int, timeWindow *string) int
-		RequestStatsByModel          func(childComplexity int, timeWindow *string) int
-		Requests                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.RequestOrder, where *ent.RequestWhereInput) int
-		RetryPolicy                  func(childComplexity int) int
-		Roles                        func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.RoleOrder, where *ent.RoleWhereInput) int
-		StoragePolicy                func(childComplexity int) int
-		SystemChannelSettings        func(childComplexity int) int
-		SystemGeneralSettings        func(childComplexity int) int
-		SystemModelSettings          func(childComplexity int) int
-		SystemStatus                 func(childComplexity int) int
-		SystemVersion                func(childComplexity int) int
-		Systems                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.SystemOrder, where *ent.SystemWhereInput) int
-		Threads                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ThreadOrder, where *ent.ThreadWhereInput) int
-		TokenStats                   func(childComplexity int) int
-		TokenStatsByAPIKey           func(childComplexity int, timeWindow *string) int
-		TokenStatsByChannel          func(childComplexity int, timeWindow *string) int
-		TokenStatsByModel            func(childComplexity int, timeWindow *string) int
-		TopRequestsProjects          func(childComplexity int) int
-		Traces                       func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.TraceOrder, where *ent.TraceWhereInput) int
-		UsageLogs                    func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.UsageLogOrder, where *ent.UsageLogWhereInput) int
-		UserAgentPassThroughSettings func(childComplexity int) int
-		Users                        func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.UserOrder, where *ent.UserWhereInput) int
-		VideoStorageSettings         func(childComplexity int) int
-		WebhookNotifierConfig        func(childComplexity int) int
+		APIKeyProfileTemplates                       func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.APIKeyProfileTemplateOrder, where *ent.APIKeyProfileTemplateWhereInput) int
+		APIKeyQuotaUsages                            func(childComplexity int, apiKeyID objects.GUID) int
+		APIKeyTokenUsageStats                        func(childComplexity int, input *APIKeyTokenUsageStatsInput) int
+		APIKeys                                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.APIKeyOrder, where *ent.APIKeyWhereInput) int
+		AllChannelSummarys                           func(childComplexity int, includeArchived *bool) int
+		AllChannelTags                               func(childComplexity int) int
+		AllScopes                                    func(childComplexity int, level *string) int
+		AutoBackupSettings                           func(childComplexity int) int
+		BrandSettings                                func(childComplexity int) int
+		ChannelOverrideTemplates                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOverrideTemplateOrder, where *ent.ChannelOverrideTemplateWhereInput) int
+		ChannelPerformanceStats                      func(childComplexity int) int
+		ChannelProbeData                             func(childComplexity int, input biz.GetChannelProbeDataInput) int
+		ChannelQuotaUsage                            func(childComplexity int, channelID objects.GUID) int
+		ChannelSuccessRates                          func(childComplexity int, timeWindow *string, limit *int) int
+		Channels                                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOrder, where *ent.ChannelWhereInput) int
+		CheckForUpdate                               func(childComplexity int) int
+		CostStatsByAPIKey                            func(childComplexity int, timeWindow *string) int
+		CostStatsByChannel                           func(childComplexity int, timeWindow *string) int
+		CostStatsByModel                             func(childComplexity int, timeWindow *string) int
+		CountChannelsByType                          func(childComplexity int, input CountChannelsByTypeInput) int
+		DailyRequestStats                            func(childComplexity int) int
+		DashboardOverview                            func(childComplexity int) int
+		DataStorages                                 func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.DataStorageOrder, where *ent.DataStorageWhereInput) int
+		DefaultDataStorageID                         func(childComplexity int) int
+		FastestChannels                              func(childComplexity int, input FastestChannelsInput) int
+		FastestModels                                func(childComplexity int, input FastestChannelsInput) int
+		FetchModels                                  func(childComplexity int, input biz.FetchModelsInput) int
+		ForwardUnsupportedToolsAcrossFormatsSettings func(childComplexity int) int
+		GetCacheDiagnostics                          func(childComplexity int, input *GetCacheDiagnosticsInput) int
+		Me                                           func(childComplexity int) int
+		ModelPerformanceStats                        func(childComplexity int) int
+		Models                                       func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ModelOrder, where *ent.ModelWhereInput) int
+		MyProjects                                   func(childComplexity int) int
+		Node                                         func(childComplexity int, id objects.GUID) int
+		Nodes                                        func(childComplexity int, ids []*objects.GUID) int
+		OidcIdentities                               func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.OIDCIdentityOrder, where *ent.OIDCIdentityWhereInput) int
+		OnboardingInfo                               func(childComplexity int) int
+		PassThroughSettings                          func(childComplexity int) int
+		PreserveUnsupportedToolsSettings             func(childComplexity int) int
+		PreviewGcCleanup                             func(childComplexity int, input gc.TriggerGcCleanupInput) int
+		Projects                                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ProjectOrder, where *ent.ProjectWhereInput) int
+		PromptProtectionRules                        func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.PromptProtectionRuleOrder, where *ent.PromptProtectionRuleWhereInput) int
+		Prompts                                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.PromptOrder, where *ent.PromptWhereInput) int
+		ProxyPresets                                 func(childComplexity int) int
+		QueryChannels                                func(childComplexity int, input biz.QueryChannelsInput) int
+		QueryModelChannelConnections                 func(childComplexity int, associations []*objects.ModelAssociation) int
+		QueryModels                                  func(childComplexity int, input QueryModelsInput) int
+		QueryUnassociatedChannels                    func(childComplexity int) int
+		QuotaEnforcementSettings                     func(childComplexity int) int
+		RequestStats                                 func(childComplexity int) int
+		RequestStatsByAPIKey                         func(childComplexity int, timeWindow *string) int
+		RequestStatsByChannel                        func(childComplexity int, timeWindow *string) int
+		RequestStatsByModel                          func(childComplexity int, timeWindow *string) int
+		Requests                                     func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.RequestOrder, where *ent.RequestWhereInput) int
+		RetryPolicy                                  func(childComplexity int) int
+		Roles                                        func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.RoleOrder, where *ent.RoleWhereInput) int
+		StoragePolicy                                func(childComplexity int) int
+		SystemChannelSettings                        func(childComplexity int) int
+		SystemGeneralSettings                        func(childComplexity int) int
+		SystemModelSettings                          func(childComplexity int) int
+		SystemStatus                                 func(childComplexity int) int
+		SystemVersion                                func(childComplexity int) int
+		Systems                                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.SystemOrder, where *ent.SystemWhereInput) int
+		Threads                                      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ThreadOrder, where *ent.ThreadWhereInput) int
+		TokenStats                                   func(childComplexity int) int
+		TokenStatsByAPIKey                           func(childComplexity int, timeWindow *string) int
+		TokenStatsByChannel                          func(childComplexity int, timeWindow *string) int
+		TokenStatsByModel                            func(childComplexity int, timeWindow *string) int
+		TopRequestsProjects                          func(childComplexity int) int
+		Traces                                       func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.TraceOrder, where *ent.TraceWhereInput) int
+		UsageLogs                                    func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.UsageLogOrder, where *ent.UsageLogWhereInput) int
+		UserAgentPassThroughSettings                 func(childComplexity int) int
+		Users                                        func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.UserOrder, where *ent.UserWhereInput) int
+		VideoStorageSettings                         func(childComplexity int) int
+		WebhookNotifierConfig                        func(childComplexity int) int
 	}
 
 	QuotaEnforcementSettings struct {
@@ -2089,6 +2103,8 @@ type MutationResolver interface {
 	DeleteProxyPreset(ctx context.Context, url string) (bool, error)
 	UpdateUserAgentPassThroughSettings(ctx context.Context, input UpdateUserAgentPassThroughSettingsInput) (bool, error)
 	UpdatePassThroughSettings(ctx context.Context, input UpdatePassThroughSettingsInput) (bool, error)
+	UpdatePreserveUnsupportedToolsSettings(ctx context.Context, input UpdatePreserveUnsupportedToolsSettingsInput) (bool, error)
+	UpdateForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, input UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput) (bool, error)
 	ClearCache(ctx context.Context, input ClearCacheInput) (*ClearCachePayload, error)
 	CreateModel(ctx context.Context, input ent.CreateModelInput) (*ent.Model, error)
 	BulkCreateModels(ctx context.Context, inputs []*ent.CreateModelInput) ([]*ent.Model, error)
@@ -2208,6 +2224,8 @@ type QueryResolver interface {
 	ProxyPresets(ctx context.Context) ([]*biz.ProxyPreset, error)
 	UserAgentPassThroughSettings(ctx context.Context) (*UserAgentPassThroughSettings, error)
 	PassThroughSettings(ctx context.Context) (*PassThroughSettings, error)
+	PreserveUnsupportedToolsSettings(ctx context.Context) (*PreserveUnsupportedToolsSettings, error)
+	ForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context) (*ForwardUnsupportedToolsAcrossFormatsSettings, error)
 	GetCacheDiagnostics(ctx context.Context, input *GetCacheDiagnosticsInput) (*GetCacheDiagnosticsPayload, error)
 	FetchModels(ctx context.Context, input biz.FetchModelsInput) (*FetchModelsPayload, error)
 	QueryModels(ctx context.Context, input QueryModelsInput) ([]*biz.ModelIdentityWithStatus, error)
@@ -3855,6 +3873,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.ExtraModelPrefix(childComplexity), true
+	case "ChannelSettings.forwardUnsupportedToolsAcrossFormats":
+		if e.complexity.ChannelSettings.ForwardUnsupportedToolsAcrossFormats == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.ForwardUnsupportedToolsAcrossFormats(childComplexity), true
 	case "ChannelSettings.headerOverrideOperations":
 		if e.complexity.ChannelSettings.HeaderOverrideOperations == nil {
 			break
@@ -3897,6 +3921,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.PassThroughUserAgent(childComplexity), true
+	case "ChannelSettings.preserveUnsupportedTools":
+		if e.complexity.ChannelSettings.PreserveUnsupportedTools == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.PreserveUnsupportedTools(childComplexity), true
 	case "ChannelSettings.proxy":
 		if e.complexity.ChannelSettings.Proxy == nil {
 			break
@@ -4538,6 +4568,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FilterCondition.Value(childComplexity), true
+
+	case "ForwardUnsupportedToolsAcrossFormatsSettings.enabled":
+		if e.complexity.ForwardUnsupportedToolsAcrossFormatsSettings.Enabled == nil {
+			break
+		}
+
+		return e.complexity.ForwardUnsupportedToolsAcrossFormatsSettings.Enabled(childComplexity), true
 
 	case "GCPCredential.jsonData":
 		if e.complexity.GCPCredential.JSONData == nil {
@@ -6045,6 +6082,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateDefaultDataStorage(childComplexity, args["input"].(UpdateDefaultDataStorageInput)), true
+	case "Mutation.updateForwardUnsupportedToolsAcrossFormatsSettings":
+		if e.complexity.Mutation.UpdateForwardUnsupportedToolsAcrossFormatsSettings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateForwardUnsupportedToolsAcrossFormatsSettings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateForwardUnsupportedToolsAcrossFormatsSettings(childComplexity, args["input"].(UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput)), true
 	case "Mutation.updateMe":
 		if e.complexity.Mutation.UpdateMe == nil {
 			break
@@ -6100,6 +6148,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdatePassThroughSettings(childComplexity, args["input"].(UpdatePassThroughSettingsInput)), true
+	case "Mutation.updatePreserveUnsupportedToolsSettings":
+		if e.complexity.Mutation.UpdatePreserveUnsupportedToolsSettings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updatePreserveUnsupportedToolsSettings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdatePreserveUnsupportedToolsSettings(childComplexity, args["input"].(UpdatePreserveUnsupportedToolsSettingsInput)), true
 	case "Mutation.updateProject":
 		if e.complexity.Mutation.UpdateProject == nil {
 			break
@@ -6587,6 +6646,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.PassThroughSettings.Enabled(childComplexity), true
+
+	case "PreserveUnsupportedToolsSettings.enabled":
+		if e.complexity.PreserveUnsupportedToolsSettings.Enabled == nil {
+			break
+		}
+
+		return e.complexity.PreserveUnsupportedToolsSettings.Enabled(childComplexity), true
 
 	case "PriceTier.pricePerUnit":
 		if e.complexity.PriceTier.PricePerUnit == nil {
@@ -7506,6 +7572,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.FetchModels(childComplexity, args["input"].(biz.FetchModelsInput)), true
+	case "Query.forwardUnsupportedToolsAcrossFormatsSettings":
+		if e.complexity.Query.ForwardUnsupportedToolsAcrossFormatsSettings == nil {
+			break
+		}
+
+		return e.complexity.Query.ForwardUnsupportedToolsAcrossFormatsSettings(childComplexity), true
 	case "Query.getCacheDiagnostics":
 		if e.complexity.Query.GetCacheDiagnostics == nil {
 			break
@@ -7591,6 +7663,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.PassThroughSettings(childComplexity), true
+	case "Query.preserveUnsupportedToolsSettings":
+		if e.complexity.Query.PreserveUnsupportedToolsSettings == nil {
+			break
+		}
+
+		return e.complexity.Query.PreserveUnsupportedToolsSettings(childComplexity), true
 	case "Query.previewGcCleanup":
 		if e.complexity.Query.PreviewGcCleanup == nil {
 			break
@@ -10662,11 +10740,13 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUpdateChannelProbeSettingInput,
 		ec.unmarshalInputUpdateDataStorageInput,
 		ec.unmarshalInputUpdateDefaultDataStorageInput,
+		ec.unmarshalInputUpdateForwardUnsupportedToolsAcrossFormatsSettingsInput,
 		ec.unmarshalInputUpdateMeInput,
 		ec.unmarshalInputUpdateModelInput,
 		ec.unmarshalInputUpdateMyPasswordInput,
 		ec.unmarshalInputUpdateOIDCIdentityInput,
 		ec.unmarshalInputUpdatePassThroughSettingsInput,
+		ec.unmarshalInputUpdatePreserveUnsupportedToolsSettingsInput,
 		ec.unmarshalInputUpdateProjectInput,
 		ec.unmarshalInputUpdateProjectProfilesInput,
 		ec.unmarshalInputUpdateProjectUserInput,
@@ -12026,6 +12106,17 @@ func (ec *executionContext) field_Mutation_updateDefaultDataStorage_args(ctx con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateForwardUnsupportedToolsAcrossFormatsSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateForwardUnsupportedToolsAcrossFormatsSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdateForwardUnsupportedToolsAcrossFormatsSettingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateMe_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12084,6 +12175,17 @@ func (ec *executionContext) field_Mutation_updatePassThroughSettings_args(ctx co
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdatePassThroughSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdatePassThroughSettingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updatePreserveUnsupportedToolsSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdatePreserveUnsupportedToolsSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdatePreserveUnsupportedToolsSettingsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -18058,6 +18160,10 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_passThroughUserAgent(ctx, field)
 			case "passThroughBody":
 				return ec.fieldContext_ChannelSettings_passThroughBody(ctx, field)
+			case "preserveUnsupportedTools":
+				return ec.fieldContext_ChannelSettings_preserveUnsupportedTools(ctx, field)
+			case "forwardUnsupportedToolsAcrossFormats":
+				return ec.fieldContext_ChannelSettings_forwardUnsupportedToolsAcrossFormats(ctx, field)
 			case "rateLimit":
 				return ec.fieldContext_ChannelSettings_rateLimit(ctx, field)
 			case "quota":
@@ -22651,6 +22757,64 @@ func (ec *executionContext) fieldContext_ChannelSettings_passThroughBody(_ conte
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelSettings_preserveUnsupportedTools(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_preserveUnsupportedTools,
+		func(ctx context.Context) (any, error) {
+			return obj.PreserveUnsupportedTools, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_preserveUnsupportedTools(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelSettings_forwardUnsupportedToolsAcrossFormats(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_forwardUnsupportedToolsAcrossFormats,
+		func(ctx context.Context) (any, error) {
+			return obj.ForwardUnsupportedToolsAcrossFormats, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_forwardUnsupportedToolsAcrossFormats(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelSettings_rateLimit(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25779,6 +25943,35 @@ func (ec *executionContext) fieldContext_FilterCondition_value(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Any does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ForwardUnsupportedToolsAcrossFormatsSettings_enabled(ctx context.Context, field graphql.CollectedField, obj *ForwardUnsupportedToolsAcrossFormatsSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ForwardUnsupportedToolsAcrossFormatsSettings_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ForwardUnsupportedToolsAcrossFormatsSettings_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ForwardUnsupportedToolsAcrossFormatsSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -33176,6 +33369,88 @@ func (ec *executionContext) fieldContext_Mutation_updatePassThroughSettings(ctx 
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_updatePreserveUnsupportedToolsSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updatePreserveUnsupportedToolsSettings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdatePreserveUnsupportedToolsSettings(ctx, fc.Args["input"].(UpdatePreserveUnsupportedToolsSettingsInput))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updatePreserveUnsupportedToolsSettings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updatePreserveUnsupportedToolsSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateForwardUnsupportedToolsAcrossFormatsSettings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateForwardUnsupportedToolsAcrossFormatsSettings(ctx, fc.Args["input"].(UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateForwardUnsupportedToolsAcrossFormatsSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_clearCache(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -35951,6 +36226,35 @@ func (ec *executionContext) _PassThroughSettings_enabled(ctx context.Context, fi
 func (ec *executionContext) fieldContext_PassThroughSettings_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "PassThroughSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PreserveUnsupportedToolsSettings_enabled(ctx context.Context, field graphql.CollectedField, obj *PreserveUnsupportedToolsSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PreserveUnsupportedToolsSettings_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PreserveUnsupportedToolsSettings_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PreserveUnsupportedToolsSettings",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -42354,6 +42658,72 @@ func (ec *executionContext) fieldContext_Query_passThroughSettings(_ context.Con
 				return ec.fieldContext_PassThroughSettings_enabled(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PassThroughSettings", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_preserveUnsupportedToolsSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_preserveUnsupportedToolsSettings,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().PreserveUnsupportedToolsSettings(ctx)
+		},
+		nil,
+		ec.marshalNPreserveUnsupportedToolsSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐPreserveUnsupportedToolsSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_preserveUnsupportedToolsSettings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_PreserveUnsupportedToolsSettings_enabled(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PreserveUnsupportedToolsSettings", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_forwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_forwardUnsupportedToolsAcrossFormatsSettings,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().ForwardUnsupportedToolsAcrossFormatsSettings(ctx)
+		},
+		nil,
+		ec.marshalNForwardUnsupportedToolsAcrossFormatsSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐForwardUnsupportedToolsAcrossFormatsSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_forwardUnsupportedToolsAcrossFormatsSettings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_ForwardUnsupportedToolsAcrossFormatsSettings_enabled(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ForwardUnsupportedToolsAcrossFormatsSettings", field.Name)
 		},
 	}
 	return fc, nil
@@ -62609,7 +62979,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "preserveUnsupportedTools", "forwardUnsupportedToolsAcrossFormats", "rateLimit", "quota"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -62700,6 +63070,20 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.PassThroughBody = data
+		case "preserveUnsupportedTools":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("preserveUnsupportedTools"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PreserveUnsupportedTools = data
+		case "forwardUnsupportedToolsAcrossFormats":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("forwardUnsupportedToolsAcrossFormats"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ForwardUnsupportedToolsAcrossFormats = data
 		case "rateLimit":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rateLimit"))
 			data, err := ec.unmarshalOChannelRateLimitInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelRateLimit(ctx, v)
@@ -78148,6 +78532,33 @@ func (ec *executionContext) unmarshalInputUpdateDefaultDataStorageInput(ctx cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateForwardUnsupportedToolsAcrossFormatsSettingsInput(ctx context.Context, obj any) (UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput, error) {
+	var it UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"enabled"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateMeInput(ctx context.Context, obj any) (UpdateMeInput, error) {
 	var it UpdateMeInput
 	asMap := map[string]any{}
@@ -78405,6 +78816,33 @@ func (ec *executionContext) unmarshalInputUpdateOIDCIdentityInput(ctx context.Co
 
 func (ec *executionContext) unmarshalInputUpdatePassThroughSettingsInput(ctx context.Context, obj any) (UpdatePassThroughSettingsInput, error) {
 	var it UpdatePassThroughSettingsInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"enabled"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdatePreserveUnsupportedToolsSettingsInput(ctx context.Context, obj any) (UpdatePreserveUnsupportedToolsSettingsInput, error) {
+	var it UpdatePreserveUnsupportedToolsSettingsInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -87536,6 +87974,10 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_passThroughUserAgent(ctx, field, obj)
 		case "passThroughBody":
 			out.Values[i] = ec._ChannelSettings_passThroughBody(ctx, field, obj)
+		case "preserveUnsupportedTools":
+			out.Values[i] = ec._ChannelSettings_preserveUnsupportedTools(ctx, field, obj)
+		case "forwardUnsupportedToolsAcrossFormats":
+			out.Values[i] = ec._ChannelSettings_forwardUnsupportedToolsAcrossFormats(ctx, field, obj)
 		case "rateLimit":
 			out.Values[i] = ec._ChannelSettings_rateLimit(ctx, field, obj)
 		case "quota":
@@ -88908,6 +89350,45 @@ func (ec *executionContext) _FilterCondition(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._FilterCondition_operator(ctx, field, obj)
 		case "value":
 			out.Values[i] = ec._FilterCondition_value(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var forwardUnsupportedToolsAcrossFormatsSettingsImplementors = []string{"ForwardUnsupportedToolsAcrossFormatsSettings"}
+
+func (ec *executionContext) _ForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, sel ast.SelectionSet, obj *ForwardUnsupportedToolsAcrossFormatsSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, forwardUnsupportedToolsAcrossFormatsSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ForwardUnsupportedToolsAcrossFormatsSettings")
+		case "enabled":
+			out.Values[i] = ec._ForwardUnsupportedToolsAcrossFormatsSettings_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -90893,6 +91374,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "updatePreserveUnsupportedToolsSettings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updatePreserveUnsupportedToolsSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateForwardUnsupportedToolsAcrossFormatsSettings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateForwardUnsupportedToolsAcrossFormatsSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "clearCache":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_clearCache(ctx, field)
@@ -91645,6 +92140,45 @@ func (ec *executionContext) _PassThroughSettings(ctx context.Context, sel ast.Se
 			out.Values[i] = graphql.MarshalString("PassThroughSettings")
 		case "enabled":
 			out.Values[i] = ec._PassThroughSettings_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var preserveUnsupportedToolsSettingsImplementors = []string{"PreserveUnsupportedToolsSettings"}
+
+func (ec *executionContext) _PreserveUnsupportedToolsSettings(ctx context.Context, sel ast.SelectionSet, obj *PreserveUnsupportedToolsSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, preserveUnsupportedToolsSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PreserveUnsupportedToolsSettings")
+		case "enabled":
+			out.Values[i] = ec._PreserveUnsupportedToolsSettings_enabled(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -94830,6 +95364,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_passThroughSettings(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "preserveUnsupportedToolsSettings":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_preserveUnsupportedToolsSettings(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "forwardUnsupportedToolsAcrossFormatsSettings":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_forwardUnsupportedToolsAcrossFormatsSettings(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -104491,6 +105069,20 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 	return graphql.WrapContextMarshaler(ctx, res)
 }
 
+func (ec *executionContext) marshalNForwardUnsupportedToolsAcrossFormatsSettings2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, sel ast.SelectionSet, v ForwardUnsupportedToolsAcrossFormatsSettings) graphql.Marshaler {
+	return ec._ForwardUnsupportedToolsAcrossFormatsSettings(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNForwardUnsupportedToolsAcrossFormatsSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐForwardUnsupportedToolsAcrossFormatsSettings(ctx context.Context, sel ast.SelectionSet, v *ForwardUnsupportedToolsAcrossFormatsSettings) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ForwardUnsupportedToolsAcrossFormatsSettings(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNGcCleanupPreviewItem2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgcᚐGcCleanupPreviewItemᚄ(ctx context.Context, sel ast.SelectionSet, v []*gc.GcCleanupPreviewItem) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -105565,6 +106157,20 @@ func (ec *executionContext) marshalNPassThroughSettings2ᚖgithubᚗcomᚋlooplj
 		return graphql.Null
 	}
 	return ec._PassThroughSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNPreserveUnsupportedToolsSettings2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐPreserveUnsupportedToolsSettings(ctx context.Context, sel ast.SelectionSet, v PreserveUnsupportedToolsSettings) graphql.Marshaler {
+	return ec._PreserveUnsupportedToolsSettings(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNPreserveUnsupportedToolsSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐPreserveUnsupportedToolsSettings(ctx context.Context, sel ast.SelectionSet, v *PreserveUnsupportedToolsSettings) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PreserveUnsupportedToolsSettings(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNPriceItemCode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPriceItemCode(ctx context.Context, v any) (objects.PriceItemCode, error) {
@@ -107521,6 +108127,11 @@ func (ec *executionContext) unmarshalNUpdateDefaultDataStorageInput2githubᚗcom
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNUpdateForwardUnsupportedToolsAcrossFormatsSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdateForwardUnsupportedToolsAcrossFormatsSettingsInput(ctx context.Context, v any) (UpdateForwardUnsupportedToolsAcrossFormatsSettingsInput, error) {
+	res, err := ec.unmarshalInputUpdateForwardUnsupportedToolsAcrossFormatsSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateMeInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdateMeInput(ctx context.Context, v any) (UpdateMeInput, error) {
 	res, err := ec.unmarshalInputUpdateMeInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -107538,6 +108149,11 @@ func (ec *executionContext) unmarshalNUpdateMyPasswordInput2githubᚗcomᚋloopl
 
 func (ec *executionContext) unmarshalNUpdatePassThroughSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdatePassThroughSettingsInput(ctx context.Context, v any) (UpdatePassThroughSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdatePassThroughSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdatePreserveUnsupportedToolsSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdatePreserveUnsupportedToolsSettingsInput(ctx context.Context, v any) (UpdatePreserveUnsupportedToolsSettingsInput, error) {
+	res, err := ec.unmarshalInputUpdatePreserveUnsupportedToolsSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

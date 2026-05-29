@@ -167,6 +167,16 @@ type ChannelSettings struct {
 	// When set to true/false, it overrides the global setting.
 	PassThroughBody *bool `json:"passThroughBody,omitempty"`
 
+	// PreserveUnsupportedTools controls whether raw tool definitions that are not
+	// represented by AxonHub's unified tool model should be preserved for compatible
+	// outbound formats. When set to nil, it inherits from the global system setting.
+	PreserveUnsupportedTools *bool `json:"preserveUnsupportedTools,omitempty"`
+
+	// ForwardUnsupportedToolsAcrossFormats controls whether preserved unsupported
+	// tools should also be sent when the outbound API format differs from the inbound
+	// API format. When set to nil, it inherits from the global system setting.
+	ForwardUnsupportedToolsAcrossFormats *bool `json:"forwardUnsupportedToolsAcrossFormats,omitempty"`
+
 	// RateLimit configures the upstream rate limit for the channel.
 	// When configured, the load balancer will skip channels that have exceeded their rate limits.
 	RateLimit *ChannelRateLimit `json:"rateLimit,omitempty"`

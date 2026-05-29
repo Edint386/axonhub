@@ -109,6 +109,11 @@ export function mergeChannelSettingsForUpdate(
     transformOptions: pick('transformOptions', existing?.transformOptions ?? undefined),
     passThroughUserAgent: pick('passThroughUserAgent', existing?.passThroughUserAgent ?? null),
     passThroughBody: pick('passThroughBody', existing?.passThroughBody ?? null),
+    preserveUnsupportedTools: pick('preserveUnsupportedTools', existing?.preserveUnsupportedTools ?? null),
+    forwardUnsupportedToolsAcrossFormats: pick(
+      'forwardUnsupportedToolsAcrossFormats',
+      existing?.forwardUnsupportedToolsAcrossFormats ?? null
+    ),
     rateLimit: pick('rateLimit', existing?.rateLimit ?? null),
     quota: pick('quota', existing?.quota ?? null),
   };

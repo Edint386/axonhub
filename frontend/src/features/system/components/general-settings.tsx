@@ -17,6 +17,10 @@ import {
   useUpdateUserAgentPassThroughSettings,
   usePassThroughSettings,
   useUpdatePassThroughSettings,
+  usePreserveUnsupportedToolsSettings,
+  useUpdatePreserveUnsupportedToolsSettings,
+  useForwardUnsupportedToolsAcrossFormatsSettings,
+  useUpdateForwardUnsupportedToolsAcrossFormatsSettings,
 } from '../data/system';
 import { GMTTimeZoneOptions } from '../data/timezones';
 
@@ -35,6 +39,16 @@ export function GeneralSettings() {
   const { data: ptSettings, isLoading: isLoadingPTSettings } = usePassThroughSettings();
   const updatePTSettings = useUpdatePassThroughSettings();
   const [passThroughEnabled, setPassThroughEnabled] = useState(false);
+
+  // Unsupported tools settings
+  const { data: preserveUnsupportedToolsSettings, isLoading: isLoadingPreserveUnsupportedToolsSettings } =
+    usePreserveUnsupportedToolsSettings();
+  const updatePreserveUnsupportedToolsSettings = useUpdatePreserveUnsupportedToolsSettings();
+  const { data: forwardUnsupportedToolsAcrossFormatsSettings, isLoading: isLoadingForwardUnsupportedToolsAcrossFormatsSettings } =
+    useForwardUnsupportedToolsAcrossFormatsSettings();
+  const updateForwardUnsupportedToolsAcrossFormatsSettings = useUpdateForwardUnsupportedToolsAcrossFormatsSettings();
+  const [preserveUnsupportedToolsEnabled, setPreserveUnsupportedToolsEnabled] = useState(false);
+  const [forwardUnsupportedToolsAcrossFormatsEnabled, setForwardUnsupportedToolsAcrossFormatsEnabled] = useState(false);
 
   const [currencyCode, setCurrencyCode] = useState('USD');
   const [timezone, setTimezone] = useState('UTC');
@@ -72,6 +86,18 @@ export function GeneralSettings() {
     }
   }, [ptSettings]);
 
+  useEffect(() => {
+    if (preserveUnsupportedToolsSettings) {
+      setPreserveUnsupportedToolsEnabled(preserveUnsupportedToolsSettings.enabled);
+    }
+  }, [preserveUnsupportedToolsSettings]);
+
+  useEffect(() => {
+    if (forwardUnsupportedToolsAcrossFormatsSettings) {
+      setForwardUnsupportedToolsAcrossFormatsEnabled(forwardUnsupportedToolsAcrossFormatsSettings.enabled);
+    }
+  }, [forwardUnsupportedToolsAcrossFormatsSettings]);
+
   const handleSave = async () => {
     setIsLoading(true);
     try {
@@ -103,6 +129,26 @@ export function GeneralSettings() {
     } catch {
       // Revert state on error
       setPassThroughEnabled(previousValue);
+    }
+  };
+
+  const handlePreserveUnsupportedToolsChange = async (enabled: boolean) => {
+    const previousValue = preserveUnsupportedToolsEnabled;
+    setPreserveUnsupportedToolsEnabled(enabled);
+    try {
+      await updatePreserveUnsupportedToolsSettings.mutateAsync({ enabled });
+    } catch {
+      setPreserveUnsupportedToolsEnabled(previousValue);
+    }
+  };
+
+  const handleForwardUnsupportedToolsAcrossFormatsChange = async (enabled: boolean) => {
+    const previousValue = forwardUnsupportedToolsAcrossFormatsEnabled;
+    setForwardUnsupportedToolsAcrossFormatsEnabled(enabled);
+    try {
+      await updateForwardUnsupportedToolsAcrossFormatsSettings.mutateAsync({ enabled });
+    } catch {
+      setForwardUnsupportedToolsAcrossFormatsEnabled(previousValue);
     }
   };
 
@@ -187,6 +233,37 @@ export function GeneralSettings() {
               disabled={isLoadingPTSettings || updatePTSettings.isPending}
             />
           </div>
+          <div className='flex items-center justify-between'>
+            <div className='space-y-0.5'>
+              <Label htmlFor='preserve-unsupported-tools'>{t('system.preserveUnsupportedTools.label')}</Label>
+              <div className='text-muted-foreground text-sm'>{t('system.preserveUnsupportedTools.helpText')}</div>
+            </div>
+            <Switch
+              id='preserve-unsupported-tools'
+              checked={preserveUnsupportedToolsEnabled}
+              onCheckedChange={handlePreserveUnsupportedToolsChange}
+              disabled={isLoadingPreserveUnsupportedToolsSettings || updatePreserveUnsupportedToolsSettings.isPending}
+            />
+          </div>
+          {preserveUnsupportedToolsEnabled && (
+            <div className='border-border/60 ml-4 flex items-center justify-between border-l pl-4'>
+              <div className='space-y-0.5'>
+                <Label htmlFor='forward-unsupported-tools-across-formats'>
+                  {t('system.forwardUnsupportedToolsAcrossFormats.label')}
+                </Label>
+                <div className='text-muted-foreground text-sm'>{t('system.forwardUnsupportedToolsAcrossFormats.helpText')}</div>
+              </div>
+              <Switch
+                id='forward-unsupported-tools-across-formats'
+                checked={forwardUnsupportedToolsAcrossFormatsEnabled}
+                onCheckedChange={handleForwardUnsupportedToolsAcrossFormatsChange}
+                disabled={
+                  isLoadingForwardUnsupportedToolsAcrossFormatsSettings ||
+                  updateForwardUnsupportedToolsAcrossFormatsSettings.isPending
+                }
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 

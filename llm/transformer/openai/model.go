@@ -346,8 +346,38 @@ type OpenAIError struct {
 
 // Tool represents a function tool.
 type Tool struct {
+	raw json.RawMessage
+
 	Type     string   `json:"type"`
 	Function Function `json:"function"`
+}
+
+type toolAlias Tool
+
+func (t *Tool) UnmarshalJSON(data []byte) error {
+	type alias toolAlias
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*t = Tool(raw)
+	t.raw = append(t.raw[:0], data...)
+
+	return nil
+}
+
+func (t Tool) rawJSON() json.RawMessage {
+	if len(t.raw) > 0 {
+		return append(json.RawMessage(nil), t.raw...)
+	}
+
+	data, err := json.Marshal(t)
+	if err != nil {
+		return nil
+	}
+
+	return data
 }
 
 // ToLLMTool converts OpenAI Tool to unified llm.Tool.

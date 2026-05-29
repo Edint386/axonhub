@@ -213,6 +213,11 @@ type Request struct {
 	Tools             []Tool      `json:"tools,omitempty"`
 	ToolChoice        *ToolChoice `json:"tool_choice,omitempty"`
 
+	// UnsupportedTools stores raw tool definitions that the current unified model
+	// cannot represent. It lets gateways preserve client-specific tools when the
+	// selected outbound format can safely receive them.
+	UnsupportedTools []UnsupportedTool `json:"unsupported_tools,omitempty"`
+
 	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
 
 	// Constrains the verbosity of the model's response. Lower values will result in
@@ -272,6 +277,12 @@ type Request struct {
 	// - "truncation": *string - truncation strategy ("auto", "disabled")
 	// - "include_obfuscation": *bool - whether to enable stream obfuscation (Responses API specific)
 	TransformerMetadata map[string]any `json:"transformer_metadata,omitempty"`
+}
+
+type UnsupportedTool struct {
+	Index int             `json:"index"`
+	Type  string          `json:"type,omitempty"`
+	Raw   json.RawMessage `json:"raw"`
 }
 
 type StreamOptions struct {

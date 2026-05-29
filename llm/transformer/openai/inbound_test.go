@@ -9,6 +9,7 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -176,6 +177,34 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 				return req != nil &&
 					req.ReasoningBudget != nil &&
 					*req.ReasoningBudget == 8192
+			},
+		},
+		{
+			name: "request with unsupported tools preserves raw definitions",
+			request: &httpclient.Request{
+				Method: http.MethodPost,
+				URL:    "/v1/chat/completions",
+				Headers: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body: []byte(`{
+					"model": "gpt-4",
+					"messages": [{"role": "user", "content": "hi"}],
+					"tools": [
+						{"type": "function", "function": {"name": "known", "parameters": {"type": "object"}}},
+						{"type": "namespace", "name": "mcp__node_repl__", "description": "Node kernel"}
+					]
+				}`),
+			},
+			wantErr: false,
+			validate: func(req *llm.Request) bool {
+				return req != nil &&
+					len(req.Tools) == 1 &&
+					req.Tools[0].Function.Name == "known" &&
+					len(req.UnsupportedTools) == 1 &&
+					req.UnsupportedTools[0].Index == 1 &&
+					req.UnsupportedTools[0].Type == "namespace" &&
+					gjson.GetBytes(req.UnsupportedTools[0].Raw, "name").String() == "mcp__node_repl__"
 			},
 		},
 		{

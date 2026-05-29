@@ -178,6 +178,28 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "request with unsupported tool preserves raw definition",
+			httpReq: &httpclient.Request{
+				Body: []byte(`{
+					"model": "gpt-4o",
+					"input": "Use tools",
+					"tools": [
+						{"type": "function", "name": "known", "parameters": {"type": "object"}},
+						{"type": "namespace", "name": "mcp__node_repl__", "description": "Node kernel"}
+					]
+				}`),
+			},
+			expectError: false,
+			validate: func(t *testing.T, result *llm.Request) {
+				require.Len(t, result.Tools, 1)
+				require.Equal(t, "known", result.Tools[0].Function.Name)
+				require.Len(t, result.UnsupportedTools, 1)
+				require.Equal(t, 1, result.UnsupportedTools[0].Index)
+				require.Equal(t, "namespace", result.UnsupportedTools[0].Type)
+				require.JSONEq(t, `{"type":"namespace","name":"mcp__node_repl__","description":"Node kernel"}`, string(result.UnsupportedTools[0].Raw))
+			},
+		},
+		{
 			name: "request with reasoning",
 			httpReq: &httpclient.Request{
 				Body: []byte(`{
