@@ -9,48 +9,16 @@ on:
       - custom
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   GO111MODULE: on
+  NODE_OPTIONS: --max-old-space-size=4096
 
 jobs:
-  build-backend:
-    name: Build Backend
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          stable: true
-          cache: true
-
-      - name: Build main binary
-        run: go build -ldflags "-s -w" -tags=nomsgpack -o axonhub ./cmd/axonhub
-
-      - name: Build schema generator
-        run: cd cmd/schema && go build -o schema
-
-      - name: Build llm module packages
-        run: cd llm && go build ./...
-
-      - name: Verify all packages compile
-        run: go build ./...
-
-      - name: Upload backend binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: axonhub-backend-${{ github.sha }}
-          path: |
-            axonhub
-            cmd/schema/schema
-
-  build-frontend:
-    name: Build Frontend
+  build-linux-amd64:
+    name: Build Linux AMD64 Package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -67,8 +35,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          node-version: "22"
+          cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install frontend dependencies
@@ -77,10 +45,45 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
-        run: NODE_OPTIONS=--max-old-space-size=4096 pnpm build
+        run: pnpm build
 
-      - name: Upload frontend dist
+      - name: Embed frontend assets
+        run: |
+          rm -rf internal/server/static/dist/assets
+          mkdir -p internal/server/static/dist
+          cp -r frontend/dist/* internal/server/static/dist/
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          stable: true
+          cache: true
+
+      - name: Build AxonHub binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build \
+            -tags=nomsgpack \
+            -ldflags "-s -w -X github.com/looplj/axonhub/internal/build.Commit=${{ github.sha }} -X github.com/looplj/axonhub/internal/build.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o axonhub \
+            ./cmd/axonhub
+
+      - name: Prepare package
+        run: |
+          mkdir -p package
+          cp axonhub package/
+          cp config.example.yml package/
+          cp LICENSE package/
+          cp README.md package/
+          cp README.zh-CN.md package/
+          chmod +x package/axonhub
+
+      - name: Upload runnable package
         uses: actions/upload-artifact@v4
         with:
-          name: axonhub-frontend-${{ github.sha }}
-          path: frontend/dist
+          name: axonhub-linux-amd64-${{ github.sha }}
+          path: package
