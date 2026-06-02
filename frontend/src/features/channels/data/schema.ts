@@ -778,7 +778,7 @@ export const channelSummarySchema = z.object({
   orderingWeight: z.number(),
   priority: z.number(),
   tags: z.array(z.string()).optional().default([]).nullable(),
-  endpoints: z.array(channelEndpointSchema).optional().default([]),
+  endpoints: z.array(channelEndpointSchema).optional().default([]).nullable(),
   allModelEntries: z.array(channelModelEntrySchema).optional().default([]),
 });
 export type ChannelSummary = z.infer<typeof channelSummarySchema>;
