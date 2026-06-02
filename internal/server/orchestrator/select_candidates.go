@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 
 	"github.com/samber/lo"
 
@@ -78,6 +79,8 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 			return nil, err
 		}
 
+		candidates = randomizeAliasModelOrder(candidates)
+
 		if log.DebugEnabled(ctx) {
 			log.Debug(ctx, "selected candidates",
 				log.Int("candidate_count", len(candidates)),
@@ -122,6 +125,89 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 
 		return llmRequest, nil
 	})
+}
+
+func randomizeAliasModelOrder(candidates []*ChannelModelsCandidate) []*ChannelModelsCandidate {
+	if len(candidates) == 0 {
+		return candidates
+	}
+
+	randomized := make([]*ChannelModelsCandidate, len(candidates))
+	for i, candidate := range candidates {
+		if candidate == nil || len(candidate.Models) < 2 {
+			randomized[i] = candidate
+			continue
+		}
+
+		cloned := *candidate
+		cloned.Models = randomizeDuplicateRequestModelGroups(candidate.Models)
+		randomized[i] = &cloned
+	}
+
+	return randomized
+}
+
+func randomizeDuplicateRequestModelGroups(models []biz.ChannelModelEntry) []biz.ChannelModelEntry {
+	return randomizeDuplicateRequestModelGroupsWithRand(models, rand.IntN)
+}
+
+func randomizeDuplicateRequestModelGroupsWithRand(
+	models []biz.ChannelModelEntry,
+	intN func(int) int,
+) []biz.ChannelModelEntry {
+	if len(models) < 2 {
+		return models
+	}
+
+	countByRequestModel := make(map[string]int, len(models))
+	for _, model := range models {
+		countByRequestModel[model.RequestModel]++
+	}
+
+	hasDuplicateRequestModel := false
+	for _, count := range countByRequestModel {
+		if count > 1 {
+			hasDuplicateRequestModel = true
+			break
+		}
+	}
+	if !hasDuplicateRequestModel {
+		return models
+	}
+
+	randomized := append([]biz.ChannelModelEntry(nil), models...)
+	entriesByRequestModel := make(map[string][]biz.ChannelModelEntry, len(countByRequestModel))
+	for _, model := range models {
+		if countByRequestModel[model.RequestModel] < 2 {
+			continue
+		}
+
+		entriesByRequestModel[model.RequestModel] = append(entriesByRequestModel[model.RequestModel], model)
+	}
+
+	for requestModel, entries := range entriesByRequestModel {
+		shuffled := append([]biz.ChannelModelEntry(nil), entries...)
+		for i := len(shuffled) - 1; i > 0; i-- {
+			j := intN(i + 1)
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		}
+
+		entriesByRequestModel[requestModel] = shuffled
+	}
+
+	nextIndexByRequestModel := make(map[string]int, len(entriesByRequestModel))
+	for i, model := range randomized {
+		entries, ok := entriesByRequestModel[model.RequestModel]
+		if !ok {
+			continue
+		}
+
+		nextIndex := nextIndexByRequestModel[model.RequestModel]
+		randomized[i] = entries[nextIndex]
+		nextIndexByRequestModel[model.RequestModel] = nextIndex + 1
+	}
+
+	return randomized
 }
 
 func areAllChannelsExhausted(candidates []*ChannelModelsCandidate, quotaProvider ProviderQuotaStatusProvider, llmRequest *llm.Request) bool {

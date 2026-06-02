@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ import (
 	"github.com/looplj/axonhub/llm/transformer/openai"
 )
 
-func TestChatCompletionOrchestrator_Process_MinuteQuotaExceeded(t *testing.T) {
+func TestChatCompletionOrchestrator_Process_APIKeyQuotaExceeded(t *testing.T) {
 	ctx := context.Background()
 	ctx = authz.WithTestBypass(ctx)
 
@@ -55,11 +56,7 @@ func TestChatCompletionOrchestrator_Process_MinuteQuotaExceeded(t *testing.T) {
 					Quota: &objects.APIKeyQuota{
 						Requests: lo.ToPtr(int64(1)),
 						Period: objects.APIKeyQuotaPeriod{
-							Type: objects.APIKeyQuotaPeriodTypePastDuration,
-							PastDuration: &objects.APIKeyQuotaPastDuration{
-								Value: 1,
-								Unit:  objects.APIKeyQuotaPastDurationUnitMinute,
-							},
+							Type: objects.APIKeyQuotaPeriodTypeAllTime,
 						},
 					},
 				},
@@ -88,17 +85,17 @@ func TestChatCompletionOrchestrator_Process_MinuteQuotaExceeded(t *testing.T) {
 	channelSelector := &staticChannelSelector{candidates: channelsToTestCandidates([]*biz.Channel{bizChannel}, "gpt-4")}
 
 	orchestrator := &ChatCompletionOrchestrator{
-		channelSelector:   channelSelector,
-		Inbound:           openai.NewInboundTransformer(),
-		RequestService:    requestService,
-		ChannelService:    channelService,
-		PromptProvider:    &stubPromptProvider{},
-		SystemService:     systemService,
-		UsageLogService:   usageLogService,
-		QuotaService:      quotaService,
-		PipelineFactory:   pipeline.NewFactory(executor),
-		ModelMapper:       NewModelMapper(),
-		channelLimiterManager:      NewChannelLimiterManager(),
+		channelSelector:       channelSelector,
+		Inbound:               openai.NewInboundTransformer(),
+		RequestService:        requestService,
+		ChannelService:        channelService,
+		PromptProvider:        &stubPromptProvider{},
+		SystemService:         systemService,
+		UsageLogService:       usageLogService,
+		QuotaService:          quotaService,
+		PipelineFactory:       pipeline.NewFactory(executor),
+		ModelMapper:           NewModelMapper(),
+		channelLimiterManager: NewChannelLimiterManager(),
 		Middlewares: []pipeline.Middleware{
 			stream.EnsureUsage(),
 		},
@@ -112,7 +109,12 @@ func TestChatCompletionOrchestrator_Process_MinuteQuotaExceeded(t *testing.T) {
 	_, err = orchestrator.Process(ctx, httpRequest)
 	require.NoError(t, err)
 
-	_, err = orchestrator.Process(ctx, httpRequest)
+	require.Eventually(t, func() bool {
+		result, err := quotaService.CheckAPIKeyQuota(ctx, apiKey.ID, apiKey.GetActiveProfile().Quota)
+		return err == nil && !result.Allowed
+	}, time.Second, time.Millisecond)
+
+	_, err = orchestrator.Process(ctx, buildTestRequest("gpt-4", "Hello!", false))
 	require.Error(t, err)
 
 	var respErr *llm.ResponseError

@@ -65,6 +65,11 @@ type Channel struct {
 	// RequestModel -> Entry
 	cachedModelEntries map[string]ChannelModelEntry
 
+	// cachedModelEntryGroups caches GetModelEntryGroups results.
+	// RequestModel -> Entries. Explicit model mappings may expose multiple
+	// actual models under the same request model alias.
+	cachedModelEntryGroups map[string][]ChannelModelEntry
+
 	// cachedModelPrices caches model prices per request model id
 	// RequestModel -> ChannelModelPrice entity (contains Price and ReferenceID)
 	cachedModelPrices map[string]*ent.ChannelModelPrice

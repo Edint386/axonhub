@@ -253,7 +253,7 @@ func buildChannelCachedSnapshot(ch *biz.Channel) channelModelCacheDiagnosticsCha
 		EnabledAPIKeyCount:  len(ch.GetEnabledAPIKeys()),
 		DisabledAPIKeyCount: len(ch.DisabledAPIKeys),
 		Settings:            buildSettingsSnapshot(ch.Settings),
-		ModelEntries:        buildSortedEntries(ch.GetModelEntries()),
+		ModelEntries:        buildSortedEntryGroups(ch.GetModelEntryGroups()),
 	}
 }
 
@@ -277,18 +277,28 @@ func buildSettingsSnapshot(settings *objects.ChannelSettings) channelModelCacheD
 	}
 }
 
-func buildSortedEntries(entries map[string]biz.ChannelModelEntry) []channelModelCacheDiagnosticsEntry {
-	keys := lo.Keys(entries)
+func buildSortedEntryGroups(entryGroups map[string][]biz.ChannelModelEntry) []channelModelCacheDiagnosticsEntry {
+	keys := lo.Keys(entryGroups)
 	sort.Strings(keys)
 
 	result := make([]channelModelCacheDiagnosticsEntry, 0, len(keys))
 	for _, key := range keys {
-		entry := entries[key]
-		result = append(result, channelModelCacheDiagnosticsEntry{
-			RequestModel: entry.RequestModel,
-			ActualModel:  entry.ActualModel,
-			Source:       entry.Source,
+		entries := append([]biz.ChannelModelEntry(nil), entryGroups[key]...)
+		sort.Slice(entries, func(i, j int) bool {
+			if entries[i].ActualModel != entries[j].ActualModel {
+				return entries[i].ActualModel < entries[j].ActualModel
+			}
+
+			return entries[i].Source < entries[j].Source
 		})
+
+		for _, entry := range entries {
+			result = append(result, channelModelCacheDiagnosticsEntry{
+				RequestModel: entry.RequestModel,
+				ActualModel:  entry.ActualModel,
+				Source:       entry.Source,
+			})
+		}
 	}
 
 	return result

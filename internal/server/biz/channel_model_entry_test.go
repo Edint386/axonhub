@@ -254,6 +254,58 @@ func TestChannel_GetUnifiedModels_CachesResult(t *testing.T) {
 	require.Equal(t, result1, result2)
 }
 
+func TestChannel_GetModelEntryGroups_DuplicateAliasMappings(t *testing.T) {
+	ch := &Channel{
+		Channel: &ent.Channel{
+			SupportedModels: []string{"gpt-4o-mini", "gpt-4.1-mini", "gpt-4o"},
+			Settings: &objects.ChannelSettings{
+				ModelMappings: []objects.ModelMapping{
+					{From: "fast", To: "gpt-4o-mini"},
+					{From: "fast", To: "gpt-4.1-mini"},
+					{From: "fast", To: "gpt-4o-mini"},
+					{From: "premium", To: "gpt-4o"},
+				},
+			},
+		},
+	}
+
+	groups := ch.GetModelEntryGroups()
+
+	require.ElementsMatch(t, []ChannelModelEntry{
+		{RequestModel: "fast", ActualModel: "gpt-4o-mini", Source: "mapping"},
+		{RequestModel: "fast", ActualModel: "gpt-4.1-mini", Source: "mapping"},
+	}, groups["fast"])
+	require.Equal(t, []ChannelModelEntry{
+		{RequestModel: "premium", ActualModel: "gpt-4o", Source: "mapping"},
+	}, groups["premium"])
+
+	entries := ch.GetModelEntries()
+	require.Equal(t, ChannelModelEntry{
+		RequestModel: "fast",
+		ActualModel:  "gpt-4o-mini",
+		Source:       "mapping",
+	}, entries["fast"])
+}
+
+func TestChannel_GetModelEntryGroups_DuplicateAliasDoesNotOverrideDirect(t *testing.T) {
+	ch := &Channel{
+		Channel: &ent.Channel{
+			SupportedModels: []string{"fast", "gpt-4o-mini", "gpt-4.1-mini"},
+			Settings: &objects.ChannelSettings{
+				ModelMappings: []objects.ModelMapping{
+					{From: "fast", To: "gpt-4o-mini"},
+					{From: "fast", To: "gpt-4.1-mini"},
+				},
+			},
+		},
+	}
+
+	groups := ch.GetModelEntryGroups()
+	require.Equal(t, []ChannelModelEntry{
+		{RequestModel: "fast", ActualModel: "fast", Source: "direct"},
+	}, groups["fast"])
+}
+
 func TestChannel_GetUnifiedModels_LowercaseModelID(t *testing.T) {
 	tests := []struct {
 		name     string

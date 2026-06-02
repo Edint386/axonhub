@@ -41,8 +41,10 @@ func (r *channelResolver) DefaultEndpoints(ctx context.Context, obj *ent.Channel
 // AllModelEntries is the resolver for the allModelEntries field.
 func (r *channelResolver) AllModelEntries(ctx context.Context, obj *ent.Channel) ([]*biz.ChannelModelEntry, error) {
 	ch := biz.Channel{Channel: obj}
-	entries := ch.GetModelEntries()
-	result := lo.Values(entries)
+	entryGroups := ch.GetModelEntryGroups()
+	result := lo.FlatMap(lo.Values(entryGroups), func(entries []biz.ChannelModelEntry, _ int) []biz.ChannelModelEntry {
+		return entries
+	})
 
 	return lo.ToSlicePtr(result), nil
 }

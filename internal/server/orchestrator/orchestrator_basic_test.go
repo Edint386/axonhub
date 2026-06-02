@@ -937,13 +937,13 @@ func TestChatCompletionOrchestrator_Process_SameChannelRetryNextModel(t *testing
 
 	err = json.Unmarshal(executor.requests[0].Body, &firstBody)
 	require.NoError(t, err)
-	assert.Equal(t, "gpt-4", firstBody["model"])
 
 	var secondBody map[string]any
 
 	err = json.Unmarshal(executor.requests[1].Body, &secondBody)
 	require.NoError(t, err)
-	assert.Equal(t, "gpt-3.5-turbo", secondBody["model"])
+	assert.ElementsMatch(t, []any{"gpt-4", "gpt-3.5-turbo"}, []any{firstBody["model"], secondBody["model"]})
+	assert.NotEqual(t, firstBody["model"], secondBody["model"])
 
 	requests, err := client.Request.Query().All(ctx)
 	require.NoError(t, err)

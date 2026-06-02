@@ -1077,21 +1077,71 @@ func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
 		return ch.cachedModelEntries
 	}
 
-	entries := make(map[string]ChannelModelEntry)
+	groups := ch.GetModelEntryGroups()
+	entries := make(map[string]ChannelModelEntry, len(groups))
+	for requestModel, entriesForModel := range groups {
+		if len(entriesForModel) == 0 {
+			continue
+		}
+
+		entries[requestModel] = entriesForModel[0]
+	}
+
+	ch.cachedModelEntries = entries
+
+	return entries
+}
+
+// GetModelEntryGroups returns all models this channel can handle, grouped by request model.
+// Explicit ModelMappings may define the same alias multiple times, which allows the
+// same request model to resolve to several actual provider models. Callers must not
+// modify the returned map or its slices.
+func (ch *Channel) GetModelEntryGroups() map[string][]ChannelModelEntry {
+	if ch.cachedModelEntryGroups != nil {
+		return ch.cachedModelEntryGroups
+	}
+
+	entries := make(map[string][]ChannelModelEntry)
+
+	addEntry := func(entry ChannelModelEntry) bool {
+		current := entries[entry.RequestModel]
+		if len(current) > 0 {
+			return false
+		}
+
+		entries[entry.RequestModel] = []ChannelModelEntry{entry}
+
+		return true
+	}
+
+	appendMappingEntry := func(entry ChannelModelEntry) bool {
+		current := entries[entry.RequestModel]
+		if len(current) > 0 && current[0].Source != "mapping" {
+			return false
+		}
+
+		for _, existing := range current {
+			if existing.ActualModel == entry.ActualModel {
+				return false
+			}
+		}
+
+		entries[entry.RequestModel] = append(current, entry)
+
+		return true
+	}
 
 	// 1. Direct models from SupportedModels
 	for _, model := range ch.SupportedModels {
-		if _, exists := entries[model]; !exists {
-			entries[model] = ChannelModelEntry{
-				RequestModel: model,
-				ActualModel:  model,
-				Source:       "direct",
-			}
-		}
+		addEntry(ChannelModelEntry{
+			RequestModel: model,
+			ActualModel:  model,
+			Source:       "direct",
+		})
 	}
 
 	if ch.Settings == nil {
-		ch.cachedModelEntries = entries
+		ch.cachedModelEntryGroups = entries
 		return entries
 	}
 
@@ -1100,13 +1150,11 @@ func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
 		prefix := ch.Settings.ExtraModelPrefix
 		for _, model := range ch.SupportedModels {
 			prefixedModel := prefix + "/" + model
-			if _, exists := entries[prefixedModel]; !exists {
-				entries[prefixedModel] = ChannelModelEntry{
-					RequestModel: prefixedModel,
-					ActualModel:  model,
-					Source:       "prefix",
-				}
-			}
+			addEntry(ChannelModelEntry{
+				RequestModel: prefixedModel,
+				ActualModel:  model,
+				Source:       "prefix",
+			})
 		}
 	}
 
@@ -1121,13 +1169,11 @@ func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
 			// Only process models that have the prefix
 			if after, ok := strings.CutPrefix(model, prefix); ok {
 				trimmedModel := after
-				if _, exists := entries[trimmedModel]; !exists {
-					entries[trimmedModel] = ChannelModelEntry{
-						RequestModel: trimmedModel,
-						ActualModel:  model,
-						Source:       "auto_trim",
-					}
-				}
+				addEntry(ChannelModelEntry{
+					RequestModel: trimmedModel,
+					ActualModel:  model,
+					Source:       "auto_trim",
+				})
 			}
 		}
 	}
@@ -1136,12 +1182,11 @@ func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
 	for _, mapping := range ch.Settings.ModelMappings {
 		// Only add if the target model is supported
 		if slices.Contains(ch.SupportedModels, mapping.To) {
-			if _, exists := entries[mapping.From]; !exists {
-				entries[mapping.From] = ChannelModelEntry{
-					RequestModel: mapping.From,
-					ActualModel:  mapping.To,
-					Source:       "mapping",
-				}
+			if appendMappingEntry(ChannelModelEntry{
+				RequestModel: mapping.From,
+				ActualModel:  mapping.To,
+				Source:       "mapping",
+			}) {
 				// When hideMappedModels is enabled, remove mapped models from the entries
 				if ch.Settings.HideMappedModels {
 					delete(entries, mapping.To)
@@ -1154,8 +1199,8 @@ func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
 	// When hideOriginalModels is enabled, remove direct models from the entries
 	// This allows only transformed models (prefix, auto_trim, mapping) to be exposed
 	if ch.Settings.HideOriginalModels {
-		for key, entry := range entries {
-			if entry.Source == "direct" {
+		for key, entriesForModel := range entries {
+			if len(entriesForModel) > 0 && entriesForModel[0].Source == "direct" {
 				delete(entries, key)
 			}
 		}
@@ -1168,18 +1213,43 @@ func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
 	if ch.Settings.LowercaseModelID {
 		// If two entries collide after lowercasing (e.g., "GPT-4" and "gpt-4"),
 		// the one with higher source priority wins: direct > auto_trim > mapping > prefix.
-		lowercased := make(map[string]ChannelModelEntry, len(entries))
-		for key, entry := range entries {
+		lowercased := make(map[string][]ChannelModelEntry, len(entries))
+		for key, entriesForModel := range entries {
 			lowerKey := strings.ToLower(key)
-			entry.RequestModel = strings.ToLower(entry.RequestModel)
-			if existing, exists := lowercased[lowerKey]; !exists || sourcePriority[entry.Source] > sourcePriority[existing.Source] {
-				lowercased[lowerKey] = entry
+
+			loweredEntries := make([]ChannelModelEntry, 0, len(entriesForModel))
+			for _, entry := range entriesForModel {
+				entry.RequestModel = strings.ToLower(entry.RequestModel)
+				loweredEntries = append(loweredEntries, entry)
+			}
+
+			existing, exists := lowercased[lowerKey]
+			if !exists || sourcePriority[loweredEntries[0].Source] > sourcePriority[existing[0].Source] {
+				lowercased[lowerKey] = loweredEntries
+				continue
+			}
+
+			if loweredEntries[0].Source == "mapping" && sourcePriority[loweredEntries[0].Source] == sourcePriority[existing[0].Source] {
+				for _, entry := range loweredEntries {
+					duplicateActualModel := false
+					for _, existingEntry := range existing {
+						if existingEntry.ActualModel == entry.ActualModel {
+							duplicateActualModel = true
+							break
+						}
+					}
+					if duplicateActualModel {
+						continue
+					}
+
+					lowercased[lowerKey] = append(lowercased[lowerKey], entry)
+				}
 			}
 		}
 		entries = lowercased
 	}
 
-	ch.cachedModelEntries = entries
+	ch.cachedModelEntryGroups = entries
 
 	return entries
 }

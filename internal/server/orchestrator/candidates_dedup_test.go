@@ -77,6 +77,68 @@ func TestDefaultSelector_Select_Deduplication(t *testing.T) {
 	require.Equal(t, "gpt-4", result[0].Models[0].ActualModel)
 }
 
+func TestDefaultSelector_Select_DuplicateAliasMappingsExpandModels(t *testing.T) {
+	ctx, client := setupTest(t)
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Alias Fanout Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "test-key"}).
+		SetSupportedModels([]string{"gpt-4o-mini", "gpt-4.1-mini"}).
+		SetDefaultTestModel("gpt-4o-mini").
+		SetSettings(&objects.ChannelSettings{
+			ModelMappings: []objects.ModelMapping{
+				{From: "fast", To: "gpt-4o-mini"},
+				{From: "fast", To: "gpt-4.1-mini"},
+			},
+		}).
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	channelService := newTestChannelServiceForChannels(client)
+	modelService := newTestModelService(client)
+	systemService := newTestSystemService(client)
+	selector := NewDefaultSelector(channelService, modelService, systemService)
+
+	model, err := client.Model.Create().
+		SetModelID("fast").
+		SetName("Fast").
+		SetDeveloper("openai").
+		SetIcon("openai").
+		SetGroup("test").
+		SetModelCard(&objects.ModelCard{}).
+		SetStatus("enabled").
+		SetSettings(&objects.ModelSettings{
+			Associations: []*objects.ModelAssociation{
+				{
+					Type:     "model",
+					Priority: 1,
+					ModelID: &objects.ModelIDAssociation{
+						ModelID: "fast",
+					},
+				},
+			},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	result, err := selector.Select(ctx, &llm.Request{Model: model.ModelID})
+	require.NoError(t, err)
+
+	require.Len(t, result, 1)
+	require.Equal(t, ch.ID, result[0].Channel.ID)
+	require.Len(t, result[0].Models, 2)
+	require.ElementsMatch(t, []string{"gpt-4o-mini", "gpt-4.1-mini"}, []string{
+		result[0].Models[0].ActualModel,
+		result[0].Models[1].ActualModel,
+	})
+	for _, entry := range result[0].Models {
+		require.Equal(t, "fast", entry.RequestModel)
+	}
+}
+
 func TestDefaultSelector_Select_AggregateSameChannelSamePriority(t *testing.T) {
 	ctx, client := setupTest(t)
 

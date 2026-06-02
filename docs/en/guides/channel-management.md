@@ -101,6 +101,15 @@ In the channel's **Settings** → **Model Mappings**, add `from → to` pairs:
 | gpt-4o-mini | gpt-4o |
 | claude-3-sonnet | claude-3.5-sonnet |
 
+You can configure the same `from` value more than once to target multiple models:
+
+| From (Client Requests) | To (Sent to Provider) |
+|------------------------|----------------------|
+| fast | gpt-4o-mini |
+| fast | gpt-4.1-mini |
+
+When a client requests `fast`, AxonHub randomizes those target models for that request and starts with the first target in the randomized order. If retry policy is enabled and the current target fails, AxonHub continues with the next target in that same randomized order within the channel.
+
 **Note**: The target model (`to`) must be in the Supported Models list. If the target model is not supported, the mapping is silently ignored.
 
 ### Extra Model Prefix

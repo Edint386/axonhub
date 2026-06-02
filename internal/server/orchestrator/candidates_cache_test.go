@@ -120,6 +120,7 @@ func TestDefaultSelector_SelectModelCandidates_Cache(t *testing.T) {
 			SetUpdatedAt(now.Add(1 * time.Hour)).
 			Save(ctx)
 		require.NoError(t, err)
+		require.NoError(t, channelService.ReloadEnabledChannelsCache(ctx))
 
 		// Clear cache to force refresh
 		selector.cacheMu.Lock()

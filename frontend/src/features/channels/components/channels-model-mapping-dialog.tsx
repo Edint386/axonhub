@@ -39,16 +39,6 @@ const createModelMappingFormSchema = (supportedModels: string[]) =>
       )
       .refine(
         (mappings) => {
-          // 检查是否所有 from 字段都是唯一的
-          const fromValues = mappings.map((m) => m.from);
-          return new Set(fromValues).size === fromValues.length;
-        },
-        {
-          message: 'Each original model can only be mapped once',
-        }
-      )
-      .refine(
-        (mappings) => {
           // 检查所有目标模型是否在支持的模型列表中
           return mappings.every((m) => supportedModels.includes(m.to));
         },
@@ -178,7 +168,7 @@ export function ChannelsModelMappingDialog({ open, onOpenChange, currentRow }: P
     to: mapping.to.trim(),
   });
 
-  const validateMappingDraft = (draft: ModelMapping, skipIndex?: number): string | null => {
+  const validateMappingDraft = (draft: ModelMapping): string | null => {
     const normalized = sanitizeMapping(draft);
     if (!normalized.from || !normalized.to) {
       return t('channels.dialogs.settings.modelMapping.validationRequired', {
@@ -188,12 +178,6 @@ export function ChannelsModelMappingDialog({ open, onOpenChange, currentRow }: P
     if (!currentRow.supportedModels.includes(normalized.to)) {
       return t('channels.dialogs.settings.modelMapping.targetInvalid', {
         defaultValue: 'Target model must be in supported models',
-      });
-    }
-    const isDuplicateFrom = modelMappings.some((mapping, idx) => idx !== skipIndex && mapping.from === normalized.from);
-    if (isDuplicateFrom) {
-      return t('channels.dialogs.settings.modelMapping.duplicateAlias', {
-        defaultValue: 'Each original model can only be mapped once',
       });
     }
     return null;
@@ -253,7 +237,7 @@ export function ChannelsModelMappingDialog({ open, onOpenChange, currentRow }: P
     if (editingIndex === null || !editingDraft) {
       return;
     }
-    const validationError = validateMappingDraft(editingDraft, editingIndex);
+    const validationError = validateMappingDraft(editingDraft);
     if (validationError) {
       setEditingError(validationError);
       return;

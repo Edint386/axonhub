@@ -113,9 +113,9 @@ func (s *DefaultSelector) selectChannelCadidates(ctx context.Context, req *llm.R
 
 	candidates := make([]*ChannelModelsCandidate, 0, len(channels))
 	for _, ch := range channels {
-		entries := ch.GetModelEntries()
+		entries := ch.GetModelEntryGroups()
 
-		entry, ok := entries[req.Model]
+		models, ok := entries[req.Model]
 		if !ok {
 			continue
 		}
@@ -126,7 +126,7 @@ func (s *DefaultSelector) selectChannelCadidates(ctx context.Context, req *llm.R
 		candidates = append(candidates, &ChannelModelsCandidate{
 			Channel:   ch,
 			Priority:  0,
-			Models:    []biz.ChannelModelEntry{entry},
+			Models:    append([]biz.ChannelModelEntry(nil), models...),
 			APIFormat: apiFormat,
 		})
 	}
