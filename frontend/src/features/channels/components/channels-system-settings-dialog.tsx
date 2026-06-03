@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Loader2, Settings2, Activity } from 'lucide-react';
+import { Loader2, Settings2, Activity, MousePointerClick } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useChannelSetting, useUpdateChannelSetting, type AutoSyncFrequency, type ProbeFrequency } from '@/features/system/data/system';
 import { useChannels } from '../context/channels-context';
+import { useSkipChannelStatusConfirmation } from '../hooks/use-channel-status-confirmation-preference';
 
 const PROBE_FREQUENCY_OPTIONS: { value: ProbeFrequency; label: string }[] = [
   { value: 'ONE_MINUTE', label: '1 minute' },
@@ -29,12 +30,14 @@ export function ChannelsSystemSettingsDialog() {
   const { open, setOpen } = useChannels();
   const { data: settings, isLoading } = useChannelSetting();
   const updateSettings = useUpdateChannelSetting();
+  const [skipStatusConfirmation, setSkipStatusConfirmation] = useSkipChannelStatusConfirmation();
 
   const isOpen = open === 'channelSettings';
 
   const [probeEnabled, setProbeEnabled] = React.useState(false);
   const [probeFrequency, setProbeFrequency] = React.useState<ProbeFrequency>('ONE_MINUTE');
   const [autoSyncFrequency, setAutoSyncFrequency] = React.useState<AutoSyncFrequency>('ONE_HOUR');
+  const [skipStatusConfirmationDraft, setSkipStatusConfirmationDraft] = React.useState(false);
 
   React.useEffect(() => {
     if (settings?.probe) {
@@ -46,6 +49,12 @@ export function ChannelsSystemSettingsDialog() {
     }
   }, [settings]);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setSkipStatusConfirmationDraft(skipStatusConfirmation);
+    }
+  }, [isOpen, skipStatusConfirmation]);
+
   const handleSave = useCallback(async () => {
     await updateSettings.mutateAsync({
       probe: {
@@ -56,8 +65,9 @@ export function ChannelsSystemSettingsDialog() {
         frequency: autoSyncFrequency,
       },
     });
+    setSkipStatusConfirmation(skipStatusConfirmationDraft);
     setOpen(null);
-  }, [updateSettings, probeEnabled, probeFrequency, autoSyncFrequency, setOpen]);
+  }, [updateSettings, probeEnabled, probeFrequency, autoSyncFrequency, setSkipStatusConfirmation, skipStatusConfirmationDraft, setOpen]);
 
   const handleClose = useCallback(() => {
     setOpen(null);
@@ -150,6 +160,33 @@ export function ChannelsSystemSettingsDialog() {
                     </SelectContent>
                   </Select>
                   <p className='text-muted-foreground text-xs'>{t('channels.dialogs.systemSettings.autoSync.frequencyDescription')}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className='pb-0'>
+                <CardTitle className='flex items-center gap-2 text-sm'>
+                  <MousePointerClick className='text-muted-foreground h-4 w-4' />
+                  {t('channels.dialogs.systemSettings.statusConfirmation.label')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-4 pt-4'>
+                <div className='flex items-center justify-between'>
+                  <div className='flex-1 pr-4'>
+                    <p className='text-sm font-medium'>{t('channels.dialogs.systemSettings.statusConfirmation.skipLabel')}</p>
+                    <p className='text-muted-foreground text-sm'>
+                      {t('channels.dialogs.systemSettings.statusConfirmation.skipDescription')}
+                    </p>
+                    <p className='text-muted-foreground mt-1 text-xs'>
+                      {t('channels.dialogs.systemSettings.statusConfirmation.localPreference')}
+                    </p>
+                  </div>
+                  <Switch
+                    id='skip-status-confirmation'
+                    checked={skipStatusConfirmationDraft}
+                    onCheckedChange={setSkipStatusConfirmationDraft}
+                    disabled={updateSettings.isPending}
+                  />
                 </div>
               </CardContent>
             </Card>
