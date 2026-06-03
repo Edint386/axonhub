@@ -1,5 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { graphqlRequest } from '@/gql/graphql';
+import { channelQuotaUsageSchema } from '@/features/channels/data/schema';
+import type { ChannelQuota, ChannelQuotaUsage } from '@/features/channels/data/schema';
 
 const CHECK_PROVIDER_QUOTAS_QUERY = `
   mutation CheckProviderQuotas {
@@ -15,6 +17,23 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
           id
           name
           type
+          settings {
+            quota {
+              requests
+              totalTokens
+              cost
+              period {
+                type
+                pastDuration {
+                  value
+                  unit
+                }
+                calendarDuration {
+                  unit
+                }
+              }
+            }
+          }
           providerQuotaStatus {
             status
             nextResetAt
@@ -23,6 +42,38 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
             providerType
           }
         }
+      }
+    }
+  }
+`;
+
+const CHANNEL_QUOTA_USAGE_QUERY = `
+  query ProviderQuotaBadgeChannelQuotaUsage($channelID: ID!) {
+    channelQuotaUsage(channelID: $channelID) {
+      channelID
+      quota {
+        requests
+        totalTokens
+        cost
+        period {
+          type
+          pastDuration {
+            value
+            unit
+          }
+          calendarDuration {
+            unit
+          }
+        }
+      }
+      window {
+        start
+        end
+      }
+      usage {
+        requestCount
+        totalTokens
+        totalCost
       }
     }
   }
@@ -37,7 +88,7 @@ type ProviderQuotaDataCommon = {
   error?: string;
 }
 
-type ProviderClaudeQuotaData = ProviderQuotaDataCommon & {
+export type ProviderClaudeQuotaData = ProviderQuotaDataCommon & {
   windows?: {
     '5h'?: { utilization?: number; reset?: number; status?: string };
     '7d'?: { utilization?: number; reset?: number; status?: string };
@@ -46,7 +97,7 @@ type ProviderClaudeQuotaData = ProviderQuotaDataCommon & {
   representative_claim?: string;
 }
 
-type ProviderCodexQuotaData = ProviderQuotaDataCommon & {
+export type ProviderCodexQuotaData = ProviderQuotaDataCommon & {
   rate_limit?: {
     primary_window?: {
       used_percent?: number;
@@ -63,39 +114,24 @@ type ProviderCodexQuotaData = ProviderQuotaDataCommon & {
   };
 }
 
-
-type CopilotQuotaSnapshot = {
-  entitlement: number;
-  has_quota: boolean;
-  overage_count: number;
-  overage_permitted: boolean;
-  percent_remaining: number;
-  quota_id: string;
-  quota_remaining: number;
-  quota_reset_at: number;
-  remaining: number;
-  timestamp_utc: string;
-  unlimited: boolean;
+export type CopilotQuotaSnapshot = {
+  entitlement?: number;
+  has_quota?: boolean;
+  overage_count?: number;
+  overage_permitted?: boolean;
+  percent_remaining?: number;
+  quota_id?: string;
+  quota_remaining?: number;
+  quota_reset_at?: number;
+  remaining?: number;
+  timestamp_utc?: string;
+  unlimited?: boolean;
 };
 
-type ProviderGitHubCopilotQuotaData = ProviderQuotaDataCommon & {
-  limited_user_quotas?: {
-    chat?: number;
-    completions?: number;
-    [key: string]: number | undefined;
-  };
-  quota_snapshots?: {
-    chat?: CopilotQuotaSnapshot;
-    completions?: CopilotQuotaSnapshot;
-    premium_interactions?: CopilotQuotaSnapshot;
-    premium_models?: CopilotQuotaSnapshot;
-    [key: string]: CopilotQuotaSnapshot | undefined;
-  };
-  total_quotas?: {
-    chat?: number;
-    completions?: number;
-    [key: string]: number | undefined;
-  };
+export type ProviderGitHubCopilotQuotaData = ProviderQuotaDataCommon & {
+  limited_user_quotas?: Record<string, number | undefined>;
+  quota_snapshots?: Record<string, CopilotQuotaSnapshot | undefined>;
+  total_quotas?: Record<string, number | undefined>;
 }
 
 export type NanoGPTQuotaWindow = {
@@ -142,74 +178,31 @@ export type ProviderNeuralWattQuotaData = ProviderQuotaDataCommon & {
   subscription?: { kwh_included?: number | null; kwh_used?: number | null; kwh_remaining?: number | null; in_overage?: boolean | null; status?: string | null; plan?: string | null } | null;
 }
 
+type ProviderQuotaData =
+  | ProviderClaudeQuotaData
+  | ProviderCodexQuotaData
+  | ProviderGitHubCopilotQuotaData
+  | ProviderNanoGPTQuotaData
+  | ProviderWaferQuotaData
+  | ProviderSyntheticQuotaData
+  | ProviderNeuralWattQuotaData
+  | (ProviderQuotaDataCommon & Record<string, unknown>);
+
 export type ProviderQuotaChannel = {
   id: string;
   name: string;
+  type: string;
+  providerType?: string;
+  localQuota?: ChannelQuota | null;
+  localQuotaUsage?: ChannelQuotaUsage | null;
+  localQuotaUsageLoading?: boolean;
   quotaStatus?: {
     status: 'available' | 'warning' | 'exhausted' | 'unknown';
     nextResetAt: string | null;
     ready: boolean;
+    quotaData: ProviderQuotaData;
   };
-} & (
-    | {
-      type: 'claudecode'
-      quotaStatus?: {
-        quotaData: ProviderClaudeQuotaData
-      }
-    }
-    | {
-      type: 'codex'
-      quotaStatus?: {
-        quotaData: ProviderCodexQuotaData
-      }
-    }
-    | {
-      type: 'github_copilot'
-      quotaStatus?: {
-        quotaData: ProviderGitHubCopilotQuotaData
-      }
-    }
-    | {
-      type: 'nanogpt'
-      quotaStatus?: {
-        quotaData: ProviderNanoGPTQuotaData
-      }
-    }
-    | {
-      type: 'nanogpt_responses'
-      quotaStatus?: {
-        quotaData: ProviderNanoGPTQuotaData
-      }
-    }
-    | {
-      type: 'openai'
-      providerType: 'wafer'
-      quotaStatus?: {
-        quotaData: ProviderWaferQuotaData
-      }
-    }
-    | {
-      type: 'openai'
-      providerType: 'synthetic'
-      quotaStatus?: {
-        quotaData: ProviderSyntheticQuotaData
-      }
-    }
-    | {
-      type: 'openai'
-      providerType: 'neuralwatt'
-      quotaStatus?: {
-        quotaData: ProviderNeuralWattQuotaData
-      }
-    }
-    | {
-      type: 'openai'
-      providerType?: undefined
-      quotaStatus?: {
-        quotaData: ProviderQuotaDataCommon
-      }
-    }
-  )
+}
 
 export function useProviderQuotaStatuses() {
   const { data } = useQuery({
@@ -227,20 +220,48 @@ export function useProviderQuotaStatuses() {
   });
 
   const channels = data?.queryChannels?.edges?.map((e: any) => e.node) || [];
+  const quotaChannels = channels.filter((c: any) => c.providerQuotaStatus != null || c.settings?.quota != null);
+  const localQuotaChannels = quotaChannels.filter((c: any) => c.settings?.quota != null);
 
-  // Filter for quota-enabled channels (any channel with providerQuotaStatus)
-  const oauthChannels = channels.filter((c: any) => c.providerQuotaStatus != null);
+  const localQuotaUsageQueries = useQueries({
+    queries: localQuotaChannels.map((channel: any) => ({
+      queryKey: ['channelQuotaUsage', channel.id],
+      queryFn: async () => {
+        const usageData = await graphqlRequest<{ channelQuotaUsage: ChannelQuotaUsage | null }>(CHANNEL_QUOTA_USAGE_QUERY, {
+          channelID: channel.id,
+        });
+        return channelQuotaUsageSchema.nullable().parse(usageData.channelQuotaUsage);
+      },
+      enabled: !!channel.id,
+      refetchInterval: 60000,
+      refetchIntervalInBackground: true,
+    })),
+  });
 
-  // Map to standard format - providerQuotaStatus is a single object, not an edge/node structure
-  return oauthChannels.map((channel: any): ProviderQuotaChannel => {
+  const localQuotaUsageByChannelID = new Map<string, { data: ChannelQuotaUsage | null | undefined; isLoading: boolean }>(
+    localQuotaChannels.map((channel: any, index: number) => [
+      channel.id,
+      {
+        data: localQuotaUsageQueries[index]?.data,
+        isLoading: localQuotaUsageQueries[index]?.isLoading || localQuotaUsageQueries[index]?.isFetching,
+      },
+    ] as [string, { data: ChannelQuotaUsage | null | undefined; isLoading: boolean }])
+  );
+
+  // Map to standard format - providerQuotaStatus is a single object, not an edge/node structure.
+  return quotaChannels.map((channel: any): ProviderQuotaChannel => {
     const quotaStatus = channel.providerQuotaStatus;
     const providerType = quotaStatus?.providerType;
+    const localQuotaUsage = localQuotaUsageByChannelID.get(channel.id);
     return {
       id: channel.id,
       name: channel.name,
       type: channel.type,
       ...(channel.type === 'openai' ? { providerType: providerType || undefined } : {}),
       quotaStatus,
+      localQuota: channel.settings?.quota ?? null,
+      localQuotaUsage: localQuotaUsage?.data,
+      localQuotaUsageLoading: localQuotaUsage?.isLoading ?? false,
     };
   });
 }

@@ -28,6 +28,7 @@ export function AppHeader() {
     },
     onSuccess: () => {
       void queryClient.refetchQueries({ queryKey: ['provider-quotas'] });
+      void queryClient.refetchQueries({ queryKey: ['channelQuotaUsage'] });
       toast.success(t('system.providerQuota.refresh.success'));
     },
     onError: (error: any) => {
