@@ -13,10 +13,11 @@ type OpenAIResponsesProviderExtensions struct {
 }
 
 type OpenAIResponsesRequestExtensions struct {
-	RawTools       []OpenAIResponsesRawFragment `json:"-"`
-	ToolSignatures []string                     `json:"-"`
-	RawToolChoice  json.RawMessage              `json:"-"`
-	RawInputItems  []OpenAIResponsesRawFragment `json:"-"`
+	RawTools       []OpenAIResponsesRawFragment   `json:"-"`
+	ToolSignatures []string                       `json:"-"`
+	RawToolChoice  json.RawMessage                `json:"-"`
+	RawInputItems  []OpenAIResponsesRawFragment   `json:"-"`
+	NamespaceTools []OpenAIResponsesNamespaceTool `json:"-"`
 }
 
 type OpenAIResponsesRawFragment struct {
@@ -25,6 +26,11 @@ type OpenAIResponsesRawFragment struct {
 	CallID        string          `json:"-"`
 	OriginalIndex int             `json:"-"`
 	Raw           json.RawMessage `json:"-"`
+}
+
+type OpenAIResponsesNamespaceTool struct {
+	Namespace string `json:"-"`
+	Name      string `json:"-"`
 }
 
 func EnsureOpenAIResponsesProviderExtensions(req *Request) *OpenAIResponsesProviderExtensions {
@@ -57,6 +63,7 @@ func CloneProviderExtensions(src *ProviderExtensions) *ProviderExtensions {
 				ToolSignatures: append([]string(nil), src.OpenAIResponses.Request.ToolSignatures...),
 				RawToolChoice:  cloneRawMessage(src.OpenAIResponses.Request.RawToolChoice),
 				RawInputItems:  cloneOpenAIResponsesRawFragments(src.OpenAIResponses.Request.RawInputItems),
+				NamespaceTools: append([]OpenAIResponsesNamespaceTool(nil), src.OpenAIResponses.Request.NamespaceTools...),
 			}
 		}
 	}

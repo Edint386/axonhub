@@ -17,9 +17,10 @@ func attachOpenAIResponsesRequestExtensions(chatReq *llm.Request, req *Request, 
 		ToolSignatures: buildRepresentedToolSignatures(req.Tools),
 		RawToolChoice:  rawUnsupportedToolChoice(req.ToolChoice, raw.ToolChoice),
 		RawInputItems:  buildRawOnlyInputFragments(req.Input, raw.InputItems),
+		NamespaceTools: buildNamespaceToolMappings(req.Tools, raw.Tools),
 	}
 
-	if len(requestExt.RawTools) == 0 && len(requestExt.RawToolChoice) == 0 && len(requestExt.RawInputItems) == 0 {
+	if len(requestExt.RawTools) == 0 && len(requestExt.RawToolChoice) == 0 && len(requestExt.RawInputItems) == 0 && len(requestExt.NamespaceTools) == 0 {
 		return
 	}
 
@@ -98,6 +99,40 @@ func buildRawOnlyToolFragments(tools []Tool, rawTools []json.RawMessage) []llm.O
 	}
 
 	return fragments
+}
+
+func buildNamespaceToolMappings(tools []Tool, rawTools []json.RawMessage) []llm.OpenAIResponsesNamespaceTool {
+	if len(tools) == 0 {
+		return nil
+	}
+
+	var mappings []llm.OpenAIResponsesNamespaceTool
+	for i := range tools {
+		if tools[i].Type != "namespace" || tools[i].Name == "" || i >= len(rawTools) || len(rawTools[i]) == 0 {
+			continue
+		}
+
+		var raw struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		}
+		if err := json.Unmarshal(rawTools[i], &raw); err != nil {
+			continue
+		}
+
+		for _, child := range raw.Tools {
+			if child.Name == "" {
+				continue
+			}
+			mappings = append(mappings, llm.OpenAIResponsesNamespaceTool{
+				Namespace: tools[i].Name,
+				Name:      child.Name,
+			})
+		}
+	}
+
+	return mappings
 }
 
 func isStructurallyRepresentedToolType(toolType string) bool {

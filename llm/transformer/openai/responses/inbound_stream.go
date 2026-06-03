@@ -318,6 +318,10 @@ func (s *responsesInboundStream) mergeTransformerMetadata(metadata map[string]an
 		mergedCalls := append(existingCalls, calls...)
 		s.transformerMetadata[responsesWebSearchCallsTransformerMetadataKey] = mergedCalls
 	}
+
+	if raw, ok := metadata[responsesNamespaceToolsTransformerMetadataKey]; ok && raw != nil {
+		s.transformerMetadata[responsesNamespaceToolsTransformerMetadataKey] = raw
+	}
 }
 
 func (s *responsesInboundStream) handleReasoningContent(content *string) error {
@@ -565,11 +569,12 @@ func (s *responsesInboundStream) initToolCall(tc llm.ToolCall) error {
 
 	default:
 		item := &Item{
-			ID:     itemID,
-			Type:   "function_call",
-			Status: lo.ToPtr("in_progress"),
-			CallID: tc.ID,
-			Name:   tc.Function.Name,
+			ID:        itemID,
+			Type:      "function_call",
+			Status:    lo.ToPtr("in_progress"),
+			CallID:    tc.ID,
+			Name:      tc.Function.Name,
+			Namespace: namespaceForFunctionCall(s.transformerMetadata, tc.Function.Name),
 		}
 
 		err := s.enqueueEvent(&StreamEvent{
@@ -889,6 +894,7 @@ func (s *responsesInboundStream) closeCurrentOutputItem() error {
 				Status:    lo.ToPtr("completed"),
 				CallID:    tc.ID,
 				Name:      tc.Function.Name,
+				Namespace: namespaceForFunctionCall(s.transformerMetadata, tc.Function.Name),
 				Arguments: tc.Function.Arguments,
 			}
 

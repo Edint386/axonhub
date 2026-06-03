@@ -237,6 +237,35 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "captures namespace child tools",
+			httpReq: &httpclient.Request{
+				Body: []byte(`{
+					"model": "gpt-4o",
+					"input": "Use node repl",
+					"tools": [
+						{
+							"type": "namespace",
+							"name": "mcp__node_repl",
+							"tools": [
+								{"type": "function", "name": "js"},
+								{"type": "function", "name": "js_reset"}
+							]
+						}
+					]
+				}`),
+			},
+			expectError: false,
+			validate: func(t *testing.T, result *llm.Request) {
+				require.NotNil(t, result.ProviderExtensions)
+				require.NotNil(t, result.ProviderExtensions.OpenAIResponses)
+				require.NotNil(t, result.ProviderExtensions.OpenAIResponses.Request)
+				require.Equal(t, []llm.OpenAIResponsesNamespaceTool{
+					{Namespace: "mcp__node_repl", Name: "js"},
+					{Namespace: "mcp__node_repl", Name: "js_reset"},
+				}, result.ProviderExtensions.OpenAIResponses.Request.NamespaceTools)
+			},
+		},
+		{
 			name: "request with reasoning",
 			httpReq: &httpclient.Request{
 				Body: []byte(`{
@@ -512,6 +541,87 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInboundTransformer_TransformResponse_NamespaceFunctionCall(t *testing.T) {
+	trans := NewInboundTransformer()
+	llmResp := &llm.Response{
+		ID:      "resp_namespace",
+		Object:  "chat.completion",
+		Model:   "gpt-5",
+		Created: 1700000000,
+		TransformerMetadata: map[string]any{
+			responsesNamespaceToolsTransformerMetadataKey: []llm.OpenAIResponsesNamespaceTool{{
+				Namespace: "mcp__node_repl",
+				Name:      "js",
+			}},
+		},
+		Choices: []llm.Choice{{
+			Index: 0,
+			Message: &llm.Message{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{{
+					ID:   "call_js",
+					Type: "function",
+					Function: llm.FunctionCall{
+						Name:      "js",
+						Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
+					},
+				}},
+			},
+			FinishReason: lo.ToPtr("tool_calls"),
+		}},
+	}
+
+	result, err := trans.TransformResponse(context.Background(), llmResp)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(result.Body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "function_call", resp.Output[0].Type)
+	require.Equal(t, "js", resp.Output[0].Name)
+	require.Equal(t, "mcp__node_repl", resp.Output[0].Namespace)
+}
+
+func TestInboundTransformer_TransformResponse_DoesNotNamespaceAmbiguousFunctionCall(t *testing.T) {
+	trans := NewInboundTransformer()
+	llmResp := &llm.Response{
+		ID:      "resp_namespace_ambiguous",
+		Object:  "chat.completion",
+		Model:   "gpt-5",
+		Created: 1700000000,
+		TransformerMetadata: map[string]any{
+			responsesNamespaceToolsTransformerMetadataKey: []llm.OpenAIResponsesNamespaceTool{
+				{Namespace: "mcp__one", Name: "js"},
+				{Namespace: "mcp__two", Name: "js"},
+			},
+		},
+		Choices: []llm.Choice{{
+			Index: 0,
+			Message: &llm.Message{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{{
+					ID:   "call_js",
+					Type: "function",
+					Function: llm.FunctionCall{
+						Name:      "js",
+						Arguments: `{}`,
+					},
+				}},
+			},
+			FinishReason: lo.ToPtr("tool_calls"),
+		}},
+	}
+
+	result, err := trans.TransformResponse(context.Background(), llmResp)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(result.Body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "js", resp.Output[0].Name)
+	require.Empty(t, resp.Output[0].Namespace)
 }
 
 func TestInboundTransformer_TransformRequest_PreservesWebSearchTools(t *testing.T) {

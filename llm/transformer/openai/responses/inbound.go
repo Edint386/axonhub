@@ -847,6 +847,43 @@ func getResponseWebSearchCallsFromMetadata(metadata map[string]any) []Item {
 	return result
 }
 
+func namespaceForFunctionCall(metadata map[string]any, name string) string {
+	if len(metadata) == 0 || name == "" {
+		return ""
+	}
+
+	raw, ok := metadata[responsesNamespaceToolsTransformerMetadataKey]
+	if !ok || raw == nil {
+		return ""
+	}
+
+	var mappings []llm.OpenAIResponsesNamespaceTool
+	if typed, ok := raw.([]llm.OpenAIResponsesNamespaceTool); ok {
+		mappings = typed
+	} else {
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return ""
+		}
+		if err := json.Unmarshal(data, &mappings); err != nil {
+			return ""
+		}
+	}
+
+	namespace := ""
+	for _, mapping := range mappings {
+		if mapping.Name != name || mapping.Namespace == "" {
+			continue
+		}
+		if namespace != "" && namespace != mapping.Namespace {
+			return ""
+		}
+		namespace = mapping.Namespace
+	}
+
+	return namespace
+}
+
 func attachAnnotationsToFirstTextItem(items []Item, annotations []llm.Annotation) ([]Item, bool) {
 	if len(items) == 0 || len(annotations) == 0 {
 		return items, false
@@ -939,14 +976,16 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 						Status: lo.ToPtr("completed"),
 					})
 				} else {
-					resp.Output = append(resp.Output, Item{
+					item := Item{
 						ID:        toolCall.ID,
 						Type:      "function_call",
 						CallID:    toolCall.ID,
 						Name:      toolCall.Function.Name,
 						Arguments: toolCall.Function.Arguments,
 						Status:    lo.ToPtr("completed"),
-					})
+					}
+					item.Namespace = namespaceForFunctionCall(chatResp.TransformerMetadata, item.Name)
+					resp.Output = append(resp.Output, item)
 				}
 			}
 		}

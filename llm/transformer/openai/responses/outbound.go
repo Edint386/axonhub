@@ -207,6 +207,9 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	if llmReq.TransformerMetadata == nil {
 		llmReq.TransformerMetadata = map[string]any{}
 	}
+	if requestExt := openAIResponsesRequestExtensions(llmReq); requestExt != nil && len(requestExt.NamespaceTools) > 0 {
+		llmReq.TransformerMetadata[responsesNamespaceToolsTransformerMetadataKey] = requestExt.NamespaceTools
+	}
 
 	apiKey := t.config.APIKeyProvider.Get(ctx)
 
