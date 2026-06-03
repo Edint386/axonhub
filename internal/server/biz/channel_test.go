@@ -701,12 +701,13 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 		wantErr       bool
 		wantUpdated   int
 		verifyWeights map[int]int
+		verifyPriority map[int]int
 	}{
 		{
 			name: "update ordering weights successfully",
 			updates: []*ChannelOrderingItem{
-				{ID: ch1.ID, OrderingWeight: 100},
-				{ID: ch2.ID, OrderingWeight: 50},
+				{ID: ch1.ID, OrderingWeight: lo.ToPtr(100)},
+				{ID: ch2.ID, OrderingWeight: lo.ToPtr(50)},
 			},
 			wantErr:     false,
 			wantUpdated: 2,
@@ -716,9 +717,39 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 			},
 		},
 		{
+			name: "update priorities successfully",
+			updates: []*ChannelOrderingItem{
+				{ID: ch1.ID, Priority: lo.ToPtr(90)},
+				{ID: ch2.ID, Priority: lo.ToPtr(80)},
+			},
+			wantErr:     false,
+			wantUpdated: 2,
+			verifyPriority: map[int]int{
+				ch1.ID: 90,
+				ch2.ID: 80,
+			},
+		},
+		{
+			name: "update weights and priorities successfully",
+			updates: []*ChannelOrderingItem{
+				{ID: ch1.ID, OrderingWeight: lo.ToPtr(70), Priority: lo.ToPtr(700)},
+				{ID: ch2.ID, OrderingWeight: lo.ToPtr(60), Priority: lo.ToPtr(600)},
+			},
+			wantErr:     false,
+			wantUpdated: 2,
+			verifyWeights: map[int]int{
+				ch1.ID: 70,
+				ch2.ID: 60,
+			},
+			verifyPriority: map[int]int{
+				ch1.ID: 700,
+				ch2.ID: 600,
+			},
+		},
+		{
 			name: "update with non-existent channel",
 			updates: []*ChannelOrderingItem{
-				{ID: 99999, OrderingWeight: 100},
+				{ID: 99999, OrderingWeight: lo.ToPtr(100)},
 			},
 			wantErr: true,
 		},
@@ -742,6 +773,15 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 						expectedWeight, ok := tt.verifyWeights[ch.ID]
 						if ok {
 							require.Equal(t, expectedWeight, ch.OrderingWeight)
+						}
+					}
+				}
+
+				if tt.verifyPriority != nil {
+					for _, ch := range result {
+						expectedPriority, ok := tt.verifyPriority[ch.ID]
+						if ok {
+							require.Equal(t, expectedPriority, ch.Priority)
 						}
 					}
 				}

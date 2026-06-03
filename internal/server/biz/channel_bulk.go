@@ -15,24 +15,39 @@ import (
 // ChannelOrderingItem represents a channel ordering update.
 type ChannelOrderingItem struct {
 	ID             int
-	OrderingWeight int
+	OrderingWeight *int
+	Priority       *int
 }
 
-// BulkUpdateChannelOrdering updates the ordering weight for multiple channels in a single transaction.
+// BulkUpdateChannelOrdering updates ordering fields for multiple channels in a single transaction.
 func (svc *ChannelService) BulkUpdateChannelOrdering(ctx context.Context, items []*ChannelOrderingItem) ([]*ent.Channel, error) {
-	client := svc.entFromContext(ctx)
-
 	updatedChannels := make([]*ent.Channel, 0, len(items))
-	for _, update := range items {
-		channel, err := client.Channel.
-			UpdateOneID(update.ID).
-			SetOrderingWeight(update.OrderingWeight).
-			Save(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update channel %d: %w", update.ID, err)
+
+	err := svc.RunInTransaction(ctx, func(txCtx context.Context) error {
+		client := svc.entFromContext(txCtx)
+
+		for _, update := range items {
+			if update.OrderingWeight == nil && update.Priority == nil {
+				continue
+			}
+
+			mut := client.Channel.
+				UpdateOneID(update.ID).
+				SetNillableOrderingWeight(update.OrderingWeight).
+				SetNillablePriority(update.Priority)
+
+			channel, err := mut.Save(txCtx)
+			if err != nil {
+				return fmt.Errorf("failed to update channel %d: %w", update.ID, err)
+			}
+
+			updatedChannels = append(updatedChannels, channel)
 		}
 
-		updatedChannels = append(updatedChannels, channel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	svc.asyncReloadChannels()

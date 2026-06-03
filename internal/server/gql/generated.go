@@ -61777,7 +61777,7 @@ func (ec *executionContext) unmarshalInputChannelOrderingItem(ctx context.Contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "orderingWeight"}
+	fieldsInOrder := [...]string{"id", "orderingWeight", "priority"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -61797,11 +61797,18 @@ func (ec *executionContext) unmarshalInputChannelOrderingItem(ctx context.Contex
 			it.ID = converted
 		case "orderingWeight":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("orderingWeight"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.OrderingWeight = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
 		}
 	}
 

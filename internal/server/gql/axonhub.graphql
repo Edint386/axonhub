@@ -298,7 +298,8 @@ input BulkCreateChannelsInput {
 
 input ChannelOrderingItem {
   id: ID!
-  orderingWeight: Int!
+  orderingWeight: Int
+  priority: Int
 }
 
 input BulkUpdateChannelOrderingInput {
