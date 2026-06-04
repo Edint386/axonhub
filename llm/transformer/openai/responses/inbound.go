@@ -891,6 +891,16 @@ func namespaceForFunctionCall(metadata map[string]any, name string) string {
 	return namespace
 }
 
+func namespaceForToolCall(metadata map[string]any, tc llm.ToolCall) string {
+	if tc.TransformerMetadata != nil {
+		if namespace, ok := tc.TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey].(string); ok && namespace != "" {
+			return namespace
+		}
+	}
+
+	return namespaceForFunctionCall(metadata, tc.Function.Name)
+}
+
 func attachAnnotationsToFirstTextItem(items []Item, annotations []llm.Annotation) ([]Item, bool) {
 	if len(items) == 0 || len(annotations) == 0 {
 		return items, false
@@ -991,7 +1001,7 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 						Arguments: toolCall.Function.Arguments,
 						Status:    lo.ToPtr("completed"),
 					}
-					item.Namespace = namespaceForFunctionCall(chatResp.TransformerMetadata, item.Name)
+					item.Namespace = namespaceForToolCall(chatResp.TransformerMetadata, toolCall)
 					resp.Output = append(resp.Output, item)
 				}
 			}

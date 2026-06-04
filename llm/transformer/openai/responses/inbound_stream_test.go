@@ -219,6 +219,79 @@ func TestInboundTransformer_TransformStream_PreservesWebSearchCallsFromChunkMeta
 	require.Equal(t, "Search result without inline citations", lo.FromPtr(lastEvent.Response.Output[1].Content.Items[0].Text))
 }
 
+func TestInboundTransformer_TransformStream_PreservesFunctionCallNamespaceMetadata(t *testing.T) {
+	trans := NewInboundTransformer()
+
+	stream, err := trans.TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+		{
+			Object:  "chat.completion.chunk",
+			ID:      "resp_namespace_stream",
+			Created: 1700000000,
+			Model:   "gpt-5",
+			Choices: []llm.Choice{{
+				Index: 0,
+				Delta: &llm.Message{
+					ToolCalls: []llm.ToolCall{{
+						ID:    "call_js",
+						Type:  "function",
+						Index: 0,
+						Function: llm.FunctionCall{
+							Name: "js",
+						},
+						TransformerMetadata: map[string]any{
+							responsesToolCallNamespaceTransformerMetadataKey: "mcp__node_repl",
+						},
+					}},
+				},
+			}},
+		},
+		{
+			Object:  "chat.completion.chunk",
+			ID:      "resp_namespace_stream",
+			Created: 1700000000,
+			Model:   "gpt-5",
+			Choices: []llm.Choice{{
+				Index: 0,
+				Delta: &llm.Message{
+					ToolCalls: []llm.ToolCall{{
+						Index: 0,
+						Function: llm.FunctionCall{
+							Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
+						},
+					}},
+				},
+			}},
+		},
+		{
+			Object:  "chat.completion.chunk",
+			ID:      "resp_namespace_stream",
+			Created: 1700000000,
+			Model:   "gpt-5",
+			Choices: []llm.Choice{{
+				Index:        0,
+				Delta:        &llm.Message{},
+				FinishReason: lo.ToPtr("tool_calls"),
+			}},
+		},
+	}))
+	require.NoError(t, err)
+
+	var doneItem *Item
+	for stream.Next() {
+		event := stream.Current()
+		var ev StreamEvent
+		err := json.Unmarshal(event.Data, &ev)
+		require.NoError(t, err)
+		if ev.Type == StreamEventTypeOutputItemDone && ev.Item != nil && ev.Item.Type == "function_call" {
+			doneItem = ev.Item
+		}
+	}
+	require.NoError(t, stream.Err())
+	require.NotNil(t, doneItem)
+	require.Equal(t, "js", doneItem.Name)
+	require.Equal(t, "mcp__node_repl", doneItem.Namespace)
+}
+
 func TestInboundTransformer_TransformStream_EmitsUpstreamErrorEvents(t *testing.T) {
 	tests := []struct {
 		name      string

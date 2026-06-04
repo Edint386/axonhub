@@ -536,6 +536,7 @@ func (s *responsesInboundStream) initToolCall(tc llm.ToolCall) error {
 		ID:                     tc.ID,
 		Type:                   tc.Type,
 		ResponseCustomToolCall: tc.ResponseCustomToolCall,
+		TransformerMetadata:    tc.TransformerMetadata,
 		Function: llm.FunctionCall{
 			Name:      tc.Function.Name,
 			Arguments: "",
@@ -574,7 +575,7 @@ func (s *responsesInboundStream) initToolCall(tc llm.ToolCall) error {
 			Status:    lo.ToPtr("in_progress"),
 			CallID:    tc.ID,
 			Name:      tc.Function.Name,
-			Namespace: namespaceForFunctionCall(s.transformerMetadata, tc.Function.Name),
+			Namespace: namespaceForToolCall(s.transformerMetadata, tc),
 		}
 
 		err := s.enqueueEvent(&StreamEvent{
@@ -894,7 +895,7 @@ func (s *responsesInboundStream) closeCurrentOutputItem() error {
 				Status:    lo.ToPtr("completed"),
 				CallID:    tc.ID,
 				Name:      tc.Function.Name,
-				Namespace: namespaceForFunctionCall(s.transformerMetadata, tc.Function.Name),
+				Namespace: namespaceForToolCall(s.transformerMetadata, *tc),
 				Arguments: tc.Function.Arguments,
 			}
 

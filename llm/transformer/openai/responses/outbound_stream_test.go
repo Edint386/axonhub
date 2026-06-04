@@ -2,9 +2,11 @@ package responses
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/llm"
@@ -12,6 +14,66 @@ import (
 	"github.com/looplj/axonhub/llm/internal/pkg/xtest"
 	"github.com/looplj/axonhub/llm/streams"
 )
+
+func TestOutboundTransformer_TransformStream_PreservesFunctionCallNamespace(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	mustEvent := func(event StreamEvent) *httpclient.StreamEvent {
+		data, err := json.Marshal(event)
+		require.NoError(t, err)
+		return &httpclient.StreamEvent{
+			Type: string(event.Type),
+			Data: data,
+		}
+	}
+
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream([]*httpclient.StreamEvent{
+		mustEvent(StreamEvent{
+			Type: StreamEventTypeOutputItemAdded,
+			Item: &Item{
+				ID:        "fc_1",
+				Type:      "function_call",
+				CallID:    "call_js",
+				Name:      "js",
+				Namespace: "mcp__node_repl",
+				Status:    lo.ToPtr("in_progress"),
+			},
+		}),
+		mustEvent(StreamEvent{
+			Type:        StreamEventTypeFunctionCallArgumentsDelta,
+			ItemID:      lo.ToPtr("fc_1"),
+			OutputIndex: 0,
+			Delta:       `{"code":"nodeRepl.write(\"ok\")"}`,
+		}),
+		mustEvent(StreamEvent{
+			Type: StreamEventTypeResponseCompleted,
+			Response: &Response{
+				ID:     "resp_1",
+				Object: "response",
+				Status: lo.ToPtr("completed"),
+			},
+		}),
+	}))
+	require.NoError(t, err)
+
+	var found bool
+	for stream.Next() {
+		resp := stream.Current()
+		if resp == llm.DoneResponse || len(resp.Choices) == 0 || resp.Choices[0].Delta == nil {
+			continue
+		}
+		toolCalls := resp.Choices[0].Delta.ToolCalls
+		if len(toolCalls) == 0 {
+			continue
+		}
+		found = true
+		require.Equal(t, "mcp__node_repl", toolCalls[0].TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey])
+		break
+	}
+	require.True(t, found)
+	require.NoError(t, stream.Err())
+}
 
 func TestOutboundTransformer_StreamTransformation_WithTestData(t *testing.T) {
 	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")

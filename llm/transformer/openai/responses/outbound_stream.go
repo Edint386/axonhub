@@ -235,9 +235,16 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		case "function_call":
 			// Initialize tool call tracking
 			toolCallIdx := len(s.state.toolCalls)
+			var transformerMetadata map[string]any
+			if item.Namespace != "" {
+				transformerMetadata = map[string]any{
+					responsesToolCallNamespaceTransformerMetadataKey: item.Namespace,
+				}
+			}
 			s.state.toolCalls[item.CallID] = &llm.ToolCall{
-				ID:   item.CallID,
-				Type: "function",
+				ID:                  item.CallID,
+				Type:                "function",
+				TransformerMetadata: transformerMetadata,
 				Function: llm.FunctionCall{
 					Name:      item.Name,
 					Arguments: "",
@@ -253,9 +260,10 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 					Delta: &llm.Message{
 						ToolCalls: []llm.ToolCall{
 							{
-								ID:    item.CallID,
-								Type:  "function",
-								Index: toolCallIdx,
+								ID:                  item.CallID,
+								Type:                "function",
+								Index:               toolCallIdx,
+								TransformerMetadata: transformerMetadata,
 								Function: llm.FunctionCall{
 									Name: item.Name,
 								},
@@ -441,6 +449,22 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		}
 		if streamEvent.Item.Type == "web_search_call" {
 			appendResponseWebSearchCallMetadata(s.state.transformerMetadata, *streamEvent.Item)
+			return nil // Intentionally skip this event
+		}
+		if streamEvent.Item.Type == "function_call" {
+			if streamEvent.Item.Namespace != "" {
+				callID := streamEvent.Item.CallID
+				if callID == "" && streamEvent.Item.ID != "" {
+					callID = s.state.itemToCallID[streamEvent.Item.ID]
+				}
+				if tc, ok := s.state.toolCalls[callID]; ok {
+					if tc.TransformerMetadata == nil {
+						tc.TransformerMetadata = map[string]any{}
+					}
+					tc.TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey] = streamEvent.Item.Namespace
+				}
+			}
+
 			return nil // Intentionally skip this event
 		}
 		if streamEvent.Item.Type != "message" {
