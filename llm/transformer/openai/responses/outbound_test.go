@@ -568,18 +568,15 @@ func TestOutboundTransformer_TransformRequest(t *testing.T) {
 
 				err := json.Unmarshal(result.Body, &req)
 				require.NoError(t, err)
-				require.Equal(t, []Tool{
-					{
-						Type: "web_search",
-						Filters: &WebSearchFilters{
-							AllowedDomains: []string{"openai.com"},
-						},
-						UserLocation: &WebSearchUserLocation{
-							Type:    "approximate",
-							Country: "US",
-						},
-					},
-				}, req.Tools)
+				require.Len(t, req.Tools, 1)
+				require.Equal(t, "web_search", req.Tools[0].Type)
+				require.Equal(t, &WebSearchFilters{
+					AllowedDomains: []string{"openai.com"},
+				}, req.Tools[0].Filters)
+				require.Equal(t, &WebSearchUserLocation{
+					Type:    "approximate",
+					Country: "US",
+				}, req.Tools[0].UserLocation)
 			},
 		},
 		{

@@ -510,6 +510,7 @@ type UpdateAutoBackupSettingsInput struct {
 	IncludeAPIKeys     *bool                `json:"includeAPIKeys,omitempty"`
 	IncludeModelPrices *bool                `json:"includeModelPrices,omitempty"`
 	IncludeUsageStats  *bool                `json:"includeUsageStats,omitempty"`
+	IncludeRequestLogs *bool                `json:"includeRequestLogs,omitempty"`
 	RetentionDays      *int                 `json:"retentionDays,omitempty"`
 }
 
@@ -551,6 +552,10 @@ type UpdateProjectUserInput struct {
 type UpdateQuotaEnforcementSettingsInput struct {
 	Enabled *bool                     `json:"enabled,omitempty"`
 	Mode    *biz.QuotaEnforcementMode `json:"mode,omitempty"`
+}
+
+type UpdateSecuritySettingsInput struct {
+	BlockedIPs []string `json:"blockedIPs,omitempty"`
 }
 
 type UpdateUserAgentPassThroughSettingsInput struct {

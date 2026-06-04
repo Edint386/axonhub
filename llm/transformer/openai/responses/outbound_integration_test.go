@@ -230,19 +230,17 @@ func TestOutboundTransformer_TransformRequest_WithWebSearchTool(t *testing.T) {
 	err = json.Unmarshal(hreq.Body, &actual)
 	require.NoError(t, err)
 	require.Len(t, actual.Tools, 1)
-	require.Equal(t, Tool{
-		Type: "web_search",
-		Filters: &WebSearchFilters{
-			AllowedDomains: []string{"openai.com", "example.com"},
-		},
-		UserLocation: &WebSearchUserLocation{
-			Type:     "approximate",
-			City:     "San Francisco",
-			Country:  "US",
-			Region:   "California",
-			Timezone: "America/Los_Angeles",
-		},
-	}, actual.Tools[0])
+	require.Equal(t, "web_search", actual.Tools[0].Type)
+	require.Equal(t, &WebSearchFilters{
+		AllowedDomains: []string{"openai.com", "example.com"},
+	}, actual.Tools[0].Filters)
+	require.Equal(t, &WebSearchUserLocation{
+		Type:     "approximate",
+		City:     "San Francisco",
+		Country:  "US",
+		Region:   "California",
+		Timezone: "America/Los_Angeles",
+	}, actual.Tools[0].UserLocation)
 }
 
 func TestCompactTransformer_TransformResponse_Integration(t *testing.T) {
