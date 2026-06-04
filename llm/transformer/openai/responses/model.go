@@ -456,6 +456,7 @@ type URLCitation struct {
 
 const responsesWebSearchCallsTransformerMetadataKey = "openai_responses_web_search_calls"
 const responsesNamespaceToolsTransformerMetadataKey = "openai_responses_namespace_tools"
+const responsesToolCallNamespaceTransformerMetadataKey = "openai_responses_tool_call_namespace"
 
 type WebSearchSource struct {
 	Type  string `json:"type,omitempty"`

@@ -72,6 +72,30 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "function call input preserves namespace",
+			httpReq: &httpclient.Request{
+				Body: []byte(`{
+					"model": "gpt-5",
+					"input": [
+						{
+							"type": "function_call",
+							"call_id": "call_js",
+							"name": "js",
+							"namespace": "mcp__node_repl",
+							"arguments": "{\"code\":\"nodeRepl.write(\\\"ok\\\")\"}"
+						}
+					]
+				}`),
+			},
+			expectError: false,
+			validate: func(t *testing.T, result *llm.Request) {
+				require.Len(t, result.Messages, 1)
+				require.Len(t, result.Messages[0].ToolCalls, 1)
+				require.Equal(t, "js", result.Messages[0].ToolCalls[0].Function.Name)
+				require.Equal(t, "mcp__node_repl", result.Messages[0].ToolCalls[0].TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey])
+			},
+		},
+		{
 			name: "request with instructions",
 			httpReq: &httpclient.Request{
 				Body: []byte(`{

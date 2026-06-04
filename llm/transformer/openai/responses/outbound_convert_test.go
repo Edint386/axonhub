@@ -700,6 +700,41 @@ func TestConvertInputFromMessages(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "assistant function call preserves namespace metadata",
+			msgs: []llm.Message{
+				{
+					Role: "assistant",
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:   "call_js",
+							Type: "function",
+							Function: llm.FunctionCall{
+								Name:      "js",
+								Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
+							},
+							TransformerMetadata: map[string]any{
+								responsesToolCallNamespaceTransformerMetadataKey: "mcp__node_repl",
+							},
+						},
+					},
+				},
+			},
+			transformOptions: llm.TransformOptions{
+				ArrayInputs: lo.ToPtr(true),
+			},
+			expected: Input{
+				Items: []Item{
+					{
+						Type:      "function_call",
+						CallID:    "call_js",
+						Name:      "js",
+						Namespace: "mcp__node_repl",
+						Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1148,6 +1183,23 @@ func TestConvertOutputToMessage(t *testing.T) {
 				require.Len(t, msg.ToolCalls, 2)
 				require.Equal(t, "fn1", msg.ToolCalls[0].Function.Name)
 				require.Equal(t, "fn2", msg.ToolCalls[1].Function.Name)
+			},
+		},
+		{
+			name: "function call preserves namespace metadata",
+			output: []Item{
+				{
+					Type:      "function_call",
+					CallID:    "call_js",
+					Name:      "js",
+					Namespace: "mcp__node_repl",
+					Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
+				},
+			},
+			validate: func(t *testing.T, msg llm.Message) {
+				require.Len(t, msg.ToolCalls, 1)
+				require.Equal(t, "js", msg.ToolCalls[0].Function.Name)
+				require.Equal(t, "mcp__node_repl", msg.ToolCalls[0].TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey])
 			},
 		},
 		{

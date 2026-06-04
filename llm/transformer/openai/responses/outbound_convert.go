@@ -232,12 +232,18 @@ func convertAssistantMessage(msg llm.Message) []Item {
 				Input:  lo.ToPtr(tc.ResponseCustomToolCall.Input),
 			})
 		} else {
-			toolCallItems = append(toolCallItems, Item{
+			item := Item{
 				Type:      "function_call",
 				CallID:    tc.ID,
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
-			})
+			}
+			if tc.TransformerMetadata != nil {
+				if namespace, ok := tc.TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey].(string); ok && namespace != "" {
+					item.Namespace = namespace
+				}
+			}
+			toolCallItems = append(toolCallItems, item)
 		}
 	}
 
@@ -643,6 +649,12 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 		case "output_text":
 			annotations = appendOutputText(&textContent, &visibleTextRuneCount, annotations, outputItem)
 		case "function_call":
+			var transformerMetadata map[string]any
+			if outputItem.Namespace != "" {
+				transformerMetadata = map[string]any{
+					responsesToolCallNamespaceTransformerMetadataKey: outputItem.Namespace,
+				}
+			}
 			toolCalls = append(toolCalls, llm.ToolCall{
 				ID:   outputItem.CallID,
 				Type: "function",
@@ -650,6 +662,7 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 					Name:      outputItem.Name,
 					Arguments: outputItem.Arguments,
 				},
+				TransformerMetadata: transformerMetadata,
 			})
 		case "custom_tool_call":
 			inputStr := ""

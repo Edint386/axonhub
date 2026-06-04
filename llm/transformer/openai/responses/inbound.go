@@ -518,6 +518,12 @@ func convertItemToMessage(item *Item) (*llm.Message, error) {
 
 	case "function_call":
 		// Function call from assistant - convert to tool call
+		var transformerMetadata map[string]any
+		if item.Namespace != "" {
+			transformerMetadata = map[string]any{
+				responsesToolCallNamespaceTransformerMetadataKey: item.Namespace,
+			}
+		}
 		return &llm.Message{
 			Role: "assistant",
 			ToolCalls: []llm.ToolCall{
@@ -528,6 +534,7 @@ func convertItemToMessage(item *Item) (*llm.Message, error) {
 						Name:      item.Name,
 						Arguments: item.Arguments,
 					},
+					TransformerMetadata: transformerMetadata,
 				},
 			},
 		}, nil
