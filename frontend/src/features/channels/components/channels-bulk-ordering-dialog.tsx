@@ -66,12 +66,22 @@ const sortChannelsByMode = (items: OrderedChannel[], mode: OrderingMode) => {
 
 const normalizePrioritiesByOrder = (items: OrderedChannel[]) => {
   const maxPriority = Math.max(...items.map((item) => item.priority), 0);
-  const startPriority = Math.max(maxPriority, items.length * PRIORITY_STEP);
+  const priorityLevels = new Set(items.map((item) => item.priority));
+  const startPriority = Math.max(maxPriority, priorityLevels.size * PRIORITY_STEP);
+  const normalizedByOriginalPriority = new Map<number, number>();
 
-  return items.map((item, index) => ({
-    ...item,
-    priority: startPriority - index * PRIORITY_STEP,
-  }));
+  return items.map((item) => {
+    let nextPriority = normalizedByOriginalPriority.get(item.priority);
+    if (nextPriority === undefined) {
+      nextPriority = startPriority - normalizedByOriginalPriority.size * PRIORITY_STEP;
+      normalizedByOriginalPriority.set(item.priority, nextPriority);
+    }
+
+    return {
+      ...item,
+      priority: nextPriority,
+    };
+  });
 };
 
 const createOrderedChannels = (channelsData: ChannelSummaryConnection | undefined, mode: OrderingMode) => {
@@ -287,7 +297,7 @@ interface ChannelsBulkOrderingDialogProps {
 
 export function ChannelsBulkOrderingDialog({ open, onOpenChange }: ChannelsBulkOrderingDialogProps) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<OrderingMode>('weight');
+  const [mode, setMode] = useState<OrderingMode>('priority');
   const { data: channelsData, isLoading } = useAllChannelSummarys(undefined, { enabled: open });
   const bulkUpdateMutation = useBulkUpdateChannelOrdering();
   const [orderedChannels, setOrderedChannels] = useState<OrderedChannel[]>([]);
@@ -305,9 +315,14 @@ export function ChannelsBulkOrderingDialog({ open, onOpenChange }: ChannelsBulkO
   }, [orderedChannels]);
 
   useEffect(() => {
-    setOrderedChannels(createOrderedChannels(channelsData, mode));
+    if (!open) {
+      return;
+    }
+
+    setMode('priority');
+    setOrderedChannels(createOrderedChannels(channelsData, 'priority'));
     setDirtyModes({ weight: false, priority: false });
-  }, [channelsData]);
+  }, [channelsData, open]);
 
   const markDirty = useCallback((dirtyMode: OrderingMode) => {
     setDirtyModes((prev) => ({ ...prev, [dirtyMode]: true }));
@@ -492,8 +507,8 @@ export function ChannelsBulkOrderingDialog({ open, onOpenChange }: ChannelsBulkO
         <div className='flex flex-shrink-0 items-center justify-between gap-3'>
           <Tabs value={mode} onValueChange={handleModeChange}>
             <TabsList>
-              <TabsTrigger value='weight'>{t('channels.dialogs.bulkOrdering.weightMode')}</TabsTrigger>
               <TabsTrigger value='priority'>{t('channels.dialogs.bulkOrdering.priorityMode')}</TabsTrigger>
+              <TabsTrigger value='weight'>{t('channels.dialogs.bulkOrdering.weightMode')}</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
