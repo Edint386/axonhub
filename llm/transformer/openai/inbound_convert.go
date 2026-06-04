@@ -90,15 +90,6 @@ func (r *Request) ToLLMRequest() *llm.Request {
 	// Convert Tools
 	req.Tools = lo.FilterMap(r.Tools, func(t Tool, index int) (llm.Tool, bool) {
 		if t.Type != llm.ToolTypeFunction {
-			raw := t.rawJSON()
-			if len(raw) > 0 {
-				req.UnsupportedTools = append(req.UnsupportedTools, llm.UnsupportedTool{
-					Index: index,
-					Type:  t.Type,
-					Raw:   raw,
-				})
-			}
-
 			return llm.Tool{}, false
 		}
 

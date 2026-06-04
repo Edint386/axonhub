@@ -262,13 +262,12 @@ func convertToLLMRequest(req *Request, rawBody ...[]byte) (*llm.Request, error) 
 	chatReq.Messages = messages
 
 	if len(req.Tools) > 0 {
-		tools, unsupportedTools, err := convertToolsToLLM(req.Tools)
+		tools, err := convertToolsToLLM(req.Tools)
 		if err != nil {
 			return nil, err
 		}
 
 		chatReq.Tools = tools
-		chatReq.UnsupportedTools = unsupportedTools
 	}
 
 	// Convert text format to response format
@@ -713,11 +712,10 @@ func convertContentItemToPart(item *Item) (*llm.MessageContentPart, error) {
 }
 
 // convertToolsToLLM converts Responses API tools to llm.Tool slice.
-func convertToolsToLLM(tools []Tool) ([]llm.Tool, []llm.UnsupportedTool, error) {
+func convertToolsToLLM(tools []Tool) ([]llm.Tool, error) {
 	result := make([]llm.Tool, 0, len(tools))
-	var unsupported []llm.UnsupportedTool
 
-	for index, tool := range tools {
+	for _, tool := range tools {
 		switch tool.Type {
 		case "function":
 			params := append(json.RawMessage(nil), tool.parametersRaw...)
@@ -725,7 +723,7 @@ func convertToolsToLLM(tools []Tool) ([]llm.Tool, []llm.UnsupportedTool, error) 
 				var err error
 				params, err = json.Marshal(tool.Parameters)
 				if err != nil {
-					return nil, nil, fmt.Errorf("failed to marshal function parameters: %w", err)
+					return nil, fmt.Errorf("failed to marshal function parameters: %w", err)
 				}
 			}
 
@@ -796,19 +794,11 @@ func convertToolsToLLM(tools []Tool) ([]llm.Tool, []llm.UnsupportedTool, error) 
 			})
 
 		default:
-			raw := tool.rawJSON()
-			if len(raw) == 0 {
-				continue
-			}
-			unsupported = append(unsupported, llm.UnsupportedTool{
-				Index: index,
-				Type:  tool.Type,
-				Raw:   raw,
-			})
+			continue
 		}
 	}
 
-	return result, unsupported, nil
+	return result, nil
 }
 
 func getResponseWebSearchCallsFromMetadata(metadata map[string]any) []Item {

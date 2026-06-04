@@ -106,15 +106,6 @@ const (
 	//nolint:gosec // Not a secret.
 	SystemKeyPassThrough = "system_pass_through"
 
-	// SystemKeyPreserveUnsupportedTools stores whether unknown client tool definitions
-	// should be preserved for compatible outbound formats instead of being dropped.
-	SystemKeyPreserveUnsupportedTools = "system_preserve_unsupported_tools"
-
-	// SystemKeyForwardUnsupportedToolsAcrossFormats stores whether preserved unknown
-	// tool definitions should also be sent when the outbound API format differs from
-	// the inbound API format.
-	SystemKeyForwardUnsupportedToolsAcrossFormats = "system_forward_unsupported_tools_across_formats"
-
 	// SystemKeyQuotaEnforcementSettings is the key used to store the quota enforcement settings.
 	// The value is JSON-encoded QuotaEnforcementSettings struct.
 	SystemKeyQuotaEnforcementSettings = "quota_enforcement_settings"
@@ -1490,53 +1481,6 @@ func (s *SystemService) SetPassThrough(ctx context.Context, enabled bool) error 
 	}
 
 	return s.setSystemValue(ctx, SystemKeyPassThrough, strValue)
-}
-
-// PreserveUnsupportedTools retrieves the global setting that preserves unknown tool definitions.
-func (s *SystemService) PreserveUnsupportedTools(ctx context.Context) (bool, error) {
-	value, err := s.getSystemValue(ctx, SystemKeyPreserveUnsupportedTools)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return false, nil
-		}
-
-		return false, fmt.Errorf("failed to get preserve unsupported tools: %w", err)
-	}
-
-	return value == "true", nil
-}
-
-func (s *SystemService) SetPreserveUnsupportedTools(ctx context.Context, enabled bool) error {
-	strValue := "false"
-	if enabled {
-		strValue = "true"
-	}
-
-	return s.setSystemValue(ctx, SystemKeyPreserveUnsupportedTools, strValue)
-}
-
-// ForwardUnsupportedToolsAcrossFormats retrieves the global setting that sends preserved
-// unknown tools even when the outbound API format differs from the inbound format.
-func (s *SystemService) ForwardUnsupportedToolsAcrossFormats(ctx context.Context) (bool, error) {
-	value, err := s.getSystemValue(ctx, SystemKeyForwardUnsupportedToolsAcrossFormats)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return false, nil
-		}
-
-		return false, fmt.Errorf("failed to get forward unsupported tools across formats: %w", err)
-	}
-
-	return value == "true", nil
-}
-
-func (s *SystemService) SetForwardUnsupportedToolsAcrossFormats(ctx context.Context, enabled bool) error {
-	strValue := "false"
-	if enabled {
-		strValue = "true"
-	}
-
-	return s.setSystemValue(ctx, SystemKeyForwardUnsupportedToolsAcrossFormats, strValue)
 }
 
 // QuotaEnforcementSettings retrieves the quota enforcement settings.

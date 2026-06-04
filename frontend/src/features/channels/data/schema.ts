@@ -272,8 +272,6 @@ export const channelSettingsSchema = z.object({
   transformOptions: transformOptionsSchema.optional(),
   passThroughUserAgent: z.boolean().optional().nullable(),
   passThroughBody: z.boolean().optional().nullable(),
-  preserveUnsupportedTools: z.boolean().optional().nullable(),
-  forwardUnsupportedToolsAcrossFormats: z.boolean().optional().nullable(),
   rateLimit: channelRateLimitSchema.optional().nullable(),
   quota: channelQuotaSchema.optional().nullable(),
 });

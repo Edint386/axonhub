@@ -109,8 +109,6 @@ type ChannelSettings {
   bodyOverrideOperations: [OverrideOperation!]! @goField(forceResolver: true)
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
-  preserveUnsupportedTools: Boolean
-  forwardUnsupportedToolsAcrossFormats: Boolean
   rateLimit: ChannelRateLimit
   quota: APIKeyQuota
 }
@@ -147,8 +145,6 @@ input ChannelSettingsInput {
   bodyOverrideOperations: [OverrideOperationInput!]
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
-  preserveUnsupportedTools: Boolean
-  forwardUnsupportedToolsAcrossFormats: Boolean
   rateLimit: ChannelRateLimitInput
   quota: APIKeyQuotaInput
 }

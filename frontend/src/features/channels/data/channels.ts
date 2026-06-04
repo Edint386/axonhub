@@ -92,11 +92,6 @@ const CHANNEL_QUOTA_FIELDS = `
           }
 `;
 
-const CHANNEL_UNSUPPORTED_TOOLS_FIELDS = `
-          preserveUnsupportedTools
-          forwardUnsupportedToolsAcrossFormats
-`;
-
 const CREATE_CHANNEL_MUTATION = `
   mutation CreateChannel($input: CreateChannelInput!) {
     createChannel(input: $input) {
@@ -140,7 +135,6 @@ const CREATE_CHANNEL_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
-          ${CHANNEL_UNSUPPORTED_TOOLS_FIELDS}
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
         }
@@ -205,7 +199,6 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
-          ${CHANNEL_UNSUPPORTED_TOOLS_FIELDS}
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
         }
@@ -270,7 +263,6 @@ const UPDATE_CHANNEL_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
-          ${CHANNEL_UNSUPPORTED_TOOLS_FIELDS}
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
         }
@@ -440,7 +432,6 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
-          ${CHANNEL_UNSUPPORTED_TOOLS_FIELDS}
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
         }
@@ -630,7 +621,6 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
-          ${CHANNEL_UNSUPPORTED_TOOLS_FIELDS}
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
         }
@@ -764,7 +754,6 @@ const QUERY_CHANNELS_QUERY = `
             }
             passThroughUserAgent
             passThroughBody
-            ${CHANNEL_UNSUPPORTED_TOOLS_FIELDS}
             ${CHANNEL_RATE_LIMIT_FIELDS}
             ${CHANNEL_QUOTA_FIELDS}
           }

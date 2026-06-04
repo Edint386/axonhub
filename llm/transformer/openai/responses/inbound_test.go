@@ -239,7 +239,7 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "request with unsupported tool preserves raw definition",
+			name: "request with raw-only namespace tool preserves provider extension",
 			httpReq: &httpclient.Request{
 				Body: []byte(`{
 					"model": "gpt-4o",
@@ -254,10 +254,13 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 			validate: func(t *testing.T, result *llm.Request) {
 				require.Len(t, result.Tools, 1)
 				require.Equal(t, "known", result.Tools[0].Function.Name)
-				require.Len(t, result.UnsupportedTools, 1)
-				require.Equal(t, 1, result.UnsupportedTools[0].Index)
-				require.Equal(t, "namespace", result.UnsupportedTools[0].Type)
-				require.JSONEq(t, `{"type":"namespace","name":"mcp__node_repl__","description":"Node kernel"}`, string(result.UnsupportedTools[0].Raw))
+				require.NotNil(t, result.ProviderExtensions)
+				require.NotNil(t, result.ProviderExtensions.OpenAIResponses)
+				require.NotNil(t, result.ProviderExtensions.OpenAIResponses.Request)
+				require.Len(t, result.ProviderExtensions.OpenAIResponses.Request.RawTools, 1)
+				require.Equal(t, 1, result.ProviderExtensions.OpenAIResponses.Request.RawTools[0].OriginalIndex)
+				require.Equal(t, "namespace", result.ProviderExtensions.OpenAIResponses.Request.RawTools[0].Type)
+				require.JSONEq(t, `{"type":"namespace","name":"mcp__node_repl__","description":"Node kernel"}`, string(result.ProviderExtensions.OpenAIResponses.Request.RawTools[0].Raw))
 			},
 		},
 		{
