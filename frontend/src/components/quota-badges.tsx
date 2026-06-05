@@ -211,6 +211,10 @@ function getLocalQuotaStatus(channel: ProviderQuotaChannel): 'available' | 'warn
   return 'available';
 }
 
+function isLocalOnlyQuotaChannel(channel: ProviderQuotaChannel): boolean {
+  return !channel.quotaStatus && !!channel.localQuota;
+}
+
 function getWorstQuotaStatus(
   providerStatus?: 'available' | 'warning' | 'exhausted' | 'unknown' | null,
   localStatus?: 'available' | 'warning' | 'exhausted' | null
@@ -1005,14 +1009,12 @@ function QuotaRow({ channel, enforcementMode }: { channel: ProviderQuotaChannel;
 function QuotaBadgeTrigger({ channels }: { channels: ProviderQuotaChannel[] }) {
   const highestUsed = Math.max(
     ...channels.map((c) => {
-      const providerPercentage = c.quotaStatus ? getChannelPercentage(c) : 0;
-      const localPercentage = getLocalQuotaPercentage(c);
-      return Math.max(providerPercentage, localPercentage);
+      return c.quotaStatus ? getChannelPercentage(c) : 0;
     })
   );
 
-  const hasExhausted = channels.some((c) => c.quotaStatus?.status === 'exhausted' || getLocalQuotaStatus(c) === 'exhausted');
-  const hasWarning = channels.some((c) => c.quotaStatus?.status === 'warning' || getLocalQuotaStatus(c) === 'warning');
+  const hasExhausted = channels.some((c) => c.quotaStatus?.status === 'exhausted');
+  const hasWarning = channels.some((c) => c.quotaStatus?.status === 'warning');
 
   let level: BatteryLevel = 'full';
   if (hasExhausted) level = 'warning';
@@ -1056,14 +1058,21 @@ export function QuotaBadges({ isRefreshing, onRefresh }: { isRefreshing: boolean
     return acc;
   }, [] as ProviderQuotaChannel[]);
 
+  const sortedChannels = [...groupedChannels].sort((a, b) => {
+    const aLocalOnly = isLocalOnlyQuotaChannel(a);
+    const bLocalOnly = isLocalOnlyQuotaChannel(b);
+    if (aLocalOnly === bLocalOnly) return 0;
+    return aLocalOnly ? 1 : -1;
+  });
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button type='button' className='hover:bg-muted relative rounded-md p-2 transition-colors'>
-          <QuotaBadgeTrigger channels={groupedChannels} />
+          <QuotaBadgeTrigger channels={sortedChannels} />
         </button>
       </PopoverTrigger>
-      <PopoverContent className={groupedChannels.length > 4 ? 'w-full sm:w-[640px]' : 'w-full sm:w-80'} align='end'>
+      <PopoverContent className={sortedChannels.length > 4 ? 'w-full sm:w-[640px]' : 'w-full sm:w-80'} align='end'>
         <div className='space-y-1'>
           <div className='mb-2 flex items-center justify-between'>
             <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>{t('system.providerQuota.title')}</div>
@@ -1077,9 +1086,9 @@ export function QuotaBadges({ isRefreshing, onRefresh }: { isRefreshing: boolean
             </button>
           </div>
           <div
-            className={`max-h-[60vh] overflow-y-auto pr-1 pl-1 ${groupedChannels.length > 4 ? 'grid grid-cols-1 gap-x-4 sm:grid-cols-2' : ''}`}
+            className={`max-h-[60vh] overflow-y-auto pr-1 pl-1 ${sortedChannels.length > 4 ? 'grid grid-cols-1 gap-x-4 sm:grid-cols-2' : ''}`}
           >
-            {groupedChannels.map((channel: ProviderQuotaChannel) => (
+            {sortedChannels.map((channel: ProviderQuotaChannel) => (
               <QuotaRow key={channel.id} channel={channel} enforcementMode={enforcementMode} />
             ))}
           </div>
