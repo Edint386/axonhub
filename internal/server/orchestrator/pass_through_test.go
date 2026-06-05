@@ -1189,6 +1189,92 @@ func TestApplyPassThroughBodyPreservesMappedModel(t *testing.T) {
 	require.Equal(t, `{"model":"my-alias","messages":[{"role":"user","content":"hi"}],"temperature":0.4}`, string(outbound.state.LlmRequest.RawRequest.Body))
 }
 
+func TestApplyPassThroughBodySkipsMultipartRawRequest(t *testing.T) {
+	ctx := context.Background()
+
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:   1,
+			Name: "pass-through-image-edit",
+			Settings: &objects.ChannelSettings{
+				PassThroughBody: lo.ToPtr(true),
+			},
+		},
+	}
+
+	outbound := &PersistentOutboundTransformer{
+		state: &PersistenceState{
+			CurrentCandidate: &ChannelModelsCandidate{Channel: channel},
+			LlmRequest: &llm.Request{
+				Model:     "gpt-image-1",
+				APIFormat: llm.APIFormatOpenAIImageEdit,
+				RawRequest: &httpclient.Request{
+					APIFormat: string(llm.APIFormatOpenAIImageEdit),
+					Headers: http.Header{
+						"Content-Type": []string{"multipart/form-data; boundary=inbound-boundary"},
+					},
+					Body: []byte("--inbound-boundary\r\n"),
+				},
+			},
+		},
+	}
+
+	request := &httpclient.Request{
+		APIFormat: string(llm.APIFormatOpenAIImageEdit),
+		Headers: http.Header{
+			"Content-Type": []string{"multipart/form-data; boundary=outbound-boundary"},
+		},
+		Body: []byte("--outbound-boundary\r\n"),
+	}
+
+	processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, "--outbound-boundary\r\n", string(processed.Body))
+	require.Equal(t, "multipart/form-data; boundary=outbound-boundary", processed.Headers.Get("Content-Type"))
+}
+
+func TestApplyPassThroughBodyPreservesMappedModelForImageGeneration(t *testing.T) {
+	ctx := context.Background()
+
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:   1,
+			Name: "pass-through-image-generation-model-mapping",
+			Settings: &objects.ChannelSettings{
+				PassThroughBody: lo.ToPtr(true),
+			},
+		},
+	}
+
+	outbound := &PersistentOutboundTransformer{
+		state: &PersistenceState{
+			CurrentCandidate: &ChannelModelsCandidate{Channel: channel},
+			LlmRequest: &llm.Request{
+				Model:     "gpt-image-1",
+				APIFormat: llm.APIFormatOpenAIImageGeneration,
+				RawRequest: &httpclient.Request{
+					APIFormat: string(llm.APIFormatOpenAIImageGeneration),
+					Headers: http.Header{
+						"Content-Type": []string{"application/json"},
+					},
+					Body: []byte(`{"model":"my-image-alias","prompt":"draw a cat","size":"1024x1024"}`),
+				},
+			},
+		},
+	}
+
+	request := &httpclient.Request{
+		APIFormat: string(llm.APIFormatOpenAIImageGeneration),
+		Body:      []byte(`{"model":"gpt-image-1","prompt":"draw a cat"}`),
+	}
+
+	processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, "gpt-image-1", gjson.GetBytes(processed.Body, "model").String())
+	require.Equal(t, "1024x1024", gjson.GetBytes(processed.Body, "size").String())
+	require.Equal(t, "my-image-alias", gjson.GetBytes(outbound.state.LlmRequest.RawRequest.Body, "model").String())
+}
+
 func TestApplyPassThroughBodyPreservesMappedModelForJinaRerank(t *testing.T) {
 	ctx := context.Background()
 

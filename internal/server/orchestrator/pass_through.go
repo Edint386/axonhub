@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/tidwall/sjson"
@@ -38,6 +39,10 @@ func (p *PersistentOutboundTransformer) isPassThroughEnabled(ctx context.Context
 		return false
 	}
 
+	if !passThroughBodySupportsRawRequest(llmReq.RawRequest) {
+		return false
+	}
+
 	if !passThroughStreamAligned(p.state.OriginalRequestStream, llmReq.Stream) {
 		return false
 	}
@@ -66,6 +71,16 @@ func passThroughStreamAligned(originalStream, effectiveStream *bool) bool {
 	effectiveEnabled := effectiveStream != nil && *effectiveStream
 
 	return originalEnabled == effectiveEnabled
+}
+
+func passThroughBodySupportsRawRequest(rawReq *httpclient.Request) bool {
+	if rawReq == nil {
+		return true
+	}
+
+	contentType := strings.ToLower(strings.TrimSpace(rawReq.Headers.Get("Content-Type")))
+
+	return !strings.HasPrefix(contentType, "multipart/")
 }
 
 // applyPassThroughRequestBody creates a middleware that reuses the original inbound request body when
@@ -131,6 +146,7 @@ func passThroughBodyNeedsModelPatch(apiFormat llm.APIFormat) bool {
 	case llm.APIFormatOpenAIChatCompletion,
 		llm.APIFormatOpenAIResponse,
 		llm.APIFormatOpenAIResponseCompact,
+		llm.APIFormatOpenAIImageGeneration,
 		llm.APIFormatOpenAIEmbedding,
 		llm.APIFormatJinaEmbedding,
 		llm.APIFormatJinaRerank,
