@@ -155,15 +155,15 @@ export default function DashboardPage() {
           <TodayRequestsCard />
         </div>
         <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-7'>
-          <Card className='hover-card col-span-1 lg:col-span-4'>
+          <Card className='hover-card col-span-1 md:h-[442px] lg:col-span-4'>
             <CardHeader>
               <CardTitle>{t('dashboard.charts.dailyRequestOverview')}</CardTitle>
             </CardHeader>
-            <CardContent className='pl-2'>
+            <CardContent className='min-h-0 flex-1 pl-2'>
               <DailyRequestStats />
             </CardContent>
           </Card>
-          <Card className='hover-card col-span-1 lg:col-span-3'>
+          <Card className='hover-card col-span-1 min-h-0 overflow-hidden md:h-[442px] lg:col-span-3'>
             <CardHeader>
               <CardTitle>{t('dashboard.charts.channelSuccessRate')}</CardTitle>
               <CardDescription>{t('dashboard.charts.channelSuccessRateDescription')}</CardDescription>
@@ -173,7 +173,7 @@ export default function DashboardPage() {
                 </Link>
               </CardAction>
             </CardHeader>
-            <CardContent>
+            <CardContent className='min-h-0 flex-1 overflow-y-auto pr-3'>
               <ChannelSuccessRate />
             </CardContent>
           </Card>
