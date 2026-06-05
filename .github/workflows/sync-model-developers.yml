@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: unstable
+          ref: custom
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
@@ -50,7 +50,7 @@ jobs:
             Source: https://raw.githubusercontent.com/ThinkInAIXYZ/PublicProviderConf/refs/heads/dev/dist/all.json
             
             This PR was automatically created by the weekly sync workflow.
-          base: unstable
-          branch: sync-model-developers
+          base: custom
+          branch: sync-model-developers-custom
           delete-branch: true
           labels: automated, dependencies
