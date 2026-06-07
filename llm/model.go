@@ -246,6 +246,15 @@ type Request struct {
 	// Completion is the completion request, will be set if the request is completion request.
 	Completion *CompletionRequest `json:"completion,omitempty"`
 
+	// Speech is the text-to-speech (TTS) request, will be set if the request is a speech request.
+	Speech *SpeechRequest `json:"speech,omitempty"`
+
+	// Transcription is the speech-to-text (STT) transcription request, will be set if the request is a transcription request.
+	Transcription *TranscriptionRequest `json:"transcription,omitempty"`
+
+	// Translation is the speech-to-text (STT) translation request, will be set if the request is a translation request.
+	Translation *TranslationRequest `json:"translation,omitempty"`
+
 	// RawRequest is the raw request from the client.
 	RawRequest *httpclient.Request `json:"raw_request,omitempty"`
 
@@ -671,6 +680,22 @@ type Response struct {
 	// Completion is the completion response, will present if the request is completion request.
 	Completion *CompletionResponse `json:"completion,omitempty"`
 
+	// Speech is the text-to-speech (TTS) response, will present if the request is a speech request.
+	Speech *SpeechResponse `json:"speech,omitempty"`
+
+	// Transcription is the speech-to-text (STT) response, will present if the request is a transcription or translation request.
+	Transcription *TranscriptionResponse `json:"transcription,omitempty"`
+
+	// SpeechStreamEvent carries one SSE event of a streaming TTS response (stream_format="sse").
+	SpeechStreamEvent *SpeechStreamEvent `json:"speech_stream_event,omitempty"`
+
+	// SpeechAudioChunk carries one raw binary chunk of a streaming TTS response
+	// when the provider returns chunked audio instead of SSE.
+	SpeechAudioChunk *SpeechAudioChunk `json:"-"`
+
+	// TranscriptionStreamEvent carries one SSE event of a streaming STT response (stream=true).
+	TranscriptionStreamEvent *TranscriptionStreamEvent `json:"transcription_stream_event,omitempty"`
+
 	// RequestType is the outbound request type from the llm service.
 	// e.g. the request from the chat/completions endpoint is in the chat type.
 	// if it is embedding request, it will be embedding.
@@ -730,8 +755,9 @@ type TopLogprob struct {
 }
 
 type ResponseMeta struct {
-	ID    string `json:"id"`
-	Usage *Usage `json:"usage"`
+	ID        string `json:"id"`
+	Usage     *Usage `json:"usage"`
+	Completed bool   `json:"completed,omitempty"`
 }
 
 // Usage Represents the total token usage per request to OpenAI.
