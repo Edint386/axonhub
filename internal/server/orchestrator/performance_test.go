@@ -11,6 +11,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/streams"
 )
 
 // mockChannelService is a mock implementation of ChannelService for testing
@@ -332,3 +333,40 @@ func TestPerformanceRecording_StreamFlagBugRegression(t *testing.T) {
 
 // TestRecordPerformanceStream_MarksFirstToken verifies that recordPerformanceStream
 // correctly marks the first token time.
+func TestRecordPerformanceStream_DoesNotMarkFirstTokenForUsageOnlyChunk(t *testing.T) {
+	perf := &biz.PerformanceRecord{Stream: true}
+	state := &PersistenceState{
+		Perf: perf,
+	}
+
+	usageOnlyChunk := &llm.Response{
+		Usage: &llm.Usage{
+			PromptTokens: 10,
+			TotalTokens:  10,
+		},
+	}
+	content := "hello"
+	contentChunk := &llm.Response{
+		Choices: []llm.Choice{
+			{
+				Delta: &llm.Message{
+					Content: llm.MessageContent{Content: &content},
+				},
+			},
+		},
+	}
+
+	stream := &recordPerformanceStream{
+		ctx:    context.Background(),
+		stream: streams.SliceStream([]*llm.Response{usageOnlyChunk, contentChunk}),
+		state:  state,
+	}
+
+	require.True(t, stream.Next())
+	require.Same(t, usageOnlyChunk, stream.Current())
+	require.Nil(t, perf.FirstTokenTime, "usage-only chunks should not start first-token latency")
+
+	require.True(t, stream.Next())
+	require.Same(t, contentChunk, stream.Current())
+	require.NotNil(t, perf.FirstTokenTime, "content chunks should start first-token latency")
+}

@@ -152,7 +152,7 @@ func (s *recordPerformanceStream) Current() *llm.Response {
 		return event
 	}
 
-	if !s.firstTokenSet && s.state.Perf != nil {
+	if !s.firstTokenSet && s.state.Perf != nil && responseHasOutput(event) {
 		s.state.Perf.MarkFirstToken()
 		s.firstTokenSet = true
 	}
@@ -181,6 +181,43 @@ func (s *recordPerformanceStream) Current() *llm.Response {
 	}
 
 	return event
+}
+
+func responseHasOutput(response *llm.Response) bool {
+	if response == nil || len(response.Choices) == 0 {
+		return false
+	}
+
+	delta := response.Choices[0].Delta
+	if delta == nil {
+		return false
+	}
+
+	if delta.Content.Content != nil && *delta.Content.Content != "" {
+		return true
+	}
+
+	if len(delta.Content.MultipleContent) > 0 {
+		return true
+	}
+
+	if delta.ReasoningContent != nil && *delta.ReasoningContent != "" {
+		return true
+	}
+
+	if delta.Reasoning != nil && *delta.Reasoning != "" {
+		return true
+	}
+
+	if delta.RedactedReasoningContent != nil && *delta.RedactedReasoningContent != "" {
+		return true
+	}
+
+	if len(delta.ToolCalls) > 0 || len(delta.InlineToolResults) > 0 {
+		return true
+	}
+
+	return false
 }
 
 func (s *recordPerformanceStream) Next() bool {
