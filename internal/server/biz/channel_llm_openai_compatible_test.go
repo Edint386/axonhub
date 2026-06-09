@@ -176,6 +176,46 @@ func TestCodexOAuthWebSocketEndpointBuildsWithoutAPIKey(t *testing.T) {
 	require.NotNil(t, custom.CustomizeExecutor(nil))
 }
 
+func TestCodexCompactEndpointBuildsCodexOutbound(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(context.Background())
+
+	entChannel := client.Channel.Create().
+		SetName("Codex Compact Channel").
+		SetType(channel.TypeCodex).
+		SetBaseURL("https://chatgpt.com/backend-api/codex#").
+		SetCredentials(objects.ChannelCredentials{
+			OAuth: &objects.OAuthCredentials{
+				AccessToken:  "access-token",
+				RefreshToken: "refresh-token",
+				ExpiresAt:    time.Now().Add(time.Hour),
+			},
+		}).
+		SetSupportedModels([]string{"gpt-5.5"}).
+		SetDefaultTestModel("gpt-5.5").
+		SetEndpoints([]objects.ChannelEndpoint{{
+			APIFormat: llm.APIFormatOpenAIResponseCompact.String(),
+		}}).
+		SaveX(ctx)
+
+	channelSvc := NewChannelServiceForTest(client)
+
+	built, err := channelSvc.buildChannelWithOutbounds(entChannel)
+	require.NoError(t, err)
+
+	primary, ok := built.Outbound.(*codex.OutboundTransformer)
+	require.True(t, ok)
+	require.NotNil(t, primary.TokenProvider())
+
+	outbound, err := BuildOutboundByAPIFormat(built, llm.APIFormatOpenAIResponseCompact.String())
+	require.NoError(t, err)
+	override, ok := outbound.(*codex.OutboundTransformer)
+	require.True(t, ok)
+	require.True(t, primary.TokenProvider() == override.TokenProvider())
+}
+
 type testStoppableOutbound struct {
 	stops int
 }

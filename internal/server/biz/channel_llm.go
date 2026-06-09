@@ -370,7 +370,7 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 	case llm.APIFormatOpenAIResponse.String(),
 		llm.APIFormatOpenAIResponseCompact.String():
 		transport := endpointTransport(ep)
-		if c.Type == channel.TypeCodex && ep.APIFormat == llm.APIFormatOpenAIResponse.String() {
+		if c.Type == channel.TypeCodex {
 			return svc.buildCodexOutbound(c, ch, baseURL, transport, ch.HTTPClient)
 		}
 
