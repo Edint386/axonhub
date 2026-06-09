@@ -107,6 +107,13 @@ export function ChannelsEndpointsDialog({ channel, open, onOpenChange }: Props) 
 
   const availableApiFormats = useMemo(() => configurableChannelEndpointApiFormats.filter((f) => !usedApiFormats.has(f)), [usedApiFormats]);
 
+  const getApiFormatLabel = useCallback(
+    (format: string) => {
+      return t(`channels.dialogs.fields.apiFormat.formats.${format}`, format);
+    },
+    [t]
+  );
+
   const handleAddEndpoint = useCallback(() => {
     setError(null);
     if (!newApiFormat) return;
@@ -262,7 +269,7 @@ export function ChannelsEndpointsDialog({ channel, open, onOpenChange }: Props) 
                   ) : (
                     availableApiFormats.map((format) => (
                       <SelectItem key={format} value={format}>
-                        {format}
+                        {getApiFormatLabel(format)}
                       </SelectItem>
                     ))
                   )}
