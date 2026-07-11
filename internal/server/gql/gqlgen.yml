@@ -102,6 +102,12 @@ models:
   ModelMappingInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ModelMapping
+  ReasoningEffortMapping:
+    model:
+      - github.com/looplj/axonhub/llm.ReasoningEffortMapping
+  ReasoningEffortMappingInput:
+    model:
+      - github.com/looplj/axonhub/llm.ReasoningEffortMapping
   ProxyType:
     model:
       - github.com/looplj/axonhub/internal/objects.ProxyType
@@ -132,6 +138,24 @@ models:
   ChannelSettingsInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelSettings
+  RetryableErrorPattern:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RetryableErrorPattern
+  RetryableErrorPatternInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RetryableErrorPattern
+  OpenCodeGoQuotaSettings:
+    model:
+      - github.com/looplj/axonhub/internal/objects.OpenCodeGoQuotaSettings
+  OpenCodeGoQuotaSettingsInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.OpenCodeGoQuotaSettings
+  ChannelProviderQuotaSettings:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelProviderQuotaSettings
+  ChannelProviderQuotaSettingsInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelProviderQuotaSettings
   ChannelRateLimit:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelRateLimit
@@ -543,6 +567,12 @@ models:
   OverrideOperationInput:
     model:
       - github.com/looplj/axonhub/internal/objects.OverrideOperation
+  OverrideMatch:
+    model:
+      - github.com/looplj/axonhub/internal/objects.OverrideMatch
+  OverrideMatchInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.OverrideMatch
   TierCost:
     model:
       - github.com/looplj/axonhub/internal/objects.TierCost

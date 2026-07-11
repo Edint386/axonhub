@@ -23,6 +23,64 @@ import (
 
 const maxConcurrentQuotaChecks = 8
 
+// Quota check failures back off exponentially so a persistently failing channel
+// (expired credentials, or a scraped provider dashboard whose markup changed) is
+// retried at a slow cadence instead of on every check interval. This mirrors the
+// model circuit breaker's probe backoff (see model_circuit_breaker.go).
+const (
+	// maxQuotaErrorBackoffMultiplier caps the backoff growth at 8x the base
+	// interval, matching the circuit breaker's probe backoff cap.
+	maxQuotaErrorBackoffMultiplier = 8
+
+	// maxQuotaErrorBackoffSteps is the consecutive-failure count at which the
+	// multiplier saturates (1, 2, 4, 8). The persisted error_count is clamped
+	// here so it stays bounded for a channel that never recovers.
+	maxQuotaErrorBackoffSteps = 4
+)
+
+// quotaErrorBackoff returns the next-check delay after `failures` consecutive
+// quota check failures: base, 2x, 4x, ... capped at maxQuotaErrorBackoffMultiplier.
+// A successful check clears the counter (saveQuotaStatus overwrites quota_data),
+// so the cadence returns to base as soon as the provider recovers.
+func quotaErrorBackoff(base time.Duration, failures int) time.Duration {
+	multiplier := 1
+	for i := 1; i < failures && multiplier < maxQuotaErrorBackoffMultiplier; i++ {
+		multiplier *= 2
+	}
+
+	if multiplier > maxQuotaErrorBackoffMultiplier {
+		multiplier = maxQuotaErrorBackoffMultiplier
+	}
+
+	return base * time.Duration(multiplier)
+}
+
+// quotaErrorCount reads the persisted consecutive-failure counter from quota_data.
+// Values stored in-process are int; values reloaded from the DB are float64.
+func quotaErrorCount(data map[string]any) int {
+	switch v := data["error_count"].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+// nextQuotaErrorCount increments the consecutive-failure counter, clamped at
+// maxQuotaErrorBackoffSteps so the value persisted in quota_data stays bounded
+// once the backoff multiplier has saturated.
+func nextQuotaErrorCount(prev int) int {
+	if prev+1 > maxQuotaErrorBackoffSteps {
+		return maxQuotaErrorBackoffSteps
+	}
+
+	return prev + 1
+}
+
 type QuotaChannelStatus struct {
 	Status providerquotastatus.Status
 	Ready  bool
@@ -281,9 +339,12 @@ func NewProviderQuotaService(params ProviderQuotaServiceParams) *ProviderQuotaSe
 	svc.registerCodexSupport()
 	svc.registerGithubCopilotSupport()
 	svc.registerNanoGPTSupport()
+	svc.registerClineSupport()
 	svc.registerWaferSupport()
 	svc.registerSyntheticSupport()
 	svc.registerNeuralWattSupport()
+	svc.registerApertisSupport()
+	svc.registerOpenCodeGoSupport()
 
 	go svc.loadQuotaCache(context.Background())
 
@@ -316,6 +377,10 @@ func (svc *ProviderQuotaService) registerNanoGPTSupport() {
 	svc.checkers["nanogpt"] = provider_quota.NewNanoGPTQuotaChecker(svc.httpClient)
 }
 
+func (svc *ProviderQuotaService) registerClineSupport() {
+	svc.checkers["cline"] = provider_quota.NewClineQuotaChecker(svc.httpClient)
+}
+
 func (svc *ProviderQuotaService) registerWaferSupport() {
 	svc.checkers["wafer"] = provider_quota.NewWaferQuotaChecker(svc.httpClient)
 }
@@ -326,6 +391,14 @@ func (svc *ProviderQuotaService) registerSyntheticSupport() {
 
 func (svc *ProviderQuotaService) registerNeuralWattSupport() {
 	svc.checkers["neuralwatt"] = provider_quota.NewNeuralWattQuotaChecker(svc.httpClient)
+}
+
+func (svc *ProviderQuotaService) registerApertisSupport() {
+	svc.checkers["apertis"] = provider_quota.NewApertisQuotaChecker(svc.httpClient)
+}
+
+func (svc *ProviderQuotaService) registerOpenCodeGoSupport() {
+	svc.checkers["opencode_go"] = provider_quota.NewOpenCodeGoQuotaChecker(svc.httpClient)
 }
 
 func (svc *ProviderQuotaService) intervalToCronExpr(interval time.Duration) string {
@@ -433,6 +506,46 @@ func (svc *ProviderQuotaService) ManualCheck(ctx context.Context) {
 	svc.runQuotaCheckForce(ctx)
 }
 
+// ResetChannelQuotaNow attempts to redeem a banked reset credit for the given codex channel.
+func (svc *ProviderQuotaService) ResetChannelQuotaNow(ctx context.Context, channelID int) error {
+	ch, err := svc.db.Channel.Query().Where(channel.IDEQ(channelID)).Only(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load channel: %w", err)
+	}
+
+	if ch.Type != channel.TypeCodex {
+		return fmt.Errorf("reset is only supported for codex channels")
+	}
+
+	if !hasCredentialsForProvider(ch) {
+		return fmt.Errorf("channel has no credentials")
+	}
+
+	checker, ok := svc.checkers["codex"]
+	if !ok {
+		return fmt.Errorf("no quota checker registered for codex")
+	}
+
+	codexChecker, ok := checker.(*provider_quota.CodexQuotaChecker)
+	if !ok {
+		return fmt.Errorf("invalid codex quota checker type")
+	}
+
+	if _, err := codexChecker.ResetNow(ctx, ch); err != nil {
+		return fmt.Errorf("failed to reset codex quota: %w", err)
+	}
+
+	// Refresh the quota status immediately so the UI reflects the reset.
+	// Hold the service mutex to keep the in-memory cache consistent with the DB
+	// in case a scheduled quota check is running concurrently.
+	svc.mu.Lock()
+	now := time.Now()
+	svc.checkChannelQuota(ctx, ch, now)
+	svc.mu.Unlock()
+
+	return nil
+}
+
 func (svc *ProviderQuotaService) runQuotaCheckForce(ctx context.Context) {
 	svc.mu.Lock()
 	defer svc.mu.Unlock()
@@ -453,7 +566,7 @@ func (svc *ProviderQuotaService) runQuotaCheck(ctx context.Context, force bool) 
 	q := svc.db.Channel.Query().
 		Where(
 			channel.StatusEQ(channel.StatusEnabled),
-			channel.TypeIn(channel.TypeClaudecode, channel.TypeCodex, channel.TypeGithubCopilot, channel.TypeNanogpt, channel.TypeNanogptResponses, channel.TypeOpenai, channel.TypeOpenaiResponses),
+			channel.TypeIn(channel.TypeClaudecode, channel.TypeCodex, channel.TypeGithubCopilot, channel.TypeNanogpt, channel.TypeNanogptResponses, channel.TypeCline, channel.TypeOpenai, channel.TypeOpenaiResponses, channel.TypeOpencodeGo, channel.TypeOpencodeGoAnthropic),
 		)
 
 	if !force {
@@ -591,7 +704,6 @@ func (svc *ProviderQuotaService) saveQuotaError(
 	now time.Time,
 ) {
 	pt := providerquotastatus.ProviderType(providerType)
-	nextCheck := now.Add(svc.getCheckInterval())
 
 	if ch.Edges.ProviderQuotaStatus != nil {
 		existing := ch.Edges.ProviderQuotaStatus
@@ -601,8 +713,12 @@ func (svc *ProviderQuotaService) saveQuotaError(
 			existingData = map[string]any{}
 		}
 
+		failures := nextQuotaErrorCount(quotaErrorCount(existingData))
+		nextCheck := now.Add(quotaErrorBackoff(svc.getCheckInterval(), failures))
+
 		merged := lo.Assign(existingData, map[string]any{
-			"error": quotaErr.Error(),
+			"error":       quotaErr.Error(),
+			"error_count": failures,
 		})
 
 		err := svc.db.ProviderQuotaStatus.UpdateOne(existing).
@@ -622,13 +738,16 @@ func (svc *ProviderQuotaService) saveQuotaError(
 		return
 	}
 
+	nextCheck := now.Add(quotaErrorBackoff(svc.getCheckInterval(), 1))
+
 	err := svc.db.ProviderQuotaStatus.Create().
 		SetChannelID(ch.ID).
 		SetProviderType(pt).
 		SetStatus(providerquotastatus.StatusUnknown).
 		SetReady(false).
 		SetQuotaData(map[string]any{
-			"error": quotaErr.Error(),
+			"error":       quotaErr.Error(),
+			"error_count": 1,
 		}).
 		SetNextCheckAt(nextCheck).
 		Exec(ctx)
@@ -652,8 +771,12 @@ func (svc *ProviderQuotaService) getProviderType(ch *ent.Channel) string {
 		return "github_copilot"
 	case channel.TypeNanogpt, channel.TypeNanogptResponses:
 		return "nanogpt"
+	case channel.TypeCline:
+		return "cline"
 	case channel.TypeOpenai, channel.TypeOpenaiResponses:
 		return provider_quota.DetectProviderFromURL(ch.BaseURL)
+	case channel.TypeOpencodeGo, channel.TypeOpencodeGoAnthropic:
+		return "opencode_go"
 	default:
 		return ""
 	}
@@ -671,8 +794,36 @@ func hasCredentialsForProvider(ch *ent.Channel) bool {
 		return ch.Credentials.OAuth != nil || isOAuthJSON(ch.Credentials.APIKey)
 	}
 
+	if ch.Type == channel.TypeCline {
+		if strings.TrimSpace(ch.Credentials.APIKey) != "" {
+			return true
+		}
+		for _, apiKey := range ch.Credentials.APIKeys {
+			if strings.TrimSpace(apiKey) != "" {
+				return true
+			}
+		}
+		return false
+	}
+
+	if ch.Type == channel.TypeOpencodeGo || ch.Type == channel.TypeOpencodeGoAnthropic {
+		return hasOpenCodeGoQuotaCredentials(ch)
+	}
+
 	return ch.Credentials.OAuth != nil || isOAuthJSON(ch.Credentials.APIKey) ||
 		strings.TrimSpace(ch.Credentials.APIKey) != "" || len(ch.Credentials.APIKeys) > 0
+}
+
+// hasOpenCodeGoQuotaCredentials reports whether the channel has the auth cookie
+// configured for OpenCode Go quota polling. The quota check scrapes the dashboard
+// using this cookie (not the upstream request credentials), so gate on it directly
+// to avoid repeatedly running checks that can only fail with "missing auth cookie".
+func hasOpenCodeGoQuotaCredentials(ch *ent.Channel) bool {
+	if ch.Settings == nil || ch.Settings.ProviderQuota == nil || ch.Settings.ProviderQuota.OpencodeGo == nil {
+		return false
+	}
+
+	return strings.TrimSpace(ch.Settings.ProviderQuota.OpencodeGo.AuthCookie) != ""
 }
 
 func (svc *ProviderQuotaService) mergeLimitsIntoQuotaData(quotaData provider_quota.QuotaData) map[string]any {

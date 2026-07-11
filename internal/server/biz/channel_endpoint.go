@@ -116,12 +116,17 @@ var defaultEndpointsForChannelType = map[channel.Type][]objects.ChannelEndpoint{
 	channel.TypeOpenai:          openAIFullDefaultEndpoints,
 	channel.TypeOpenaiResponses: {{APIFormat: llm.APIFormatOpenAIResponse.String()}},
 	channel.TypeAtlascloud:      openAICompatibleDefaultEndpoints,
-	channel.TypeCodex:           {{APIFormat: llm.APIFormatOpenAIResponse.String()}},
-	channel.TypeVercel:          openAICompatibleDefaultEndpoints,
-	channel.TypeAnthropic:       {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
-	channel.TypeAnthropicAWS:    {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
-	channel.TypeAnthropicGcp:    {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
-	channel.TypeGeminiOpenai:    {{APIFormat: llm.APIFormatOpenAIChatCompletion.String()}},
+	channel.TypeCline:           openAIChatOnlyDefaultEndpoints,
+	channel.TypeCodex: {
+		{APIFormat: llm.APIFormatOpenAIResponse.String()},
+		{APIFormat: llm.APIFormatOpenAIImageGeneration.String()},
+		{APIFormat: llm.APIFormatOpenAIImageEdit.String()},
+	},
+	channel.TypeVercel:       openAICompatibleDefaultEndpoints,
+	channel.TypeAnthropic:    {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
+	channel.TypeAnthropicAWS: {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
+	channel.TypeAnthropicGcp: {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
+	channel.TypeGeminiOpenai: {{APIFormat: llm.APIFormatOpenAIChatCompletion.String()}},
 	channel.TypeGemini: {
 		{APIFormat: llm.APIFormatGeminiContents.String()},
 		{APIFormat: llm.APIFormatGeminiEmbedding.String()},
@@ -185,6 +190,8 @@ var defaultEndpointsForChannelType = map[channel.Type][]objects.ChannelEndpoint{
 	channel.TypeNanogptResponses: {{APIFormat: llm.APIFormatOpenAIResponse.String()}},
 	channel.TypeOpencodeGo:       openAIChatOnlyDefaultEndpoints,
 	channel.TypeOllama:           {{APIFormat: llm.APIFormatOllamaChat.String()}},
+	channel.TypeEvolink:          openAICompatibleDefaultEndpoints,
+	channel.TypeEvolinkAnthropic: {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
 }
 
 func DefaultEndpointsForChannelType(t channel.Type) []objects.ChannelEndpoint {

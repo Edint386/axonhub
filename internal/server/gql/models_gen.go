@@ -555,11 +555,21 @@ type UpdateQuotaEnforcementSettingsInput struct {
 }
 
 type UpdateSecuritySettingsInput struct {
-	BlockedIPs []string `json:"blockedIPs,omitempty"`
+	BlockedIPs              []string `json:"blockedIPs,omitempty"`
+	ShowRequestLogIPBanIcon *bool    `json:"showRequestLogIPBanIcon,omitempty"`
 }
 
 type UpdateUserAgentPassThroughSettingsInput struct {
 	Enabled bool `json:"enabled"`
+}
+
+// Usage statistics grouped by user
+type UsageStatsByUser struct {
+	UserID       objects.GUID `json:"userId"`
+	UserName     string       `json:"userName"`
+	RequestCount int          `json:"requestCount"`
+	TotalTokens  int          `json:"totalTokens"`
+	TotalCost    float64      `json:"totalCost"`
 }
 
 type UserAgentPassThroughSettings struct {

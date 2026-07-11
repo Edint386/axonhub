@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { graphqlRequest } from '@/gql/graphql';
+import { graphqlRequest, GraphQLRequestError } from '@/gql/graphql';
 import { toast } from 'sonner';
 import { getTokenFromStorage } from '@/stores/authStore';
 import i18n from '@/lib/i18n';
@@ -96,6 +96,8 @@ const RETRY_POLICY_QUERY = `
       maxChannelRetries
       maxSingleChannelRetries
       retryDelayMs
+      streamFirstEventTimeoutSeconds
+      nonStreamResponseTimeoutSeconds
       loadBalancerStrategy
       enabled
       emptyResponseDetection
@@ -251,10 +253,12 @@ export interface UpdateVideoStorageSettingsInput {
 
 export interface SecuritySettings {
   blockedIPs: string[];
+  showRequestLogIPBanIcon: boolean;
 }
 
 export interface UpdateSecuritySettingsInput {
   blockedIPs?: string[];
+  showRequestLogIPBanIcon?: boolean;
 }
 
 export interface StoragePolicy {
@@ -342,6 +346,8 @@ export interface RetryPolicy {
   maxChannelRetries: number;
   maxSingleChannelRetries: number;
   retryDelayMs: number;
+  streamFirstEventTimeoutSeconds: number;
+  nonStreamResponseTimeoutSeconds: number;
   loadBalancerStrategy: string;
   enabled: boolean;
   autoDisableChannel: AutoDisableChannel;
@@ -368,6 +374,8 @@ export interface RetryPolicyInput {
   maxChannelRetries?: number;
   maxSingleChannelRetries?: number;
   retryDelayMs?: number;
+  streamFirstEventTimeoutSeconds?: number;
+  nonStreamResponseTimeoutSeconds?: number;
   loadBalancerStrategy?: string;
   enabled?: boolean;
   autoDisableChannel?: AutoDisableChannelInput;
@@ -927,6 +935,7 @@ const SECURITY_SETTINGS_QUERY = `
   query SecuritySettings {
     securitySettings {
       blockedIPs
+      showRequestLogIPBanIcon
     }
   }
 `;
@@ -1074,6 +1083,10 @@ export function useGeneralSettings() {
         const data = await graphqlRequest<{ systemGeneralSettings: SystemGeneralSettings }>(SYSTEM_GENERAL_SETTINGS_QUERY);
         return data.systemGeneralSettings;
       } catch (error) {
+        // Only suppress permission errors (403) — surface 500, network, etc. as toasts
+        if (error instanceof GraphQLRequestError && error.status === 403) {
+          throw error;
+        }
         handleError(error, i18n.t('common.errors.internalServerError'));
         throw error;
       }

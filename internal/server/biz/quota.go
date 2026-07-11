@@ -16,8 +16,9 @@ import (
 )
 
 type QuotaWindow struct {
-	Start *time.Time
-	End   *time.Time
+	Start        *time.Time
+	End          *time.Time
+	EndInclusive bool
 }
 
 type QuotaUsage struct {
@@ -306,7 +307,7 @@ func quotaWindow(now time.Time, period objects.APIKeyQuotaPeriod, loc *time.Loca
 	switch period.Type {
 	case objects.APIKeyQuotaPeriodTypeAllTime:
 		end := now
-		return QuotaWindow{End: &end}, nil
+		return QuotaWindow{End: &end, EndInclusive: true}, nil
 	case objects.APIKeyQuotaPeriodTypePastDuration:
 		if period.PastDuration == nil {
 			return QuotaWindow{}, fmt.Errorf("pastDuration is required")
@@ -332,7 +333,7 @@ func quotaWindow(now time.Time, period objects.APIKeyQuotaPeriod, loc *time.Loca
 		start := now.Add(-d)
 		end := now
 
-		return QuotaWindow{Start: &start, End: &end}, nil
+		return QuotaWindow{Start: &start, End: &end, EndInclusive: true}, nil
 	case objects.APIKeyQuotaPeriodTypeCalendarDuration:
 		if period.CalendarDuration == nil {
 			return QuotaWindow{}, fmt.Errorf("calendarDuration is required")
@@ -369,7 +370,11 @@ func (s *QuotaService) requestCount(ctx context.Context, q *ent.UsageLogQuery, w
 	}
 
 	if window.End != nil {
-		q = q.Where(usagelog.CreatedAtLT(*window.End))
+		if window.EndInclusive {
+			q = q.Where(usagelog.CreatedAtLTE(*window.End))
+		} else {
+			q = q.Where(usagelog.CreatedAtLT(*window.End))
+		}
 	}
 
 	n, err := q.Count(ctx)
@@ -396,7 +401,11 @@ func (s *QuotaService) usageAgg(ctx context.Context, baseQuery *ent.UsageLogQuer
 		}
 
 		if window.End != nil {
-			q = q.Where(usagelog.CreatedAtLT(*window.End))
+			if window.EndInclusive {
+				q = q.Where(usagelog.CreatedAtLTE(*window.End))
+			} else {
+				q = q.Where(usagelog.CreatedAtLT(*window.End))
+			}
 		}
 
 		switch {

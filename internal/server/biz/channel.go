@@ -3,7 +3,9 @@ package biz
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -79,6 +81,10 @@ type Channel struct {
 
 	// cachedDisabledKeySet caches disabled key lookup set for O(1) check
 	cachedDisabledKeySet map[string]struct{}
+
+	// apiKeyOverride, if non-empty, forces all outbound transformers to use this key
+	// instead of the channel's normal key selection. Used by the channel key test flow.
+	apiKeyOverride string
 }
 
 type ChannelServiceParams struct {
@@ -104,8 +110,6 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 		apiKeyErrorCounts:  make(map[int]map[string]map[int]int),
 		perfCh:             make(chan *PerformanceRecord, 1024),
 	}
-	svc.initChannelPerformances(context.Background())
-
 	watcherMode := params.CacheConfig.Mode
 	if watcherMode == "" {
 		watcherMode = xcache.ModeMemory
@@ -383,6 +387,19 @@ func (svc *ChannelService) GetChannel(ctx context.Context, channelID int) (*Chan
 	return svc.buildChannelWithOutbounds(entity)
 }
 
+// GetChannelWithKey returns a channel with the outbound transformer's API key
+// forced to the given key. This is used by the channel key test flow to test
+// a specific key. Each call creates a fresh channel instance, so the override
+// does not affect other requests.
+func (svc *ChannelService) GetChannelWithKey(ctx context.Context, channelID int, apiKey string) (*Channel, error) {
+	entity, err := svc.entFromContext(ctx).Channel.Get(ctx, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("channel not found: %w", err)
+	}
+
+	return svc.buildChannelWithOutbounds(entity, apiKey)
+}
+
 // ListModelsInput represents the input for listing models with filters.
 type ListModelsInput struct {
 	StatusIn                []channel.Status
@@ -511,6 +528,14 @@ func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateCh
 		if err := ValidateQuota(input.Settings.Quota); err != nil {
 			return nil, fmt.Errorf("invalid quota: %w", err)
 		}
+
+		if err := NormalizeRetryableStatusCodes(input.Settings); err != nil {
+			return nil, err
+		}
+
+		if err := NormalizeRetryableErrorPatterns(input.Settings); err != nil {
+			return nil, err
+		}
 	}
 
 	if input.Endpoints != nil {
@@ -577,6 +602,62 @@ func (svc *ChannelService) CreateChannel(ctx context.Context, input ent.CreateCh
 	return channel, nil
 }
 
+// NormalizeRetryableStatusCodes validates, deduplicates, and sorts additional
+// retryable HTTP status codes configured on a channel.
+func NormalizeRetryableStatusCodes(settings *objects.ChannelSettings) error {
+	if settings == nil || len(settings.RetryableStatusCodes) == 0 {
+		return nil
+	}
+
+	codes := slices.Clone(settings.RetryableStatusCodes)
+	for _, code := range codes {
+		if code < 400 || code > 599 {
+			return fmt.Errorf("invalid retryable status code %d: must be between 400 and 599", code)
+		}
+	}
+
+	slices.Sort(codes)
+	settings.RetryableStatusCodes = slices.Compact(codes)
+
+	return nil
+}
+
+// NormalizeRetryableErrorPatterns validates, deduplicates, and trims additional
+// retryable error text matchers configured on a channel.
+func NormalizeRetryableErrorPatterns(settings *objects.ChannelSettings) error {
+	if settings == nil || len(settings.RetryableErrorPatterns) == 0 {
+		return nil
+	}
+
+	patterns := make([]objects.RetryableErrorPattern, 0, len(settings.RetryableErrorPatterns))
+	seen := make(map[string]struct{}, len(settings.RetryableErrorPatterns))
+
+	for _, pattern := range settings.RetryableErrorPatterns {
+		pattern.Pattern = strings.TrimSpace(pattern.Pattern)
+		if pattern.Pattern == "" {
+			continue
+		}
+
+		if pattern.Regex {
+			if _, err := regexp.Compile(pattern.Pattern); err != nil {
+				return fmt.Errorf("invalid retryable error regex %q: %w", pattern.Pattern, err)
+			}
+		}
+
+		key := fmt.Sprintf("%t\x00%s", pattern.Regex, pattern.Pattern)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+
+		seen[key] = struct{}{}
+		patterns = append(patterns, pattern)
+	}
+
+	settings.RetryableErrorPatterns = patterns
+
+	return nil
+}
+
 // UpdateChannel updates an existing channel with the provided input.
 func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent.UpdateChannelInput) (*ent.Channel, error) {
 	log.Debug(ctx, "UpdateChannel", log.Int("id", id), log.Any("input", input))
@@ -639,6 +720,14 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 
 		if err := ValidateQuota(input.Settings.Quota); err != nil {
 			return nil, fmt.Errorf("invalid quota: %w", err)
+		}
+
+		if err := NormalizeRetryableStatusCodes(input.Settings); err != nil {
+			return nil, err
+		}
+
+		if err := NormalizeRetryableErrorPatterns(input.Settings); err != nil {
+			return nil, err
 		}
 
 		mut.SetSettings(input.Settings)

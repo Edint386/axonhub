@@ -557,7 +557,7 @@ func TestLoadBalancedSelector_Select_RateLimitedHighPriorityFallsThrough(t *test
 	}
 
 	tracker := NewChannelRequestTracker()
-	tracker.IncrementRequest(1)
+	require.True(t, tracker.TryAcquireRequest(1, rpm))
 	systemService := &mockSystemService{retryPolicy: &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 1}}
 	selector := WithLoadBalancedSelector(
 		&staticChannelSelector{candidates: candidates},

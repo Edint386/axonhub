@@ -64,6 +64,13 @@ func NewChatCompletionOrchestrator(
 	circuitBreakerLoadBalancer := NewLoadBalancer(systemService, channelService,
 		NewWeightStrategy(), NewModelAwareCircuitBreakerStrategy(modelCircuitBreaker), rateLimitStrategy, quotaStrategy)
 
+	roundRobinHealthFilter := NewRoundRobinHealthStrategy(channelService)
+	roundRobinLoadBalancer := NewLoadBalancer(systemService, channelService,
+		NewRoundRobinStrategy(channelService),
+		rateLimitStrategy,
+		quotaStrategy,
+	).WithoutWeightTieBreaker().WithRoundRobinHealthFilter(roundRobinHealthFilter)
+
 	return &ChatCompletionOrchestrator{
 		Inbound:            inbound,
 		RequestService:     requestService,
@@ -87,6 +94,7 @@ func NewChatCompletionOrchestrator(
 		adaptiveLoadBalancer:       adaptiveLoadBalancer,
 		failoverLoadBalancer:       failoverLoadBalancer,
 		circuitBreakerLoadBalancer: circuitBreakerLoadBalancer,
+		roundRobinLoadBalancer:     roundRobinLoadBalancer,
 		modelCircuitBreaker:        modelCircuitBreaker,
 		quotaProvider:              quotaProvider,
 		proxy:                      nil,
@@ -115,6 +123,7 @@ type ChatCompletionOrchestrator struct {
 	adaptiveLoadBalancer       *LoadBalancer
 	failoverLoadBalancer       *LoadBalancer
 	circuitBreakerLoadBalancer *LoadBalancer
+	roundRobinLoadBalancer     *LoadBalancer
 	// channelLimiterManager owns per-channel concurrency admission control and
 	// supplies in-flight / queue stats to the rate-limit-aware load-balancer strategy.
 	channelLimiterManager *ChannelLimiterManager
@@ -188,6 +197,8 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		loadBalancer = processor.failoverLoadBalancer
 	case biz.LoadBalancerStrategyCircuitBreaker:
 		loadBalancer = processor.circuitBreakerLoadBalancer
+	case biz.LoadBalancerStrategyRoundRobin:
+		loadBalancer = processor.roundRobinLoadBalancer
 	default:
 		// Default to adaptive load balancer
 	}
@@ -221,6 +232,11 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		if retryPolicy.EmptyResponseDetection {
 			pipelineOpts = append(pipelineOpts, pipeline.WithEmptyResponseDetection())
 		}
+
+		pipelineOpts = append(pipelineOpts, pipeline.WithResponseTimeouts(
+			time.Duration(retryPolicy.StreamFirstEventTimeoutSeconds)*time.Second,
+			time.Duration(retryPolicy.NonStreamResponseTimeoutSeconds)*time.Second,
+		))
 	}
 
 	var middlewares []pipeline.Middleware
@@ -269,11 +285,13 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		// Forward the events to the live streaming.
 		withLivePreview(state, processor.SystemService, processor.LiveStreamRegistry),
 
-		// Per-channel admission control. Must run before rate-limit tracking so a
-		// locally rejected (queue full / queue timeout) request does not consume
-		// RPM budget for a request that never reached upstream.
+		// Per-channel concurrency admission runs before RPM admission so a locally
+		// rejected queue attempt does not consume RPM for a request that never
+		// reached upstream.
 		withChannelLimiter(outbound, processor.channelLimiterManager, processor.channelLimiterMetrics),
-		// Rate limit tracking middleware for load balancing.
+		// Strict single-instance RPM admission for every outbound attempt.
+		withRateLimitAdmission(outbound, processor.rateLimitTracker),
+		// Rate limit tracking middleware for TPM and provider cooldown signals.
 		withRateLimitTracking(outbound, processor.rateLimitTracker),
 
 		// Response pass-through capture middlewares must be last in the outbound list

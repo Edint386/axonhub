@@ -159,6 +159,11 @@ func (r *mutationResolver) CreateChannel(ctx context.Context, input ent.CreateCh
 	return r.channelService.CreateChannel(ctx, input)
 }
 
+// DuplicateChannel is the resolver for the duplicateChannel field.
+func (r *mutationResolver) DuplicateChannel(ctx context.Context, sourceID objects.GUID, input ent.CreateChannelInput) (*ent.Channel, error) {
+	return r.channelService.DuplicateChannel(ctx, sourceID.ID, input)
+}
+
 // BulkCreateChannels is the resolver for the bulkCreateChannels field.
 func (r *mutationResolver) BulkCreateChannels(ctx context.Context, input biz.BulkCreateChannelsInput) ([]*ent.Channel, error) {
 	return r.channelService.BulkCreateChannels(ctx, input)
@@ -291,6 +296,24 @@ func (r *mutationResolver) TestChannelAPIKeys(ctx context.Context, channelID obj
 		SuccessCount: result.SuccessCount,
 		FailedCount:  result.FailedCount,
 		Results:      apiKeyResults,
+	}, nil
+}
+
+// TestChannelAPIKey is the resolver for the testChannelAPIKey field.
+func (r *mutationResolver) TestChannelAPIKey(ctx context.Context, channelID objects.GUID, key string, modelID *string) (*TestAPIKeyResult, error) {
+	ctx = contexts.WithSource(ctx, request.SourceTest)
+
+	result, err := r.TestChannelOrchestrator.TestSingleAPIKey(ctx, channelID, key, modelID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to test channel API key: %w", err)
+	}
+
+	return &TestAPIKeyResult{
+		KeyPrefix: result.KeyPrefix,
+		Success:   result.Success,
+		Latency:   result.Latency,
+		Error:     result.Error,
+		Disabled:  result.Disabled,
 	}, nil
 }
 

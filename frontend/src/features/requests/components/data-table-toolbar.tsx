@@ -148,6 +148,10 @@ export function DataTableToolbar<TData>({
       value: 'failed' as RequestStatus,
       label: t('requests.status.failed'),
     },
+    {
+      value: 'canceled' as RequestStatus,
+      label: t('requests.status.canceled'),
+    },
   ];
 
   const requestSources = [
@@ -159,10 +163,7 @@ export function DataTableToolbar<TData>({
       value: 'playground',
       label: t('requests.source.playground'),
     },
-    {
-      value: 'test',
-      label: t('requests.source.test'),
-    },
+
   ];
 
   return (

@@ -119,6 +119,21 @@ func TestDeriveLoadBalancerStrategy(t *testing.T) {
 			},
 			expected: "failover",
 		},
+		{
+			name: "load balance strategy is round-robin in active profile",
+			apiKey: &ent.APIKey{
+				Profiles: &objects.APIKeyProfiles{
+					ActiveProfile: "default",
+					Profiles: []objects.APIKeyProfile{
+						{
+							Name:                "default",
+							LoadBalanceStrategy: lo.ToPtr(biz.LoadBalancerStrategyRoundRobin),
+						},
+					},
+				},
+			},
+			expected: biz.LoadBalancerStrategyRoundRobin,
+		},
 	}
 
 	for _, tt := range tests {
@@ -221,6 +236,91 @@ func TestIsRetryableError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isRetryableError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsRetryableErrorForChannel(t *testing.T) {
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			Settings: &objects.ChannelSettings{
+				RetryableStatusCodes: []int{400, 403},
+				RetryableErrorPatterns: []objects.RetryableErrorPattern{
+					{Pattern: "Console API returned 403"},
+					{Pattern: `Console API returned \d+`, Regex: true},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		err      error
+		channel  *biz.Channel
+		expected bool
+	}{
+		{
+			name:     "error is nil",
+			err:      nil,
+			channel:  channel,
+			expected: false,
+		},
+		{
+			name: "default retryable status remains retryable",
+			err: &httpclient.Error{
+				StatusCode: http.StatusInternalServerError,
+			},
+			channel:  nil,
+			expected: true,
+		},
+		{
+			name: "configured 400 status is retryable",
+			err: &httpclient.Error{
+				StatusCode: http.StatusBadRequest,
+			},
+			channel:  channel,
+			expected: true,
+		},
+		{
+			name: "unconfigured 401 status is not retryable",
+			err: &httpclient.Error{
+				StatusCode: http.StatusUnauthorized,
+			},
+			channel:  channel,
+			expected: false,
+		},
+		{
+			name:     "configured error text is retryable",
+			err:      errors.New("failed to stream request: error: Console API returned 403, code: upstream_error, type: upstream_error"),
+			channel:  channel,
+			expected: true,
+		},
+		{
+			name:     "configured error regex is retryable",
+			err:      errors.New("failed to stream request: error: Console API returned 502, code: upstream_error, type: upstream_error"),
+			channel:  channel,
+			expected: true,
+		},
+		{
+			name:     "unmatched error text is not retryable",
+			err:      errors.New("failed to stream request: error: credentials rejected"),
+			channel:  channel,
+			expected: false,
+		},
+		{
+			name: "configured status is not retryable without channel settings",
+			err: &httpclient.Error{
+				StatusCode: http.StatusBadRequest,
+			},
+			channel:  &biz.Channel{Channel: &ent.Channel{}},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isRetryableErrorForChannel(tt.err, tt.channel)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

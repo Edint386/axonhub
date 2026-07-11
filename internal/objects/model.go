@@ -41,6 +41,19 @@ type ModelSettings struct {
 	Associations                        []*ModelAssociation `json:"associations"`
 }
 
+const (
+	ModelAssociationConditionFieldPromptTokens  = "prompt_tokens"
+	ModelAssociationConditionFieldStream        = "stream"
+	ModelAssociationConditionFieldRequestFormat = "request_format"
+	ModelAssociationConditionFieldDailyTime     = "daily_time"
+	ModelAssociationConditionFieldHasImage      = "has_image"
+	ModelAssociationConditionFieldHasVideo      = "has_video"
+	ModelAssociationConditionFieldHasDocument   = "has_document"
+	ModelAssociationConditionFieldHasAudio      = "has_audio"
+	ModelAssociationConditionFieldRequestHeader       = "request_header"
+	ModelAssociationConditionFieldRequestHeaderPrefix = "request_header."
+)
+
 type ModelAssociation struct {
 	// channel_model: the specified model id in the specified channel
 	// channel_regex: the specified pattern in the specified channel

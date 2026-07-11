@@ -164,4 +164,10 @@ config.schema.json
 .agent/
 .factory
 .omo/
+.omc/
 .playwright-mcp/
+.ace-tool/
+
+# Local manual database cleanup utility
+scripts/gc_cleanup.py
+scripts/__pycache__/gc_cleanup.*.pyc

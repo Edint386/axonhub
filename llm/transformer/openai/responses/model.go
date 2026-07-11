@@ -44,9 +44,13 @@ type Tool struct {
 	UserLocation *WebSearchUserLocation `json:"user_location,omitempty"`
 
 	// This field is for ImageGeneration
+	Action string `json:"action,omitempty"`
+	// This field is for ImageGeneration
 	Background string `json:"background,omitempty"`
 	// This field is for ImageGeneration
 	InputFidelity string `json:"input_fidelity,omitempty"`
+	// This field is for ImageGeneration
+	InputImageMask map[string]any `json:"input_image_mask,omitempty"`
 	// This field is for ImageGeneration
 	Model string `json:"model,omitempty"`
 	// This field is for ImageGeneration
@@ -457,6 +461,12 @@ type URLCitation struct {
 const responsesWebSearchCallsTransformerMetadataKey = "openai_responses_web_search_calls"
 const responsesNamespaceToolsTransformerMetadataKey = "openai_responses_namespace_tools"
 const responsesToolCallNamespaceTransformerMetadataKey = "openai_responses_tool_call_namespace"
+const responsesReasoningItemTransformerMetadataKey = "openai_responses_reasoning_item"
+
+type responsesReasoningItemMetadata struct {
+	ID   string `json:"id,omitempty"`
+	Done bool   `json:"done,omitempty"`
+}
 
 type WebSearchSource struct {
 	Type  string `json:"type,omitempty"`
@@ -469,6 +479,71 @@ type WebSearchAction struct {
 	Query   string            `json:"query,omitempty"`
 	Queries []string          `json:"queries,omitempty"`
 	Sources []WebSearchSource `json:"sources,omitempty"`
+}
+
+// ItemAction is the polymorphic "action" field of an output item.
+// ImageGenerationAction and WebSearch are mutually exclusive;
+// if both are set, ImageGenerationAction takes precedence during marshaling.
+type ItemAction struct {
+	// ImageGenerationAction holds the bare-string action for image_generation_call items
+	// (e.g. "generate", "edit").
+	ImageGenerationAction string
+	// WebSearch holds the structured action for web_search_call items.
+	WebSearch *WebSearchAction
+}
+
+// NewImageGenerationAction creates an ItemAction with a bare-string action value.
+func NewImageGenerationAction(action string) *ItemAction {
+	return &ItemAction{ImageGenerationAction: action}
+}
+
+// NewWebSearchAction creates an ItemAction with a structured WebSearchAction value.
+func NewWebSearchAction(action *WebSearchAction) *ItemAction {
+	return &ItemAction{WebSearch: action}
+}
+
+// IsImageGeneration reports whether this action represents an image_generation_call string action.
+func (a *ItemAction) IsImageGeneration() bool {
+	return a != nil && a.ImageGenerationAction != ""
+}
+
+// IsWebSearch reports whether this action represents a web_search_call structured action.
+func (a *ItemAction) IsWebSearch() bool {
+	return a != nil && a.WebSearch != nil
+}
+
+func (a *ItemAction) UnmarshalJSON(data []byte) error {
+	// Try string form first (image_generation_call).
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		a.ImageGenerationAction = str
+		a.WebSearch = nil
+
+		return nil
+	}
+
+	// Then object form (web_search_call).
+	var obj WebSearchAction
+	if err := json.Unmarshal(data, &obj); err == nil {
+		a.ImageGenerationAction = ""
+		a.WebSearch = &obj
+
+		return nil
+	}
+
+	return fmt.Errorf("action must be a string or object")
+}
+
+func (a ItemAction) MarshalJSON() ([]byte, error) {
+	if a.ImageGenerationAction != "" {
+		return json.Marshal(a.ImageGenerationAction)
+	}
+
+	if a.WebSearch != nil {
+		return json.Marshal(a.WebSearch)
+	}
+
+	return []byte("null"), nil
 }
 
 // Item is a unified structure for both input and output items in the Responses API.
@@ -541,8 +616,9 @@ type Item struct {
 	// The encrypted content of the reasoning item.
 	EncryptedContent *string `json:"encrypted_content,omitempty"`
 
-	// Web search action fields (for type="web_search_call").
-	Action *WebSearchAction `json:"action,omitempty"`
+	// Action is the polymorphic "action" field: web_search_call uses an object,
+	// image_generation_call uses a bare string. See ItemAction.
+	Action *ItemAction `json:"action,omitempty"`
 
 	// Compaction fields (for type="compaction")
 	// The identifier of the actor that created the item.

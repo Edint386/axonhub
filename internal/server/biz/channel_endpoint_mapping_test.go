@@ -69,6 +69,11 @@ func TestDefaultEndpointsForChannelType_UseLLMAPIFormatValues(t *testing.T) {
 			},
 		},
 		{
+			name:     "cline exposes chat only",
+			typ:      channel.TypeCline,
+			expected: []string{llm.APIFormatOpenAIChatCompletion.String()},
+		},
+		{
 			name:     "minimax exposes chat only",
 			typ:      channel.TypeMinimax,
 			expected: []string{llm.APIFormatOpenAIChatCompletion.String()},
@@ -82,6 +87,15 @@ func TestDefaultEndpointsForChannelType_UseLLMAPIFormatValues(t *testing.T) {
 			name:     "nanogpt responses defaults to responses",
 			typ:      channel.TypeNanogptResponses,
 			expected: []string{llm.APIFormatOpenAIResponse.String()},
+		},
+		{
+			name: "codex exposes responses plus image generation and edit",
+			typ:  channel.TypeCodex,
+			expected: []string{
+				llm.APIFormatOpenAIResponse.String(),
+				llm.APIFormatOpenAIImageGeneration.String(),
+				llm.APIFormatOpenAIImageEdit.String(),
+			},
 		},
 		{
 			name:     "jina exposes rerank and embedding",

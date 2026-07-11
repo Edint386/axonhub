@@ -59,6 +59,7 @@ export const channelTypeSchema = z.enum([
   'openai',
   'openai_responses',
   'atlascloud',
+  'cline',
   'codex',
   'anthropic',
   'anthropic_aws',
@@ -112,6 +113,8 @@ export const channelTypeSchema = z.enum([
   'opencode_go',
   'opencode_go_anthropic',
   'ollama',
+  'evolink',
+  'evolink_anthropic',
 ]);
 export type ChannelType = z.infer<typeof channelTypeSchema>;
 
@@ -142,13 +145,20 @@ export const headerEntrySchema = z.object({
 export type HeaderEntry = z.infer<typeof headerEntrySchema>;
 
 // Override Operation
+export const overrideMatchSchema = z.object({
+  path: z.string().trim().min(1),
+  eq: z.string().trim().min(1),
+});
+export type OverrideMatch = z.infer<typeof overrideMatchSchema>;
+
 export const overrideOperationSchema = z.object({
-  op: z.enum(['set', 'delete', 'rename', 'copy', 'array_append', 'array_prepend', 'array_insert']),
+  op: z.enum(['set', 'delete', 'rename', 'copy', 'array_append', 'array_prepend', 'array_insert', 'array_remove']),
   path: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
   value: z.any().optional(),
   condition: z.string().optional(),
+  match: overrideMatchSchema.nullish(),
   index: z.number().int().nullish(),
   splat: z.boolean().nullish(),
 });
@@ -168,10 +178,17 @@ export const proxyConfigSchema = z.object({
 export type ProxyConfig = z.infer<typeof proxyConfigSchema>;
 
 // Transform Options
+export const reasoningEffortMappingSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+export type ReasoningEffortMapping = z.infer<typeof reasoningEffortMappingSchema>;
+
 export const transformOptionsSchema = z.object({
   forceArrayInstructions: z.boolean().optional(),
   forceArrayInputs: z.boolean().optional(),
   replaceDeveloperRoleWithSystem: z.boolean().optional(),
+  reasoningEffortMapping: z.array(reasoningEffortMappingSchema).nullish(),
 });
 export type TransformOptions = z.infer<typeof transformOptionsSchema>;
 
@@ -268,10 +285,27 @@ export const channelLimiterStatsSchema = z.object({
 });
 export type ChannelLimiterStats = z.infer<typeof channelLimiterStatsSchema>;
 
+export const retryableErrorPatternSchema = z.object({
+  pattern: z.string().min(1),
+  regex: z.boolean().optional().nullable(),
+});
+export type RetryableErrorPattern = z.infer<typeof retryableErrorPatternSchema>;
+
+export const openCodeGoQuotaSettingsSchema = z.object({
+  workspaceId: z.string().optional().nullable(),
+  authCookie: z.string().optional().nullable(),
+});
+export type OpenCodeGoQuotaSettings = z.infer<typeof openCodeGoQuotaSettingsSchema>;
+
+export const channelProviderQuotaSettingsSchema = z.object({
+  opencodeGo: openCodeGoQuotaSettingsSchema.optional().nullable(),
+});
+export type ChannelProviderQuotaSettings = z.infer<typeof channelProviderQuotaSettingsSchema>;
+
 // Channel Settings
 export const channelSettingsSchema = z.object({
   extraModelPrefix: z.string().optional(),
-  modelMappings: z.array(modelMappingSchema).nullable(),
+  modelMappings: z.array(modelMappingSchema).optional().nullable(),
   autoTrimedModelPrefixes: z.array(z.string()).optional().nullable(),
   hideOriginalModels: z.boolean().optional(),
   hideMappedModels: z.boolean().optional(),
@@ -284,6 +318,9 @@ export const channelSettingsSchema = z.object({
   passThroughBody: z.boolean().optional().nullable(),
   rateLimit: channelRateLimitSchema.optional().nullable(),
   quota: channelQuotaSchema.optional().nullable(),
+  retryableStatusCodes: z.array(z.number().int().min(400).max(599)).optional().nullable(),
+  retryableErrorPatterns: z.array(retryableErrorPatternSchema).optional().nullable(),
+  providerQuota: channelProviderQuotaSettingsSchema.optional().nullable(),
 });
 
 export type ChannelSettings = z.infer<typeof channelSettingsSchema>;
