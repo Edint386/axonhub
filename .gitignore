@@ -169,5 +169,6 @@ config.schema.json
 .ace-tool/
 
 # Local manual database cleanup utility
+scripts/cleanup-sqlite.sh
 scripts/gc_cleanup.py
 scripts/__pycache__/gc_cleanup.*.pyc

@@ -30,6 +30,8 @@ import (
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/role"
+	"github.com/looplj/axonhub/internal/ent/thread"
+	"github.com/looplj/axonhub/internal/ent/trace"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/ent/user"
 	"github.com/looplj/axonhub/internal/objects"
@@ -916,6 +918,8 @@ type ComplexityRoot struct {
 	Mutation struct {
 		AddUserToProject                     func(childComplexity int, input AddUserToProjectInput) int
 		ApplyChannelOverrideTemplate         func(childComplexity int, input ApplyChannelOverrideTemplateInput) int
+		ArchiveThread                        func(childComplexity int, id objects.GUID) int
+		ArchiveTrace                         func(childComplexity int, id objects.GUID) int
 		Backup                               func(childComplexity int, input backup.BackupOptions) int
 		BulkArchiveAPIKeys                   func(childComplexity int, ids []*objects.GUID) int
 		BulkArchiveChannels                  func(childComplexity int, ids []*objects.GUID) int
@@ -978,6 +982,8 @@ type ComplexityRoot struct {
 		RemoveUserFromProject                func(childComplexity int, input RemoveUserFromProjectInput) int
 		ResetChannelQuotaNow                 func(childComplexity int, channelID objects.GUID) int
 		Restore                              func(childComplexity int, file graphql.Upload, input backup.RestoreOptions) int
+		RetainThread                         func(childComplexity int, id objects.GUID) int
+		RetainTrace                          func(childComplexity int, id objects.GUID) int
 		RotateAPIKey                         func(childComplexity int, id objects.GUID) int
 		SaveChannelEndpoints                 func(childComplexity int, input biz.SaveChannelEndpointsInput) int
 		SaveChannelModelPrices               func(childComplexity int, channelID objects.GUID, input []*biz.SaveChannelModelPriceInput) int
@@ -988,7 +994,11 @@ type ComplexityRoot struct {
 		TestChannelAPIKeys                   func(childComplexity int, channelID objects.GUID, modelID *string) int
 		TriggerAutoBackup                    func(childComplexity int) int
 		TriggerGcCleanup                     func(childComplexity int, input gc.TriggerGcCleanupInput) int
+		UnarchiveThread                      func(childComplexity int, id objects.GUID) int
+		UnarchiveTrace                       func(childComplexity int, id objects.GUID) int
 		UnlinkOIDCIdentity                   func(childComplexity int, id objects.GUID) int
+		UnretainThread                       func(childComplexity int, id objects.GUID) int
+		UnretainTrace                        func(childComplexity int, id objects.GUID) int
 		UpdateAPIKey                         func(childComplexity int, id objects.GUID, input ent.UpdateAPIKeyInput) int
 		UpdateAPIKeyProfileTemplate          func(childComplexity int, id objects.GUID, input ent.UpdateAPIKeyProfileTemplateInput, profile *objects.APIKeyProfile) int
 		UpdateAPIKeyProfiles                 func(childComplexity int, id objects.GUID, input objects.APIKeyProfiles) int
@@ -1171,8 +1181,8 @@ type ComplexityRoot struct {
 		ID          func(childComplexity int) int
 		Name        func(childComplexity int) int
 		Order       func(childComplexity int) int
+		Project     func(childComplexity int) int
 		ProjectID   func(childComplexity int) int
-		Projects    func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ProjectOrder, where *ent.ProjectWhereInput) int
 		Role        func(childComplexity int) int
 		Settings    func(childComplexity int) int
 		Status      func(childComplexity int) int
@@ -1727,15 +1737,17 @@ type ComplexityRoot struct {
 	}
 
 	Thread struct {
-		CreatedAt      func(childComplexity int) int
-		FirstUserQuery func(childComplexity int) int
-		ID             func(childComplexity int) int
-		Project        func(childComplexity int) int
-		ProjectID      func(childComplexity int) int
-		ThreadID       func(childComplexity int) int
-		Traces         func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.TraceOrder, where *ent.TraceWhereInput) int
-		UpdatedAt      func(childComplexity int) int
-		UsageMetadata  func(childComplexity int) int
+		ArchivedTracesCount func(childComplexity int) int
+		CreatedAt           func(childComplexity int) int
+		FirstUserQuery      func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		Project             func(childComplexity int) int
+		ProjectID           func(childComplexity int) int
+		Status              func(childComplexity int) int
+		ThreadID            func(childComplexity int) int
+		Traces              func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.TraceOrder, where *ent.TraceWhereInput) int
+		UpdatedAt           func(childComplexity int) int
+		UsageMetadata       func(childComplexity int) int
 	}
 
 	ThreadConnection struct {
@@ -1821,6 +1833,7 @@ type ComplexityRoot struct {
 		RawRootSegment func(childComplexity int) int
 		Requests       func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.RequestOrder, where *ent.RequestWhereInput) int
 		RootSegment    func(childComplexity int) int
+		Status         func(childComplexity int) int
 		Thread         func(childComplexity int) int
 		ThreadID       func(childComplexity int) int
 		TraceID        func(childComplexity int) int
@@ -2165,6 +2178,14 @@ type MutationResolver interface {
 	UpdateAPIKeyProfileTemplate(ctx context.Context, id objects.GUID, input ent.UpdateAPIKeyProfileTemplateInput, profile *objects.APIKeyProfile) (*ent.APIKeyProfileTemplate, error)
 	DeleteAPIKeyProfileTemplate(ctx context.Context, id objects.GUID) (*ent.APIKeyProfileTemplate, error)
 	LoadAPIKeyProfileTemplate(ctx context.Context, input LoadAPIKeyProfileTemplateInput) (*ent.APIKey, error)
+	ArchiveTrace(ctx context.Context, id objects.GUID) (bool, error)
+	UnarchiveTrace(ctx context.Context, id objects.GUID) (bool, error)
+	RetainTrace(ctx context.Context, id objects.GUID) (bool, error)
+	UnretainTrace(ctx context.Context, id objects.GUID) (bool, error)
+	ArchiveThread(ctx context.Context, id objects.GUID) (bool, error)
+	UnarchiveThread(ctx context.Context, id objects.GUID) (bool, error)
+	RetainThread(ctx context.Context, id objects.GUID) (bool, error)
+	UnretainThread(ctx context.Context, id objects.GUID) (bool, error)
 	UpdateMe(ctx context.Context, input UpdateMeInput) (*ent.User, error)
 	UpdateMyPassword(ctx context.Context, input UpdateMyPasswordInput) (bool, error)
 	UnlinkOIDCIdentity(ctx context.Context, id objects.GUID) (bool, error)
@@ -2232,6 +2253,8 @@ type ProjectResolver interface {
 }
 type PromptResolver interface {
 	ID(ctx context.Context, obj *ent.Prompt) (*objects.GUID, error)
+
+	ProjectID(ctx context.Context, obj *ent.Prompt) (*objects.GUID, error)
 }
 type PromptProtectionRuleResolver interface {
 	ID(ctx context.Context, obj *ent.PromptProtectionRule) (*objects.GUID, error)
@@ -2371,6 +2394,7 @@ type ThreadResolver interface {
 
 	FirstUserQuery(ctx context.Context, obj *ent.Thread) (*string, error)
 	UsageMetadata(ctx context.Context, obj *ent.Thread) (*biz.UsageMetadata, error)
+	ArchivedTracesCount(ctx context.Context, obj *ent.Thread) (int, error)
 }
 type TraceResolver interface {
 	ID(ctx context.Context, obj *ent.Trace) (*objects.GUID, error)
@@ -5461,6 +5485,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ApplyChannelOverrideTemplate(childComplexity, args["input"].(ApplyChannelOverrideTemplateInput)), true
+	case "Mutation.archiveThread":
+		if e.complexity.Mutation.ArchiveThread == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_archiveThread_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ArchiveThread(childComplexity, args["id"].(objects.GUID)), true
+	case "Mutation.archiveTrace":
+		if e.complexity.Mutation.ArchiveTrace == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_archiveTrace_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ArchiveTrace(childComplexity, args["id"].(objects.GUID)), true
 	case "Mutation.backup":
 		if e.complexity.Mutation.Backup == nil {
 			break
@@ -6138,6 +6184,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.Restore(childComplexity, args["file"].(graphql.Upload), args["input"].(backup.RestoreOptions)), true
+	case "Mutation.retainThread":
+		if e.complexity.Mutation.RetainThread == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_retainThread_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RetainThread(childComplexity, args["id"].(objects.GUID)), true
+	case "Mutation.retainTrace":
+		if e.complexity.Mutation.RetainTrace == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_retainTrace_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RetainTrace(childComplexity, args["id"].(objects.GUID)), true
 	case "Mutation.rotateAPIKey":
 		if e.complexity.Mutation.RotateAPIKey == nil {
 			break
@@ -6243,6 +6311,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.TriggerGcCleanup(childComplexity, args["input"].(gc.TriggerGcCleanupInput)), true
+	case "Mutation.unarchiveThread":
+		if e.complexity.Mutation.UnarchiveThread == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_unarchiveThread_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UnarchiveThread(childComplexity, args["id"].(objects.GUID)), true
+	case "Mutation.unarchiveTrace":
+		if e.complexity.Mutation.UnarchiveTrace == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_unarchiveTrace_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UnarchiveTrace(childComplexity, args["id"].(objects.GUID)), true
 	case "Mutation.unlinkOIDCIdentity":
 		if e.complexity.Mutation.UnlinkOIDCIdentity == nil {
 			break
@@ -6254,6 +6344,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UnlinkOIDCIdentity(childComplexity, args["id"].(objects.GUID)), true
+	case "Mutation.unretainThread":
+		if e.complexity.Mutation.UnretainThread == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_unretainThread_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UnretainThread(childComplexity, args["id"].(objects.GUID)), true
+	case "Mutation.unretainTrace":
+		if e.complexity.Mutation.UnretainTrace == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_unretainTrace_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UnretainTrace(childComplexity, args["id"].(objects.GUID)), true
 	case "Mutation.updateAPIKey":
 		if e.complexity.Mutation.UpdateAPIKey == nil {
 			break
@@ -7253,23 +7365,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Prompt.Order(childComplexity), true
+	case "Prompt.project":
+		if e.complexity.Prompt.Project == nil {
+			break
+		}
+
+		return e.complexity.Prompt.Project(childComplexity), true
 	case "Prompt.projectID":
 		if e.complexity.Prompt.ProjectID == nil {
 			break
 		}
 
 		return e.complexity.Prompt.ProjectID(childComplexity), true
-	case "Prompt.projects":
-		if e.complexity.Prompt.Projects == nil {
-			break
-		}
-
-		args, err := ec.field_Prompt_projects_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Prompt.Projects(childComplexity, args["after"].(*entgql.Cursor[int]), args["first"].(*int), args["before"].(*entgql.Cursor[int]), args["last"].(*int), args["orderBy"].(*ent.ProjectOrder), args["where"].(*ent.ProjectWhereInput)), true
 	case "Prompt.role":
 		if e.complexity.Prompt.Role == nil {
 			break
@@ -9710,6 +9817,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.TestChannelPayload.Success(childComplexity), true
 
+	case "Thread.archivedTracesCount":
+		if e.complexity.Thread.ArchivedTracesCount == nil {
+			break
+		}
+
+		return e.complexity.Thread.ArchivedTracesCount(childComplexity), true
 	case "Thread.createdAt":
 		if e.complexity.Thread.CreatedAt == nil {
 			break
@@ -9740,6 +9853,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Thread.ProjectID(childComplexity), true
+	case "Thread.status":
+		if e.complexity.Thread.Status == nil {
+			break
+		}
+
+		return e.complexity.Thread.Status(childComplexity), true
 	case "Thread.threadID":
 		if e.complexity.Thread.ThreadID == nil {
 			break
@@ -10114,6 +10233,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Trace.RootSegment(childComplexity), true
+	case "Trace.status":
+		if e.complexity.Trace.Status == nil {
+			break
+		}
+
+		return e.complexity.Trace.Status(childComplexity), true
 	case "Trace.thread":
 		if e.complexity.Trace.Thread == nil {
 			break
@@ -11604,6 +11729,28 @@ func (ec *executionContext) field_Mutation_applyChannelOverrideTemplate_args(ctx
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_archiveThread_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_archiveTrace_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_backup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12310,6 +12457,28 @@ func (ec *executionContext) field_Mutation_restore_args(ctx context.Context, raw
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_retainThread_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_retainTrace_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_rotateAPIKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12434,7 +12603,51 @@ func (ec *executionContext) field_Mutation_triggerGcCleanup_args(ctx context.Con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_unarchiveThread_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_unarchiveTrace_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_unlinkOIDCIdentity_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_unretainThread_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_unretainTrace_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID)
@@ -13274,42 +13487,6 @@ func (ec *executionContext) field_Project_users_args(ctx context.Context, rawArg
 	}
 	args["orderBy"] = arg4
 	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOUserWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐUserWhereInput)
-	if err != nil {
-		return nil, err
-	}
-	args["where"] = arg5
-	return args, nil
-}
-
-func (ec *executionContext) field_Prompt_projects_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖentgoᚗioᚋcontribᚋentgqlᚐCursor)
-	if err != nil {
-		return nil, err
-	}
-	args["after"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
-	if err != nil {
-		return nil, err
-	}
-	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖentgoᚗioᚋcontribᚋentgqlᚐCursor)
-	if err != nil {
-		return nil, err
-	}
-	args["before"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
-	if err != nil {
-		return nil, err
-	}
-	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOProjectOrder2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐProjectOrder)
-	if err != nil {
-		return nil, err
-	}
-	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOProjectWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐProjectWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -33986,6 +34163,334 @@ func (ec *executionContext) fieldContext_Mutation_loadApiKeyProfileTemplate(ctx 
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_archiveTrace(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_archiveTrace,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ArchiveTrace(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_archiveTrace(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_archiveTrace_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_unarchiveTrace(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_unarchiveTrace,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UnarchiveTrace(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_unarchiveTrace(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_unarchiveTrace_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_retainTrace(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_retainTrace,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RetainTrace(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_retainTrace(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_retainTrace_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_unretainTrace(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_unretainTrace,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UnretainTrace(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_unretainTrace(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_unretainTrace_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_archiveThread(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_archiveThread,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ArchiveThread(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_archiveThread(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_archiveThread_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_unarchiveThread(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_unarchiveThread,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UnarchiveThread(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_unarchiveThread(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_unarchiveThread_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_retainThread(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_retainThread,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RetainThread(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_retainThread(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_retainThread_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_unretainThread(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_unretainThread,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UnretainThread(ctx, fc.Args["id"].(objects.GUID))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_unretainThread(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_unretainThread_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_updateMe(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -35723,8 +36228,8 @@ func (ec *executionContext) fieldContext_Mutation_createPrompt(ctx context.Conte
 				return ec.fieldContext_Prompt_order(ctx, field)
 			case "settings":
 				return ec.fieldContext_Prompt_settings(ctx, field)
-			case "projects":
-				return ec.fieldContext_Prompt_projects(ctx, field)
+			case "project":
+				return ec.fieldContext_Prompt_project(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Prompt", field.Name)
 		},
@@ -35790,8 +36295,8 @@ func (ec *executionContext) fieldContext_Mutation_updatePrompt(ctx context.Conte
 				return ec.fieldContext_Prompt_order(ctx, field)
 			case "settings":
 				return ec.fieldContext_Prompt_settings(ctx, field)
-			case "projects":
-				return ec.fieldContext_Prompt_projects(ctx, field)
+			case "project":
+				return ec.fieldContext_Prompt_project(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Prompt", field.Name)
 		},
@@ -39284,10 +39789,10 @@ func (ec *executionContext) _Prompt_projectID(ctx context.Context, field graphql
 		field,
 		ec.fieldContext_Prompt_projectID,
 		func(ctx context.Context) (any, error) {
-			return obj.ProjectID, nil
+			return ec.resolvers.Prompt().ProjectID(ctx, obj)
 		},
 		nil,
-		ec.marshalNInt2int,
+		ec.marshalNID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
 		true,
 		true,
 	)
@@ -39297,10 +39802,10 @@ func (ec *executionContext) fieldContext_Prompt_projectID(_ context.Context, fie
 	fc = &graphql.FieldContext{
 		Object:     "Prompt",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -39515,24 +40020,23 @@ func (ec *executionContext) fieldContext_Prompt_settings(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Prompt_projects(ctx context.Context, field graphql.CollectedField, obj *ent.Prompt) (ret graphql.Marshaler) {
+func (ec *executionContext) _Prompt_project(ctx context.Context, field graphql.CollectedField, obj *ent.Prompt) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Prompt_projects,
+		ec.fieldContext_Prompt_project,
 		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return obj.Projects(ctx, fc.Args["after"].(*entgql.Cursor[int]), fc.Args["first"].(*int), fc.Args["before"].(*entgql.Cursor[int]), fc.Args["last"].(*int), fc.Args["orderBy"].(*ent.ProjectOrder), fc.Args["where"].(*ent.ProjectWhereInput))
+			return obj.Project(ctx)
 		},
 		nil,
-		ec.marshalNProjectConnection2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐProjectConnection,
+		ec.marshalNProject2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐProject,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Prompt_projects(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Prompt_project(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Prompt",
 		Field:      field,
@@ -39540,26 +40044,43 @@ func (ec *executionContext) fieldContext_Prompt_projects(ctx context.Context, fi
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "edges":
-				return ec.fieldContext_ProjectConnection_edges(ctx, field)
-			case "pageInfo":
-				return ec.fieldContext_ProjectConnection_pageInfo(ctx, field)
-			case "totalCount":
-				return ec.fieldContext_ProjectConnection_totalCount(ctx, field)
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "status":
+				return ec.fieldContext_Project_status(ctx, field)
+			case "profiles":
+				return ec.fieldContext_Project_profiles(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			case "roles":
+				return ec.fieldContext_Project_roles(ctx, field)
+			case "apiKeys":
+				return ec.fieldContext_Project_apiKeys(ctx, field)
+			case "requests":
+				return ec.fieldContext_Project_requests(ctx, field)
+			case "usageLogs":
+				return ec.fieldContext_Project_usageLogs(ctx, field)
+			case "threads":
+				return ec.fieldContext_Project_threads(ctx, field)
+			case "traces":
+				return ec.fieldContext_Project_traces(ctx, field)
+			case "prompts":
+				return ec.fieldContext_Project_prompts(ctx, field)
+			case "apiKeyProfileTemplates":
+				return ec.fieldContext_Project_apiKeyProfileTemplates(ctx, field)
+			case "projectUsers":
+				return ec.fieldContext_Project_projectUsers(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type ProjectConnection", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Prompt_projects_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
 	}
 	return fc, nil
 }
@@ -39897,8 +40418,8 @@ func (ec *executionContext) fieldContext_PromptEdge_node(_ context.Context, fiel
 				return ec.fieldContext_Prompt_order(ctx, field)
 			case "settings":
 				return ec.fieldContext_Prompt_settings(ctx, field)
-			case "projects":
-				return ec.fieldContext_Prompt_projects(ctx, field)
+			case "project":
+				return ec.fieldContext_Prompt_project(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Prompt", field.Name)
 		},
@@ -46194,6 +46715,8 @@ func (ec *executionContext) fieldContext_Request_trace(_ context.Context, field 
 				return ec.fieldContext_Trace_traceID(ctx, field)
 			case "threadID":
 				return ec.fieldContext_Trace_threadID(ctx, field)
+			case "status":
+				return ec.fieldContext_Trace_status(ctx, field)
 			case "project":
 				return ec.fieldContext_Trace_project(ctx, field)
 			case "thread":
@@ -52422,6 +52945,35 @@ func (ec *executionContext) fieldContext_Thread_threadID(_ context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Thread_status(ctx context.Context, field graphql.CollectedField, obj *ent.Thread) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Thread_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNThreadStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Thread_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Thread",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ThreadStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Thread_project(ctx context.Context, field graphql.CollectedField, obj *ent.Thread) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -52608,6 +53160,35 @@ func (ec *executionContext) fieldContext_Thread_usageMetadata(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Thread_archivedTracesCount(ctx context.Context, field graphql.CollectedField, obj *ent.Thread) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Thread_archivedTracesCount,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Thread().ArchivedTracesCount(ctx, obj)
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Thread_archivedTracesCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Thread",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ThreadConnection_edges(ctx context.Context, field graphql.CollectedField, obj *ent.ThreadConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -52745,6 +53326,8 @@ func (ec *executionContext) fieldContext_ThreadEdge_node(_ context.Context, fiel
 				return ec.fieldContext_Thread_projectID(ctx, field)
 			case "threadID":
 				return ec.fieldContext_Thread_threadID(ctx, field)
+			case "status":
+				return ec.fieldContext_Thread_status(ctx, field)
 			case "project":
 				return ec.fieldContext_Thread_project(ctx, field)
 			case "traces":
@@ -52753,6 +53336,8 @@ func (ec *executionContext) fieldContext_ThreadEdge_node(_ context.Context, fiel
 				return ec.fieldContext_Thread_firstUserQuery(ctx, field)
 			case "usageMetadata":
 				return ec.fieldContext_Thread_usageMetadata(ctx, field)
+			case "archivedTracesCount":
+				return ec.fieldContext_Thread_archivedTracesCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Thread", field.Name)
 		},
@@ -54158,6 +54743,35 @@ func (ec *executionContext) fieldContext_Trace_threadID(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Trace_status(ctx context.Context, field graphql.CollectedField, obj *ent.Trace) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Trace_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNTraceStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Trace_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Trace",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type TraceStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Trace_project(ctx context.Context, field graphql.CollectedField, obj *ent.Trace) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -54257,6 +54871,8 @@ func (ec *executionContext) fieldContext_Trace_thread(_ context.Context, field g
 				return ec.fieldContext_Thread_projectID(ctx, field)
 			case "threadID":
 				return ec.fieldContext_Thread_threadID(ctx, field)
+			case "status":
+				return ec.fieldContext_Thread_status(ctx, field)
 			case "project":
 				return ec.fieldContext_Thread_project(ctx, field)
 			case "traces":
@@ -54265,6 +54881,8 @@ func (ec *executionContext) fieldContext_Trace_thread(_ context.Context, field g
 				return ec.fieldContext_Thread_firstUserQuery(ctx, field)
 			case "usageMetadata":
 				return ec.fieldContext_Thread_usageMetadata(ctx, field)
+			case "archivedTracesCount":
+				return ec.fieldContext_Thread_archivedTracesCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Thread", field.Name)
 		},
@@ -54641,6 +55259,8 @@ func (ec *executionContext) fieldContext_TraceEdge_node(_ context.Context, field
 				return ec.fieldContext_Trace_traceID(ctx, field)
 			case "threadID":
 				return ec.fieldContext_Trace_threadID(ctx, field)
+			case "status":
+				return ec.fieldContext_Trace_status(ctx, field)
 			case "project":
 				return ec.fieldContext_Trace_project(ctx, field)
 			case "thread":
@@ -67567,7 +68187,7 @@ func (ec *executionContext) unmarshalInputCreatePromptInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "description", "role", "content", "status", "order", "settings", "projectIDs"}
+	fieldsInOrder := [...]string{"name", "description", "role", "content", "status", "order", "settings"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -67623,17 +68243,6 @@ func (ec *executionContext) unmarshalInputCreatePromptInput(ctx context.Context,
 				return it, err
 			}
 			it.Settings = data
-		case "projectIDs":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDs"))
-			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			converted, err := objects.ConvertGUIDPtrsToInts(data)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			it.ProjectIDs = converted
 		}
 	}
 
@@ -68000,7 +68609,7 @@ func (ec *executionContext) unmarshalInputCreateThreadInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"threadID", "projectID"}
+	fieldsInOrder := [...]string{"threadID", "status", "projectID"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -68014,6 +68623,13 @@ func (ec *executionContext) unmarshalInputCreateThreadInput(ctx context.Context,
 				return it, err
 			}
 			it.ThreadID = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOThreadStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
 		case "projectID":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectID"))
 			data, err := ec.unmarshalNID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
@@ -68038,7 +68654,7 @@ func (ec *executionContext) unmarshalInputCreateTraceInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"traceID", "projectID", "threadID"}
+	fieldsInOrder := [...]string{"traceID", "status", "projectID", "threadID"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -68052,6 +68668,13 @@ func (ec *executionContext) unmarshalInputCreateTraceInput(ctx context.Context, 
 				return it, err
 			}
 			it.TraceID = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOTraceStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
 		case "projectID":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectID"))
 			data, err := ec.unmarshalNID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
@@ -73511,7 +74134,7 @@ func (ec *executionContext) unmarshalInputPromptWhereInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "projectIDGT", "projectIDGTE", "projectIDLT", "projectIDLTE", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "description", "descriptionNEQ", "descriptionIn", "descriptionNotIn", "descriptionGT", "descriptionGTE", "descriptionLT", "descriptionLTE", "descriptionContains", "descriptionHasPrefix", "descriptionHasSuffix", "descriptionEqualFold", "descriptionContainsFold", "role", "roleNEQ", "roleIn", "roleNotIn", "roleGT", "roleGTE", "roleLT", "roleLTE", "roleContains", "roleHasPrefix", "roleHasSuffix", "roleEqualFold", "roleContainsFold", "content", "contentNEQ", "contentIn", "contentNotIn", "contentGT", "contentGTE", "contentLT", "contentLTE", "contentContains", "contentHasPrefix", "contentHasSuffix", "contentEqualFold", "contentContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "order", "orderNEQ", "orderIn", "orderNotIn", "orderGT", "orderGTE", "orderLT", "orderLTE", "hasProjects", "hasProjectsWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "description", "descriptionNEQ", "descriptionIn", "descriptionNotIn", "descriptionGT", "descriptionGTE", "descriptionLT", "descriptionLTE", "descriptionContains", "descriptionHasPrefix", "descriptionHasSuffix", "descriptionEqualFold", "descriptionContainsFold", "role", "roleNEQ", "roleIn", "roleNotIn", "roleGT", "roleGTE", "roleLT", "roleLTE", "roleContains", "roleHasPrefix", "roleHasSuffix", "roleEqualFold", "roleContainsFold", "content", "contentNEQ", "contentIn", "contentNotIn", "contentGT", "contentGTE", "contentLT", "contentLTE", "contentContains", "contentHasPrefix", "contentHasSuffix", "contentEqualFold", "contentContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "order", "orderNEQ", "orderIn", "orderNotIn", "orderGT", "orderGTE", "orderLT", "orderLTE", "hasProject", "hasProjectWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -73741,60 +74364,48 @@ func (ec *executionContext) unmarshalInputPromptWhereInput(ctx context.Context, 
 			it.UpdatedAtLTE = data
 		case "projectID":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectID"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.ProjectID = data
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ProjectID = converted
 		case "projectIDNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDNEQ"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.ProjectIDNEQ = data
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ProjectIDNEQ = converted
 		case "projectIDIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDIn"))
-			data, err := ec.unmarshalOInt2ᚕintᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.ProjectIDIn = data
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ProjectIDIn = converted
 		case "projectIDNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDNotIn"))
-			data, err := ec.unmarshalOInt2ᚕintᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.ProjectIDNotIn = data
-		case "projectIDGT":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDGT"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
 			if err != nil {
-				return it, err
+				return it, graphql.ErrorOnPath(ctx, err)
 			}
-			it.ProjectIDGT = data
-		case "projectIDGTE":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDGTE"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ProjectIDGTE = data
-		case "projectIDLT":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDLT"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ProjectIDLT = data
-		case "projectIDLTE":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDLTE"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ProjectIDLTE = data
+			it.ProjectIDNotIn = converted
 		case "name":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -74243,20 +74854,20 @@ func (ec *executionContext) unmarshalInputPromptWhereInput(ctx context.Context, 
 				return it, err
 			}
 			it.OrderLTE = data
-		case "hasProjects":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasProjects"))
+		case "hasProject":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasProject"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.HasProjects = data
-		case "hasProjectsWith":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasProjectsWith"))
+			it.HasProject = data
+		case "hasProjectWith":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasProjectWith"))
 			data, err := ec.unmarshalOProjectWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐProjectWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.HasProjectsWith = data
+			it.HasProjectWith = data
 		}
 	}
 
@@ -79540,7 +80151,7 @@ func (ec *executionContext) unmarshalInputThreadWhereInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "threadID", "threadIDNEQ", "threadIDIn", "threadIDNotIn", "threadIDGT", "threadIDGTE", "threadIDLT", "threadIDLTE", "threadIDContains", "threadIDHasPrefix", "threadIDHasSuffix", "threadIDEqualFold", "threadIDContainsFold", "hasProject", "hasProjectWith", "hasTraces", "hasTracesWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "threadID", "threadIDNEQ", "threadIDIn", "threadIDNotIn", "threadIDGT", "threadIDGTE", "threadIDLT", "threadIDLTE", "threadIDContains", "threadIDHasPrefix", "threadIDHasSuffix", "threadIDEqualFold", "threadIDContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "hasProject", "hasProjectWith", "hasTraces", "hasTracesWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -79903,6 +80514,34 @@ func (ec *executionContext) unmarshalInputThreadWhereInput(ctx context.Context, 
 				return it, err
 			}
 			it.ThreadIDContainsFold = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOThreadStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		case "statusNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNEQ"))
+			data, err := ec.unmarshalOThreadStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusNEQ = data
+		case "statusIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusIn"))
+			data, err := ec.unmarshalOThreadStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatusᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusIn = data
+		case "statusNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNotIn"))
+			data, err := ec.unmarshalOThreadStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatusᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusNotIn = data
 		case "hasProject":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasProject"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -80050,7 +80689,7 @@ func (ec *executionContext) unmarshalInputTraceWhereInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "traceID", "traceIDNEQ", "traceIDIn", "traceIDNotIn", "traceIDGT", "traceIDGTE", "traceIDLT", "traceIDLTE", "traceIDContains", "traceIDHasPrefix", "traceIDHasSuffix", "traceIDEqualFold", "traceIDContainsFold", "threadID", "threadIDNEQ", "threadIDIn", "threadIDNotIn", "threadIDIsNil", "threadIDNotNil", "hasProject", "hasProjectWith", "hasThread", "hasThreadWith", "hasRequests", "hasRequestsWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "traceID", "traceIDNEQ", "traceIDIn", "traceIDNotIn", "traceIDGT", "traceIDGTE", "traceIDLT", "traceIDLTE", "traceIDContains", "traceIDHasPrefix", "traceIDHasSuffix", "traceIDEqualFold", "traceIDContainsFold", "threadID", "threadIDNEQ", "threadIDIn", "threadIDNotIn", "threadIDIsNil", "threadIDNotNil", "status", "statusNEQ", "statusIn", "statusNotIn", "hasProject", "hasProjectWith", "hasThread", "hasThreadWith", "hasRequests", "hasRequestsWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -80471,6 +81110,34 @@ func (ec *executionContext) unmarshalInputTraceWhereInput(ctx context.Context, o
 				return it, err
 			}
 			it.ThreadIDNotNil = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOTraceStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		case "statusNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNEQ"))
+			data, err := ec.unmarshalOTraceStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusNEQ = data
+		case "statusIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusIn"))
+			data, err := ec.unmarshalOTraceStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatusᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusIn = data
+		case "statusNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNotIn"))
+			data, err := ec.unmarshalOTraceStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatusᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusNotIn = data
 		case "hasProject":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasProject"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -81786,7 +82453,7 @@ func (ec *executionContext) unmarshalInputUpdatePromptInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "description", "role", "content", "status", "order", "settings", "addProjectIDs", "removeProjectIDs", "clearProjects"}
+	fieldsInOrder := [...]string{"name", "description", "role", "content", "status", "order", "settings"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -81842,35 +82509,6 @@ func (ec *executionContext) unmarshalInputUpdatePromptInput(ctx context.Context,
 				return it, err
 			}
 			it.Settings = data
-		case "addProjectIDs":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("addProjectIDs"))
-			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			converted, err := objects.ConvertGUIDPtrsToInts(data)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			it.AddProjectIDs = converted
-		case "removeProjectIDs":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("removeProjectIDs"))
-			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			converted, err := objects.ConvertGUIDPtrsToInts(data)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			it.RemoveProjectIDs = converted
-		case "clearProjects":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clearProjects"))
-			data, err := ec.unmarshalOBoolean2bool(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ClearProjects = data
 		}
 	}
 
@@ -82624,7 +83262,7 @@ func (ec *executionContext) unmarshalInputUpdateThreadInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"threadID"}
+	fieldsInOrder := [...]string{"threadID", "status"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -82638,6 +83276,13 @@ func (ec *executionContext) unmarshalInputUpdateThreadInput(ctx context.Context,
 				return it, err
 			}
 			it.ThreadID = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOThreadStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
 		}
 	}
 
@@ -82651,7 +83296,7 @@ func (ec *executionContext) unmarshalInputUpdateTraceInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"traceID"}
+	fieldsInOrder := [...]string{"traceID", "status"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -82665,6 +83310,13 @@ func (ec *executionContext) unmarshalInputUpdateTraceInput(ctx context.Context, 
 				return it, err
 			}
 			it.TraceID = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOTraceStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
 		}
 	}
 
@@ -94288,6 +94940,62 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "archiveTrace":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_archiveTrace(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unarchiveTrace":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_unarchiveTrace(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "retainTrace":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_retainTrace(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unretainTrace":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_unretainTrace(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "archiveThread":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_archiveThread(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unarchiveThread":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_unarchiveThread(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "retainThread":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_retainThread(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unretainThread":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_unretainThread(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateMe":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateMe(ctx, field)
@@ -96089,10 +96797,41 @@ func (ec *executionContext) _Prompt(ctx context.Context, sel ast.SelectionSet, o
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "projectID":
-			out.Values[i] = ec._Prompt_projectID(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Prompt_projectID(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "name":
 			out.Values[i] = ec._Prompt_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -96128,7 +96867,7 @@ func (ec *executionContext) _Prompt(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "projects":
+		case "project":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -96137,7 +96876,7 @@ func (ec *executionContext) _Prompt(ctx context.Context, sel ast.SelectionSet, o
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Prompt_projects(ctx, field, obj)
+				res = ec._Prompt_project(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -102505,6 +103244,11 @@ func (ec *executionContext) _Thread(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "status":
+			out.Values[i] = ec._Thread_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "project":
 			field := field
 
@@ -102620,6 +103364,42 @@ func (ec *executionContext) _Thread(ctx context.Context, sel ast.SelectionSet, o
 					}
 				}()
 				res = ec._Thread_usageMetadata(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "archivedTracesCount":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Thread_archivedTracesCount(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -103321,6 +104101,11 @@ func (ec *executionContext) _Trace(ctx context.Context, sel ast.SelectionSet, ob
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "status":
+			out.Values[i] = ec._Trace_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "project":
 			field := field
 
@@ -111269,6 +112054,16 @@ func (ec *executionContext) marshalNThreadOrderField2ᚖgithubᚗcomᚋloopljᚋ
 	return v
 }
 
+func (ec *executionContext) unmarshalNThreadStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx context.Context, v any) (thread.Status, error) {
+	var res thread.Status
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNThreadStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx context.Context, sel ast.SelectionSet, v thread.Status) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNThreadWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐThreadWhereInput(ctx context.Context, v any) (*ent.ThreadWhereInput, error) {
 	res, err := ec.unmarshalInputThreadWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
@@ -111556,6 +112351,16 @@ func (ec *executionContext) marshalNTraceOrderField2ᚖgithubᚗcomᚋloopljᚋa
 		}
 		return graphql.Null
 	}
+	return v
+}
+
+func (ec *executionContext) unmarshalNTraceStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx context.Context, v any) (trace.Status, error) {
+	var res trace.Status
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTraceStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx context.Context, sel ast.SelectionSet, v trace.Status) graphql.Marshaler {
 	return v
 }
 
@@ -118004,6 +118809,87 @@ func (ec *executionContext) unmarshalOThreadOrder2ᚖgithubᚗcomᚋloopljᚋaxo
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalOThreadStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatusᚄ(ctx context.Context, v any) ([]thread.Status, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]thread.Status, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNThreadStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOThreadStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []thread.Status) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNThreadStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalOThreadStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx context.Context, v any) (*thread.Status, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(thread.Status)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOThreadStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋthreadᚐStatus(ctx context.Context, sel ast.SelectionSet, v *thread.Status) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
 func (ec *executionContext) unmarshalOThreadWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐThreadWhereInputᚄ(ctx context.Context, v any) ([]*ent.ThreadWhereInput, error) {
 	if v == nil {
 		return nil, nil
@@ -118237,6 +119123,87 @@ func (ec *executionContext) unmarshalOTraceOrder2ᚖgithubᚗcomᚋloopljᚋaxon
 	}
 	res, err := ec.unmarshalInputTraceOrder(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOTraceStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatusᚄ(ctx context.Context, v any) ([]trace.Status, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]trace.Status, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNTraceStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOTraceStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []trace.Status) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNTraceStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalOTraceStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx context.Context, v any) (*trace.Status, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(trace.Status)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOTraceStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋtraceᚐStatus(ctx context.Context, sel ast.SelectionSet, v *trace.Status) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOTraceWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐTraceWhereInputᚄ(ctx context.Context, v any) ([]*ent.TraceWhereInput, error) {

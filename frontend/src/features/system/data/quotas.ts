@@ -288,6 +288,37 @@ export type ProviderKimiCodeQuotaData = ProviderQuotaDataCommon & {
   };
 };
 
+export type MinimaxModelRow = {
+  modelName: string;
+  intervalUsedPercent: number;
+  intervalTotalPercent: number;
+  intervalPercent: number;
+  intervalStatus: string;
+  intervalResetAt?: string;
+  weeklyUsedPercent: number;
+  weeklyTotalPercent: number;
+  weeklyPercent: number;
+  weeklyStatus: string;
+  weeklyResetAt?: string;
+  weeklyBoostPermille?: number;
+};
+
+export type ProviderMinimaxQuotaData = ProviderQuotaDataCommon & {
+  rows?: MinimaxModelRow[];
+};
+
+export type ZhipuWindowRow = {
+  window: string;
+  usedPercent: number;
+  status: string;
+  resetAt?: string;
+};
+
+export type ProviderZhipuQuotaData = ProviderQuotaDataCommon & {
+  rows?: ZhipuWindowRow[];
+  level?: string;
+};
+
 export type ClineQuotaWindow = {
   items_count: number;
   used_cost_units: number;
@@ -360,6 +391,8 @@ export type ProviderQuotaData =
   | ProviderNanoGPTQuotaData
   | ProviderOpenCodeGoQuotaData
   | ProviderKimiCodeQuotaData
+  | ProviderMinimaxQuotaData
+  | ProviderZhipuQuotaData
   | ProviderWaferQuotaData
   | ProviderSyntheticQuotaData
   | ProviderNeuralWattQuotaData
