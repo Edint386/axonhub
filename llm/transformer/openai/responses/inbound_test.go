@@ -672,6 +672,111 @@ func TestInboundTransformer_TransformResponse_NamespaceFunctionCall(t *testing.T
 	require.Equal(t, "mcp__node_repl", resp.Output[0].Namespace)
 }
 
+// Non-Responses channels only ever see the flattened function name, and their
+// outbound transformer builds its own TransformerMetadata, so the namespace has
+// to be recovered from the request carried in ctx.
+func TestInboundTransformer_TransformResponse_RestoresFlattenedNamespaceFunctionCall(t *testing.T) {
+	trans := NewInboundTransformer()
+
+	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
+		Body: []byte(`{
+			"model": "gpt-5",
+			"input": "run it",
+			"tools": [{
+				"type": "namespace",
+				"name": "mcp__node_repl",
+				"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
+			}]
+		}`),
+	})
+	require.NoError(t, err)
+	require.Len(t, llmReq.Tools, 1)
+	require.Equal(t, "mcp__node_repl__js", llmReq.Tools[0].Function.Name)
+
+	llmResp := &llm.Response{
+		ID:      "resp_flattened_namespace",
+		Object:  "chat.completion",
+		Model:   "gpt-5",
+		Created: 1700000000,
+		Choices: []llm.Choice{{
+			Index: 0,
+			Message: &llm.Message{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{{
+					ID:   "call_js",
+					Type: "function",
+					Function: llm.FunctionCall{
+						Name:      "mcp__node_repl__js",
+						Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
+					},
+				}},
+			},
+			FinishReason: lo.ToPtr("tool_calls"),
+		}},
+	}
+
+	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
+	require.NoError(t, err)
+
+	var resp Response
+
+	require.NoError(t, json.Unmarshal(result.Body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "function_call", resp.Output[0].Type)
+	require.Equal(t, "js", resp.Output[0].Name)
+	require.Equal(t, "mcp__node_repl", resp.Output[0].Namespace)
+}
+
+// A plain function whose name merely contains "__" must never be split.
+func TestInboundTransformer_TransformResponse_DoesNotSplitUnrelatedFunctionName(t *testing.T) {
+	trans := NewInboundTransformer()
+
+	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
+		Body: []byte(`{
+			"model": "gpt-5",
+			"input": "check",
+			"tools": [
+				{
+					"type": "namespace",
+					"name": "mcp__node_repl",
+					"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
+				},
+				{"type": "function", "name": "get__weather", "parameters": {"type": "object"}}
+			]
+		}`),
+	})
+	require.NoError(t, err)
+
+	llmResp := &llm.Response{
+		ID:      "resp_unrelated",
+		Object:  "chat.completion",
+		Model:   "gpt-5",
+		Created: 1700000000,
+		Choices: []llm.Choice{{
+			Index: 0,
+			Message: &llm.Message{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{{
+					ID:       "call_weather",
+					Type:     "function",
+					Function: llm.FunctionCall{Name: "get__weather", Arguments: `{}`},
+				}},
+			},
+			FinishReason: lo.ToPtr("tool_calls"),
+		}},
+	}
+
+	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
+	require.NoError(t, err)
+
+	var resp Response
+
+	require.NoError(t, json.Unmarshal(result.Body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "get__weather", resp.Output[0].Name)
+	require.Empty(t, resp.Output[0].Namespace)
+}
+
 func TestInboundTransformer_TransformResponse_DoesNotNamespaceAmbiguousFunctionCall(t *testing.T) {
 	trans := NewInboundTransformer()
 	llmResp := &llm.Response{
@@ -2014,7 +2119,7 @@ func TestInboundTransformer_TransformRequest_WithReasoningInput(t *testing.T) {
 }
 
 func TestConvertToResponsesAPIResponse_AttachesAnnotationsToFirstTextItem(t *testing.T) {
-	resp := convertToResponsesAPIResponse(&llm.Response{
+	resp := convertToResponsesAPIResponse(context.Background(), &llm.Response{
 		ID:      "resp_annotations",
 		Created: 1677652288,
 		Model:   "gpt-4o",

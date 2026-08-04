@@ -70,7 +70,7 @@ func (t *InboundTransformer) TransformResponse(ctx context.Context, chatResp *ll
 	}
 
 	// Convert to Responses API format
-	resp := convertToResponsesAPIResponse(chatResp)
+	resp := convertToResponsesAPIResponse(ctx, chatResp)
 
 	body, err := json.Marshal(resp)
 	if err != nil {
@@ -874,51 +874,95 @@ func getResponseWebSearchCallsFromMetadata(metadata map[string]any) []Item {
 	return result
 }
 
-func namespaceForFunctionCall(metadata map[string]any, name string) string {
-	if len(metadata) == 0 || name == "" {
-		return ""
-	}
-
-	raw, ok := metadata[responsesNamespaceToolsTransformerMetadataKey]
-	if !ok || raw == nil {
-		return ""
-	}
-
-	var mappings []llm.OpenAIResponsesNamespaceTool
-	if typed, ok := raw.([]llm.OpenAIResponsesNamespaceTool); ok {
-		mappings = typed
-	} else {
-		data, err := json.Marshal(raw)
-		if err != nil {
-			return ""
+// namespaceToolMappings collects the namespace/sub-tool pairs declared by the
+// original client request.
+//
+// Responses-format channels replay the raw namespace block to the provider, so
+// the provider answers with a proper namespace field and the mapping is carried
+// in TransformerMetadata. Other channels only ever see the flattened function
+// names, and their outbound transformer builds its own TransformerMetadata, so
+// the mapping has to be read back from the request stored in ctx.
+func namespaceToolMappings(ctx context.Context, metadata map[string]any) []llm.OpenAIResponsesNamespaceTool {
+	if raw, ok := metadata[responsesNamespaceToolsTransformerMetadataKey]; ok && raw != nil {
+		if typed, ok := raw.([]llm.OpenAIResponsesNamespaceTool); ok {
+			return typed
 		}
-		if err := json.Unmarshal(data, &mappings); err != nil {
-			return ""
+
+		var mappings []llm.OpenAIResponsesNamespaceTool
+		if data, err := json.Marshal(raw); err == nil {
+			if err := json.Unmarshal(data, &mappings); err == nil {
+				return mappings
+			}
+		}
+	}
+
+	if requestExt := openAIResponsesRequestExtensions(llm.RequestFromContext(ctx)); requestExt != nil {
+		return requestExt.NamespaceTools
+	}
+
+	return nil
+}
+
+// resolveNamespaceFunctionCall maps a function name reported by the provider
+// back to the namespace and sub-tool name the client originally declared.
+//
+// Two shapes are accepted: the flattened "<namespace>__<sub>" produced by
+// convertToolsToLLM, and the bare sub-tool name returned by providers that
+// received the raw namespace block. Matching is done against the declared
+// mappings rather than by splitting on "__", so namespaces that themselves
+// contain "__" (the usual "mcp__<server>" form) are never mis-split, and plain
+// functions that merely look like a flattened name are left alone.
+func resolveNamespaceFunctionCall(ctx context.Context, metadata map[string]any, name string) (string, string) {
+	if name == "" {
+		return "", name
+	}
+
+	mappings := namespaceToolMappings(ctx, metadata)
+	if len(mappings) == 0 {
+		return "", name
+	}
+
+	for _, mapping := range mappings {
+		if mapping.Namespace == "" || mapping.Name == "" {
+			continue
+		}
+
+		if namespaceFunctionName(mapping.Namespace, mapping.Name) == name {
+			return mapping.Namespace, mapping.Name
 		}
 	}
 
 	namespace := ""
+
 	for _, mapping := range mappings {
 		if mapping.Name != name || mapping.Namespace == "" {
 			continue
 		}
+
 		if namespace != "" && namespace != mapping.Namespace {
-			return ""
+			return "", name
 		}
+
 		namespace = mapping.Namespace
 	}
 
-	return namespace
+	return namespace, name
 }
 
-func namespaceForToolCall(metadata map[string]any, tc llm.ToolCall) string {
+// resolveNamespaceToolCall returns the namespace and client-facing name for a
+// tool call, preferring information the provider supplied directly.
+func resolveNamespaceToolCall(ctx context.Context, metadata map[string]any, tc llm.ToolCall) (string, string) {
+	if tc.Function.Namespace != "" {
+		return tc.Function.Namespace, tc.Function.Name
+	}
+
 	if tc.TransformerMetadata != nil {
 		if namespace, ok := tc.TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey].(string); ok && namespace != "" {
-			return namespace
+			return namespace, tc.Function.Name
 		}
 	}
 
-	return namespaceForFunctionCall(metadata, tc.Function.Name)
+	return resolveNamespaceFunctionCall(ctx, metadata, tc.Function.Name)
 }
 
 func attachAnnotationsToFirstTextItem(items []Item, annotations []llm.Annotation) ([]Item, bool) {
@@ -963,7 +1007,7 @@ func attachAnnotationsToFirstTextItem(items []Item, annotations []llm.Annotation
 }
 
 // convertToResponsesAPIResponse converts llm.Response to Responses API Response.
-func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
+func convertToResponsesAPIResponse(ctx context.Context, chatResp *llm.Response) *Response {
 	resp := &Response{
 		Object:             "response",
 		ID:                 chatResp.ID,
@@ -1013,17 +1057,16 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 						Status: lo.ToPtr("completed"),
 					})
 				} else {
-					item := Item{
+					namespace, name := resolveNamespaceToolCall(ctx, chatResp.TransformerMetadata, toolCall)
+					resp.Output = append(resp.Output, Item{
 						ID:        toolCall.ID,
 						Type:      "function_call",
 						CallID:    toolCall.ID,
-						Name:      toolCall.Function.Name,
-						Namespace: toolCall.Function.Namespace,
+						Name:      name,
+						Namespace: namespace,
 						Arguments: toolCall.Function.Arguments,
 						Status:    lo.ToPtr("completed"),
-					}
-					item.Namespace = namespaceForToolCall(chatResp.TransformerMetadata, toolCall)
-					resp.Output = append(resp.Output, item)
+					})
 				}
 			}
 		}

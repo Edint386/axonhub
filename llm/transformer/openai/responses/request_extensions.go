@@ -148,6 +148,7 @@ func buildNamespaceToolMappings(tools []Tool, rawTools []json.RawMessage) []llm.
 
 		var raw struct {
 			Tools []struct {
+				Type string `json:"type"`
 				Name string `json:"name"`
 			} `json:"tools"`
 		}
@@ -156,7 +157,9 @@ func buildNamespaceToolMappings(tools []Tool, rawTools []json.RawMessage) []llm.
 		}
 
 		for _, child := range raw.Tools {
-			if child.Name == "" {
+			// Mirror the flattening rule in convertToolsToLLM so the mapping
+			// always lines up with the tools the model actually sees.
+			if child.Name == "" || child.Type != "function" {
 				continue
 			}
 			mappings = append(mappings, llm.OpenAIResponsesNamespaceTool{

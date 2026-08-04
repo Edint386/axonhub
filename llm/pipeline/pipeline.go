@@ -269,6 +269,11 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 		return nil, err
 	}
 
+	// Make the transformed request reachable from the response side. Inbound
+	// transformers need it to restore request-scoped details that the channel
+	// outbound transformer cannot carry back in TransformerMetadata.
+	ctx = llm.WithRequest(ctx, llmRequest)
+
 	originalStream := llmRequest.Stream
 
 	var lastErr error

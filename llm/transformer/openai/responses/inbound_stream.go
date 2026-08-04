@@ -652,17 +652,14 @@ func (s *responsesInboundStream) initToolCall(tc llm.ToolCall) error {
 		}
 
 	default:
-		namespace := tc.Function.Namespace
-		if namespace == "" {
-			namespace = namespaceForToolCall(s.transformerMetadata, tc)
-		}
+		namespace, name := resolveNamespaceToolCall(s.ctx, s.transformerMetadata, tc)
 
 		item := &Item{
 			ID:        itemID,
 			Type:      "function_call",
 			Status:    lo.ToPtr("in_progress"),
 			CallID:    tc.ID,
-			Name:      tc.Function.Name,
+			Name:      name,
 			Namespace: namespace,
 		}
 
@@ -978,17 +975,14 @@ func (s *responsesInboundStream) closeCurrentOutputItem() error {
 				return fmt.Errorf("failed to enqueue function_call_arguments.done event: %w", err)
 			}
 
-			namespace := tc.Function.Namespace
-			if namespace == "" {
-				namespace = namespaceForToolCall(s.transformerMetadata, *tc)
-			}
+			namespace, name := resolveNamespaceToolCall(s.ctx, s.transformerMetadata, *tc)
 
 			item := Item{
 				ID:        itemID,
 				Type:      "function_call",
 				Status:    lo.ToPtr("completed"),
 				CallID:    tc.ID,
-				Name:      tc.Function.Name,
+				Name:      name,
 				Namespace: namespace,
 				Arguments: tc.Function.Arguments,
 			}
