@@ -26,7 +26,7 @@ type Tool struct {
 	raw           json.RawMessage
 	parametersRaw json.RawMessage
 
-	// Any of "function", "image_generation", "custom", "web_search".
+	// Any of "function", "image_generation", "custom", "web_search", "namespace".
 	Type        string `json:"type,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -35,6 +35,9 @@ type Tool struct {
 	Parameters map[string]any `json:"parameters,omitempty"`
 	// This field is from variant [FunctionTool].
 	Strict *bool `json:"strict,omitempty"`
+
+	// Tools holds sub-tools when Type is "namespace".
+	Tools []Tool `json:"tools,omitempty"`
 
 	// This field is for custom tool format definition.
 	Format *CustomToolFormat `json:"format,omitempty"`

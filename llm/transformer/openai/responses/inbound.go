@@ -795,12 +795,38 @@ func convertToolsToLLM(tools []Tool) ([]llm.Tool, error) {
 				ResponseCustomTool: customTool,
 			})
 
+		case "namespace":
+			for _, subTool := range tool.Tools {
+				if subTool.Type != "function" {
+					continue
+				}
+
+				params, err := json.Marshal(subTool.Parameters)
+				if err != nil {
+					return nil, fmt.Errorf("failed to marshal namespace tool parameters: %w", err)
+				}
+
+				result = append(result, llm.Tool{
+					Type: "function",
+					Function: llm.Function{
+						Name:        namespaceFunctionName(tool.Name, subTool.Name),
+						Description: subTool.Description,
+						Parameters:  params,
+						Strict:      subTool.Strict,
+					},
+				})
+			}
+
 		default:
 			continue
 		}
 	}
 
 	return result, nil
+}
+
+func namespaceFunctionName(namespaceName, functionName string) string {
+	return namespaceName + "__" + functionName
 }
 
 func getResponseWebSearchCallsFromMetadata(metadata map[string]any) []Item {
