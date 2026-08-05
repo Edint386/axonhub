@@ -151,8 +151,9 @@ func TestUsageLogService_CreateUsageLog_WithPriceReferenceID(t *testing.T) {
 	channelService.SetEnabledChannelsForTest([]*Channel{enabledCh})
 
 	// Verify cache contains the model price
-	require.NotNil(t, enabledCh.cachedModelPrices["gpt-4"])
-	require.Equal(t, "test-ref-123", enabledCh.cachedModelPrices["gpt-4"].ReferenceID)
+	cachedPrice, ok := enabledCh.ModelPrice("gpt-4")
+	require.True(t, ok)
+	require.Equal(t, "test-ref-123", cachedPrice.ReferenceID)
 
 	svc := NewUsageLogService(client, systemService, channelService)
 
@@ -274,8 +275,9 @@ func TestUsageLogService_CreateUsageLog_WithCachedTokens(t *testing.T) {
 	channelService.SetEnabledChannelsForTest([]*Channel{enabledCh})
 
 	// Verify cache contains the model price
-	require.NotNil(t, enabledCh.cachedModelPrices["gpt-4"])
-	require.Equal(t, "test-ref-cached", enabledCh.cachedModelPrices["gpt-4"].ReferenceID)
+	cachedPrice, ok := enabledCh.ModelPrice("gpt-4")
+	require.True(t, ok)
+	require.Equal(t, "test-ref-cached", cachedPrice.ReferenceID)
 
 	svc := NewUsageLogService(client, systemService, channelService)
 

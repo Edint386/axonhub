@@ -1142,35 +1142,42 @@ func (svc *ChannelService) refreshOAuthToken(ctx context.Context, ch *ent.Channe
 // DO NOT modify the returned map or its ChannelModelEntry values.
 // Modifications will not persist and may cause data inconsistency.
 func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
-	// Return cached result if available
-	if ch.cachedModelEntries != nil {
-		return ch.cachedModelEntries
-	}
+	ch.modelEntriesOnce.Do(func() {
+		groups := ch.GetModelEntryGroups()
+		entries := make(map[string]ChannelModelEntry, len(groups))
 
-	groups := ch.GetModelEntryGroups()
-	entries := make(map[string]ChannelModelEntry, len(groups))
-	for requestModel, entriesForModel := range groups {
-		if len(entriesForModel) == 0 {
-			continue
+		for requestModel, entriesForModel := range groups {
+			if len(entriesForModel) == 0 {
+				continue
+			}
+
+			entries[requestModel] = entriesForModel[0]
 		}
 
-		entries[requestModel] = entriesForModel[0]
-	}
+		ch.cachedModelEntries = entries
+	})
 
-	ch.cachedModelEntries = entries
-
-	return entries
+	return ch.cachedModelEntries
 }
 
 // GetModelEntryGroups returns all models this channel can handle, grouped by request model.
 // Explicit ModelMappings may define the same alias multiple times, which allows the
 // same request model to resolve to several actual provider models. Callers must not
 // modify the returned map or its slices.
+//
+// The result is computed at most once per channel instance. Concurrent callers
+// all observe the same map.
 func (ch *Channel) GetModelEntryGroups() map[string][]ChannelModelEntry {
-	if ch.cachedModelEntryGroups != nil {
-		return ch.cachedModelEntryGroups
-	}
+	ch.modelEntryGroupsOnce.Do(func() {
+		ch.cachedModelEntryGroups = ch.buildModelEntryGroups()
+	})
 
+	return ch.cachedModelEntryGroups
+}
+
+// buildModelEntryGroups computes the model entry groups from the channel's
+// supported models and settings. Callers should go through GetModelEntryGroups.
+func (ch *Channel) buildModelEntryGroups() map[string][]ChannelModelEntry {
 	entries := make(map[string][]ChannelModelEntry)
 
 	addEntry := func(entry ChannelModelEntry) bool {
@@ -1211,7 +1218,6 @@ func (ch *Channel) GetModelEntryGroups() map[string][]ChannelModelEntry {
 	}
 
 	if ch.Settings == nil {
-		ch.cachedModelEntryGroups = entries
 		return entries
 	}
 
@@ -1325,8 +1331,6 @@ func (ch *Channel) GetModelEntryGroups() map[string][]ChannelModelEntry {
 		}
 		entries = lowercased
 	}
-
-	ch.cachedModelEntryGroups = entries
 
 	return entries
 }

@@ -498,7 +498,7 @@ func (svc *ChannelService) SaveChannelModelPrices(
 		if log.DebugEnabled(ctx) {
 			log.Debug(ctx, "refreshed cached model prices after save",
 				log.Int("channel_id", channelID),
-				log.Int("count", len(ch.cachedModelPrices)),
+				log.Int("count", ch.ModelPriceCount()),
 			)
 		}
 	}
@@ -524,7 +524,8 @@ func (svc *ChannelService) preloadModelPrices(ctx context.Context, ch *Channel) 
 		cache[p.ModelID] = p
 	}
 
-	ch.cachedModelPrices = cache
+	ch.setModelPrices(cache)
+
 	if log.DebugEnabled(ctx) {
 		log.Debug(ctx, "preloaded model prices", log.Int("channel_id", ch.ID), log.Int("count", len(cache)))
 	}

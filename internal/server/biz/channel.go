@@ -65,15 +65,32 @@ type Channel struct {
 
 	// cachedModelEntries caches GetModelEntries results
 	// RequestModel -> Entry
+	//
+	// Written exactly once, guarded by modelEntriesOnce. buildChannel warms it
+	// before the channel is published to the shared enabled-channel cache, so
+	// the request hot path only ever reads it. Channels built outside
+	// buildChannel (ListModels, the association matcher) still initialize it
+	// lazily, which is why the Once is required rather than merely defensive.
+	modelEntriesOnce   sync.Once
 	cachedModelEntries map[string]ChannelModelEntry
 
 	// cachedModelEntryGroups caches GetModelEntryGroups results.
 	// RequestModel -> Entries. Explicit model mappings may expose multiple
 	// actual models under the same request model alias.
+	//
+	// Same contract as cachedModelEntries. Callers must treat the returned map
+	// and its slices as read-only.
+	modelEntryGroupsOnce   sync.Once
 	cachedModelEntryGroups map[string][]ChannelModelEntry
 
 	// cachedModelPrices caches model prices per request model id
 	// RequestModel -> ChannelModelPrice entity (contains Price and ReferenceID)
+	//
+	// Unlike the two caches above this one is refreshed at runtime:
+	// SaveChannelModelPrices calls preloadModelPrices again on the channel
+	// instance that in-flight requests are already reading from. Every access
+	// must therefore go through modelPricesMu.
+	modelPricesMu     sync.RWMutex
 	cachedModelPrices map[string]*ent.ChannelModelPrice
 
 	// cachedEnabledAPIKeys caches enabled API keys (computed once when channel is loaded)
@@ -913,6 +930,34 @@ func (svc *ChannelService) DeleteChannel(ctx context.Context, id int) error {
 // GetEnabledAPIKeys returns cached enabled API keys.
 func (c *Channel) GetEnabledAPIKeys() []string {
 	return c.cachedEnabledAPIKeys
+}
+
+// ModelPrice returns the cached price entity for the given model id.
+//
+// The price cache is swapped at runtime by preloadModelPrices on a channel
+// that is already serving traffic, so reads must be synchronized.
+func (c *Channel) ModelPrice(modelID string) (*ent.ChannelModelPrice, bool) {
+	c.modelPricesMu.RLock()
+	defer c.modelPricesMu.RUnlock()
+
+	price, ok := c.cachedModelPrices[modelID]
+
+	return price, ok
+}
+
+// ModelPriceCount returns the number of cached model prices.
+func (c *Channel) ModelPriceCount() int {
+	c.modelPricesMu.RLock()
+	defer c.modelPricesMu.RUnlock()
+
+	return len(c.cachedModelPrices)
+}
+
+// setModelPrices replaces the cached model prices.
+func (c *Channel) setModelPrices(prices map[string]*ent.ChannelModelPrice) {
+	c.modelPricesMu.Lock()
+	c.cachedModelPrices = prices
+	c.modelPricesMu.Unlock()
 }
 
 // IsAPIKeyDisabled checks if a key is disabled (O(1) lookup).
