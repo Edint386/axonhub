@@ -1154,7 +1154,7 @@ function QuotaRow({ channel, enforcementMode }: { channel: ProviderQuotaChannel;
                   const intervalUsed = Math.round(row.intervalUsedPercent);
                   const intervalTotal = Math.round(row.intervalTotalPercent);
                   const showIntervalTotal = intervalTotal !== 100;
-                  const hasWeekly = row.weeklyStatus !== '';
+                  const hasWeekly = !!row.weeklyStatus;
                   const weeklyUsed = Math.round(row.weeklyUsedPercent);
                   const weeklyTotal = Math.round(row.weeklyTotalPercent);
                   const showWeeklyTotal = weeklyTotal !== 100;
