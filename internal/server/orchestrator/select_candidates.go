@@ -67,6 +67,8 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 
 		quotaSelector := WithProviderQuotaSelector(selector, quotaProvider, systemService)
 		selector = quotaSelector
+		channelQuotaSelector := WithChannelQuotaSelector(selector, inbound.state.QuotaService)
+		selector = channelQuotaSelector
 
 		if len(inbound.state.LoadBalancers) > 0 {
 			selector = WithRoutingPolicyLoadBalancedSelector(
@@ -112,7 +114,7 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 		settings := systemService.QuotaEnforcementSettingsOrDefault(ctx)
 
 		if len(candidates) == 0 {
-			if settings.Enabled && quotaSelector.FilteredCount > 0 {
+			if channelQuotaSelector.FilteredCount > 0 || (settings.Enabled && quotaSelector.FilteredCount > 0) {
 				return nil, NewQuotaExhaustedError(llmRequest.Model)
 			}
 			return nil, fmt.Errorf("%w: %s", biz.ErrInvalidModel, llmRequest.Model)
