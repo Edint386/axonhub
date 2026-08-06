@@ -44,8 +44,9 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useChannels } from '../context/channels-context';
-import { useTestChannel, useUpdateChannel } from '../data/channels';
+import { useTestChannel, useUpdateChannel, useUpdateChannelStatus } from '../data/channels';
 import { CHANNEL_CONFIGS, getProvider } from '../data/config_channels';
+import { useSkipChannelStatusConfirmation } from '../hooks/use-channel-status-confirmation-preference';
 import { Channel } from '../data/schema';
 import { ChannelHealthCell } from './channel-health-cell';
 import { ChannelLimiterCell } from './channel-limiter-cell';
@@ -62,16 +63,32 @@ const clampWeight = (value: number) => formatWeight(Math.min(MAX_WEIGHT, Math.ma
 const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
   const channel = row.original;
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [skipStatusConfirmation] = useSkipChannelStatusConfirmation();
   const { channelPermissions } = usePermissions();
+  const updateChannelStatus = useUpdateChannelStatus();
 
   const isEnabled = channel.status === 'enabled';
   const isArchived = channel.status === 'archived';
 
-  const handleSwitchClick = useCallback(() => {
-    if (!isArchived) {
-      setDialogOpen(true);
+  const handleSwitchClick = useCallback(async () => {
+    if (isArchived || updateChannelStatus.isPending) {
+      return;
     }
-  }, [isArchived]);
+
+    if (!skipStatusConfirmation) {
+      setDialogOpen(true);
+      return;
+    }
+
+    const newStatus = isEnabled ? 'disabled' : 'enabled';
+    try {
+      await updateChannelStatus.mutateAsync({
+        id: channel.id,
+        status: newStatus,
+      });
+    } catch (_error) {
+    }
+  }, [channel.id, isArchived, isEnabled, skipStatusConfirmation, updateChannelStatus]);
 
   if (!channelPermissions.canWrite) {
     return <Badge variant='outline'>{channel.status}</Badge>;
@@ -79,7 +96,12 @@ const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
 
   return (
     <div className='flex justify-center'>
-      <Switch checked={isEnabled} onCheckedChange={handleSwitchClick} disabled={isArchived} data-testid='channel-status-switch' />
+      <Switch
+        checked={isEnabled}
+        onCheckedChange={handleSwitchClick}
+        disabled={isArchived || updateChannelStatus.isPending}
+        data-testid='channel-status-switch'
+      />
       {dialogOpen && <ChannelsStatusDialog open={dialogOpen} onOpenChange={setDialogOpen} currentRow={channel} />}
     </div>
   );
