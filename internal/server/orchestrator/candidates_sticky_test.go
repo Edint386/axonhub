@@ -9,6 +9,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/providerquotastatus"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
@@ -205,6 +206,38 @@ func TestLoadBalancedSelector_TraceStickySelection(t *testing.T) {
 		require.Equal(t, 2, result[0].Channel.ID)
 		require.True(t, result[0].TraceSticky)
 	})
+}
+
+func TestRoutingPipeline_ProviderQuotaFiltersBeforeSticky(t *testing.T) {
+	trace := &ent.Trace{ID: 30, ThreadID: 40}
+	ctx := contexts.WithTrace(context.Background(), trace)
+	candidates := []*ChannelModelsCandidate{
+		stickyTestCandidate(1, 0),
+		stickyTestCandidate(2, 0),
+	}
+	provider := &mockQuotaStatusProvider{statuses: map[int]*biz.QuotaChannelStatus{
+		1: {Status: providerquotastatus.StatusExhausted, Ready: false},
+	}}
+	settings := &mockQuotaEnforcementSettingsProvider{
+		settings: &biz.QuotaEnforcementSettings{Enabled: true, Mode: biz.QuotaEnforcementModeExhaustedOnly},
+	}
+	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+		Enabled:           true,
+		MaxChannelRetries: 1,
+		TraceStickyMode:   biz.TraceStickyPreferPreviousChannel,
+	}}
+	selector := WithTraceStickyLoadBalancedSelector(
+		WithProviderQuotaSelector(&staticChannelSelector{candidates: candidates}, provider, settings),
+		NewLoadBalancer(policy, nil),
+		policy,
+		&fakePreviousChannelProvider{traceChannelIDs: map[int]int{trace.ID: 1}},
+	)
+
+	result, err := selector.Select(ctx, &llm.Request{Model: "gpt-4"})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, 2, result[0].Channel.ID)
+	require.False(t, result[0].TraceSticky)
 }
 
 func TestResolveLoadBalancer_ReportsAppliedStrategy(t *testing.T) {
