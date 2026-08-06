@@ -46,11 +46,11 @@ func (s *UsageLogService) computeUsageCost(ctx context.Context, channelID int, m
 		log.Debug(ctx, "checking cached model price",
 			log.Int("channel_id", channelID),
 			log.String("model_id", modelID),
-			log.Int("cached_price_count", len(ch.cachedModelPrices)),
+			log.Int("cached_price_count", ch.ModelPriceCount()),
 		)
 	}
 
-	if modelPrice, ok := ch.cachedModelPrices[modelID]; ok {
+	if modelPrice, ok := ch.ModelPrice(modelID); ok {
 		items, total := ComputeUsageCost(usage, modelPrice.Price, time.Now())
 
 		totalCost := total.InexactFloat64()
