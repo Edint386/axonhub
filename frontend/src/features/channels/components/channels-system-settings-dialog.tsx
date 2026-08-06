@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Loader2, Settings2, Activity, RotateCcw } from 'lucide-react';
+import { Loader2, Settings2, Activity, MousePointerClick, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useChannelSetting, useUpdateChannelSetting, type AutoSyncFrequency, type ProbeFrequency } from '@/features/system/data/system';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useChannels } from '../context/channels-context';
+import { useSkipChannelStatusConfirmation } from '../hooks/use-channel-status-confirmation-preference';
 
 const MAX_PROMPT_CODE_POINTS = 4096;
 const DEFAULT_TEST_SYSTEM_PROMPT = 'You are a helpful assistant.';
@@ -42,12 +43,14 @@ export function ChannelsSystemSettingsDialog() {
   const canWriteSettings = hasSystemScope('write_settings');
   const { data: settings, isLoading } = useChannelSetting({ enabled: isOpen && canReadSettings });
   const updateSettings = useUpdateChannelSetting();
+  const [skipStatusConfirmation, setSkipStatusConfirmation] = useSkipChannelStatusConfirmation();
 
   const [probeEnabled, setProbeEnabled] = React.useState(false);
   const [probeFrequency, setProbeFrequency] = React.useState<ProbeFrequency>('ONE_MINUTE');
   const [autoSyncFrequency, setAutoSyncFrequency] = React.useState<AutoSyncFrequency>('ONE_HOUR');
   const [testSystemPrompt, setTestSystemPrompt] = React.useState(DEFAULT_TEST_SYSTEM_PROMPT);
   const [testUserPrompt, setTestUserPrompt] = React.useState(DEFAULT_TEST_USER_PROMPT);
+  const [skipStatusConfirmationDraft, setSkipStatusConfirmationDraft] = React.useState(false);
 
   React.useEffect(() => {
     if (!isOpen || !settings) return;
@@ -61,6 +64,12 @@ export function ChannelsSystemSettingsDialog() {
     setTestSystemPrompt(settings.testSystemPrompt ?? DEFAULT_TEST_SYSTEM_PROMPT);
     setTestUserPrompt(settings.testUserPrompt ?? DEFAULT_TEST_USER_PROMPT);
   }, [isOpen, settings]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setSkipStatusConfirmationDraft(skipStatusConfirmation);
+    }
+  }, [isOpen, skipStatusConfirmation]);
 
   const systemPromptLength = countCodePoints(testSystemPrompt);
   const userPromptLength = countCodePoints(testUserPrompt);
@@ -79,8 +88,21 @@ export function ChannelsSystemSettingsDialog() {
       testSystemPrompt,
       testUserPrompt,
     });
+    setSkipStatusConfirmation(skipStatusConfirmationDraft);
     setOpen(null);
-  }, [updateSettings, probeEnabled, probeFrequency, autoSyncFrequency, testSystemPrompt, testUserPrompt, canWriteSettings, promptTooLong, setOpen]);
+  }, [
+    updateSettings,
+    probeEnabled,
+    probeFrequency,
+    autoSyncFrequency,
+    testSystemPrompt,
+    testUserPrompt,
+    skipStatusConfirmationDraft,
+    setSkipStatusConfirmation,
+    canWriteSettings,
+    promptTooLong,
+    setOpen,
+  ]);
 
   const handleClose = useCallback(() => {
     setOpen(null);
@@ -175,6 +197,34 @@ export function ChannelsSystemSettingsDialog() {
                     </SelectContent>
                   </Select>
                   <p className='text-muted-foreground text-xs'>{t('channels.dialogs.systemSettings.autoSync.frequencyDescription')}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className='pb-0'>
+                <CardTitle className='flex items-center gap-2 text-sm'>
+                  <MousePointerClick className='text-muted-foreground h-4 w-4' />
+                  {t('channels.dialogs.systemSettings.statusConfirmation.label')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-4 pt-4'>
+                <div className='flex items-center justify-between'>
+                  <div className='flex-1 pr-4'>
+                    <p className='text-sm font-medium'>{t('channels.dialogs.systemSettings.statusConfirmation.skipLabel')}</p>
+                    <p className='text-muted-foreground text-sm'>
+                      {t('channels.dialogs.systemSettings.statusConfirmation.skipDescription')}
+                    </p>
+                    <p className='text-muted-foreground mt-1 text-xs'>
+                      {t('channels.dialogs.systemSettings.statusConfirmation.localPreference')}
+                    </p>
+                  </div>
+                  <Switch
+                    id='skip-status-confirmation'
+                    checked={skipStatusConfirmationDraft}
+                    onCheckedChange={setSkipStatusConfirmationDraft}
+                    disabled={updateSettings.isPending || !canWriteSettings}
+                  />
                 </div>
               </CardContent>
             </Card>
