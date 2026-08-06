@@ -2483,7 +2483,7 @@ func TestConvertToResponsesAPIResponse_AttachesAnnotationsToFirstTextItem(t *tes
 }
 
 func TestConvertToResponsesAPIResponse_PreservesMultipleReasoningItems(t *testing.T) {
-	resp := convertToResponsesAPIResponse(&llm.Response{
+	resp := convertToResponsesAPIResponse(context.Background(), &llm.Response{
 		ID:      "resp_reasoning_items",
 		Model:   "gpt-5",
 		Created: 1,

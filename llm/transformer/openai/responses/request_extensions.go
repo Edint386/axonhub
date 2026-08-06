@@ -17,14 +17,16 @@ func attachOpenAIResponsesRequestExtensions(chatReq *llm.Request, req *Request, 
 		reasoningContext = req.Reasoning.Context
 	}
 	requestExt := &llm.OpenAIResponsesRequestExtensions{
-		ReasoningContext: reasoningContext,
-		RawTools:         buildRawOnlyToolFragments(req.Tools, raw.Tools),
-		ToolSignatures:   buildRepresentedToolSignatures(req.Tools),
-		RawToolChoice:    rawUnsupportedToolChoice(req.ToolChoice, raw.ToolChoice),
-		RawInputItems:    buildRawOnlyInputFragments(req.Input, raw.InputItems),
+		ReasoningContext:   reasoningContext,
+		RawTools:           buildRawOnlyToolFragments(req.Tools, raw.Tools),
+		ToolSignatures:     buildRepresentedToolSignatures(req.Tools),
+		RawToolChoice:      rawUnsupportedToolChoice(req.ToolChoice, raw.ToolChoice),
+		RawInputItems:      buildRawOnlyInputFragments(req.Input, raw.InputItems),
+		NamespaceTools:     buildNamespaceToolMappings(req.Tools, raw.Tools),
+		PlainFunctionNames: buildPlainFunctionNames(req.Tools),
 	}
 
-	if requestExt.ReasoningContext == "" && len(requestExt.RawTools) == 0 && len(requestExt.RawToolChoice) == 0 && len(requestExt.RawInputItems) == 0 {
+	if requestExt.ReasoningContext == "" && len(requestExt.RawTools) == 0 && len(requestExt.RawToolChoice) == 0 && len(requestExt.RawInputItems) == 0 && len(requestExt.NamespaceTools) == 0 {
 		return
 	}
 
@@ -33,6 +35,21 @@ func attachOpenAIResponsesRequestExtensions(chatReq *llm.Request, req *Request, 
 		return
 	}
 	ext.Request = requestExt
+}
+
+func buildPlainFunctionNames(tools []Tool) []string {
+	if len(tools) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Type == "function" && tool.Name != "" {
+			names = append(names, tool.Name)
+		}
+	}
+
+	return names
 }
 
 type rawRequestFragments struct {
@@ -130,6 +147,41 @@ func representedNamespaceToolCount(tool Tool) int {
 	}
 
 	return count
+}
+
+func buildNamespaceToolMappings(tools []Tool, rawTools []json.RawMessage) []llm.OpenAIResponsesNamespaceTool {
+	if len(tools) == 0 {
+		return nil
+	}
+
+	var mappings []llm.OpenAIResponsesNamespaceTool
+	for i := range tools {
+		if tools[i].Type != "namespace" || tools[i].Name == "" || i >= len(rawTools) || len(rawTools[i]) == 0 {
+			continue
+		}
+
+		var raw struct {
+			Tools []struct {
+				Type string `json:"type"`
+				Name string `json:"name"`
+			} `json:"tools"`
+		}
+		if err := json.Unmarshal(rawTools[i], &raw); err != nil {
+			continue
+		}
+
+		for _, child := range raw.Tools {
+			if child.Name == "" || child.Type != "function" {
+				continue
+			}
+			mappings = append(mappings, llm.OpenAIResponsesNamespaceTool{
+				Namespace: tools[i].Name,
+				Name:      child.Name,
+			})
+		}
+	}
+
+	return mappings
 }
 
 func isStructurallyRepresentedToolType(toolType string) bool {
