@@ -33,6 +33,11 @@ type ChannelModelsCandidate struct {
 	ModelRoutingPolicy *ModelRoutingPolicy
 }
 
+type candidatePriorityTier struct {
+	modelPriority   int
+	channelPriority int
+}
+
 // ModelRoutingPolicy contains model-level overrides carried from model
 // resolution into the load-balancing decorator without another database query.
 type ModelRoutingPolicy struct {
@@ -744,7 +749,7 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 	}
 
 	if traceStickyMode == biz.TraceStickyPreferPreviousChannel {
-		if stickyCandidate, remainingCandidates := s.selectTraceStickyCandidate(ctx, candidates); stickyCandidate != nil {
+		if stickyCandidate, remainingCandidates := s.selectTraceStickyCandidate(ctx, candidates, loadBalancer); stickyCandidate != nil {
 			stickyCandidate.TraceSticky = true
 
 			fallbackCount := max(requiredCount-1, 0)
@@ -780,6 +785,7 @@ func resolveLoadBalancer(loadBalancers map[string]*LoadBalancer, strategy string
 func (s *LoadBalancedSelector) selectTraceStickyCandidate(
 	ctx context.Context,
 	candidates []*ChannelModelsCandidate,
+	loadBalancer *LoadBalancer,
 ) (*ChannelModelsCandidate, []*ChannelModelsCandidate) {
 	if s.previousChannelProvider == nil || len(candidates) == 0 {
 		return nil, candidates
@@ -789,7 +795,7 @@ func (s *LoadBalancedSelector) selectTraceStickyCandidate(
 		channelID, err := s.previousChannelProvider.GetPreviousChannelID(ctx, trace.ID)
 		if err != nil {
 			log.Warn(ctx, "failed to get previous trace channel", log.Int("trace_id", trace.ID), log.Cause(err))
-		} else if stickyCandidate, remainingCandidates := extractStickyCandidate(candidates, channelID); stickyCandidate != nil {
+		} else if stickyCandidate, remainingCandidates := s.extractEligibleStickyCandidate(ctx, candidates, channelID, loadBalancer); stickyCandidate != nil {
 			return stickyCandidate, remainingCandidates
 		}
 	}
@@ -811,7 +817,75 @@ func (s *LoadBalancedSelector) selectTraceStickyCandidate(
 		return nil, candidates
 	}
 
-	return extractStickyCandidate(candidates, channelID)
+	return s.extractEligibleStickyCandidate(ctx, candidates, channelID, loadBalancer)
+}
+
+func (s *LoadBalancedSelector) extractEligibleStickyCandidate(
+	ctx context.Context,
+	candidates []*ChannelModelsCandidate,
+	channelID int,
+	loadBalancer *LoadBalancer,
+) (*ChannelModelsCandidate, []*ChannelModelsCandidate) {
+	if channelID == 0 {
+		return nil, candidates
+	}
+
+	bestTier, ok := bestAvailablePriorityTier(ctx, candidates, loadBalancer)
+	if !ok {
+		return nil, candidates
+	}
+
+	var stickyCandidate *ChannelModelsCandidate
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.Channel == nil || candidate.Channel.ID != channelID {
+			continue
+		}
+
+		if _, unavailable := loadBalancer.HardUnavailableReason(ctx, candidate.Channel); unavailable || !samePriorityTier(candidate, bestTier) {
+			continue
+		}
+
+		if stickyCandidate == nil {
+			stickyCandidate = candidate
+		}
+	}
+
+	if stickyCandidate == nil {
+		return nil, candidates
+	}
+
+	stickyClone := *stickyCandidate
+	remainingCandidates := make([]*ChannelModelsCandidate, 0, len(candidates)-1)
+	for _, candidate := range candidates {
+		if candidate != nil && candidate.Channel != nil && candidate.Channel.ID == channelID {
+			continue
+		}
+		remainingCandidates = append(remainingCandidates, candidate)
+	}
+	return &stickyClone, remainingCandidates
+}
+
+func samePriorityTier(candidate *ChannelModelsCandidate, tier candidatePriorityTier) bool {
+	return candidate != nil && candidate.Channel != nil && candidate.Priority == tier.modelPriority && candidate.Channel.Priority == tier.channelPriority
+}
+
+func bestAvailablePriorityTier(ctx context.Context, candidates []*ChannelModelsCandidate, loadBalancer *LoadBalancer) (candidatePriorityTier, bool) {
+	var best candidatePriorityTier
+	found := false
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.Channel == nil {
+			continue
+		}
+		if _, unavailable := loadBalancer.HardUnavailableReason(ctx, candidate.Channel); unavailable {
+			continue
+		}
+		tier := candidatePriorityTier{modelPriority: candidate.Priority, channelPriority: candidate.Channel.Priority}
+		if !found || tier.modelPriority < best.modelPriority || (tier.modelPriority == best.modelPriority && tier.channelPriority > best.channelPriority) {
+			best = tier
+			found = true
+		}
+	}
+	return best, found
 }
 
 // extractStickyCandidate returns the highest-priority candidate for channelID
@@ -864,24 +938,43 @@ func (s *LoadBalancedSelector) sortCandidates(
 		return candidates
 	}
 
-	// Group candidates by priority first (lower priority value = higher priority)
-	priorityGroups := make(map[int][]*ChannelModelsCandidate)
+	// Group candidates by model association priority first, then channel priority.
+	priorityGroups := make(map[candidatePriorityTier][]*ChannelModelsCandidate)
 	for _, c := range candidates {
-		priorityGroups[c.Priority] = append(priorityGroups[c.Priority], c)
+		if c == nil || c.Channel == nil {
+			continue
+		}
+		tier := candidatePriorityTier{modelPriority: c.Priority, channelPriority: c.Channel.Priority}
+		priorityGroups[tier] = append(priorityGroups[tier], c)
 	}
 
-	// Get sorted priority keys (lower priority value = higher priority)
+	// Get sorted priority tiers (lower model priority, then higher channel priority).
 	priorities := lo.Keys(priorityGroups)
 
-	// Sort priorities: lower value = higher priority
-	slices.Sort(priorities)
+	slices.SortFunc(priorities, func(a, b candidatePriorityTier) int {
+		if a.modelPriority != b.modelPriority {
+			return a.modelPriority - b.modelPriority
+		}
+		return b.channelPriority - a.channelPriority
+	})
 
-	// For each priority group, apply load balancing to sort candidates within the group
-	// Stop early if we have collected enough candidates
-	var result []*ChannelModelsCandidate
+	// For each priority group, apply load balancing to sort candidates within the group.
+	// Hard-unavailable channels remain as last-resort retry candidates.
+	result := make([]*ChannelModelsCandidate, 0, min(requiredCount, len(candidates)))
+	deferredUnavailable := make([]*ChannelModelsCandidate, 0)
 
 	for _, p := range priorities {
-		group := priorityGroups[p]
+		group := make([]*ChannelModelsCandidate, 0, len(priorityGroups[p]))
+		for _, candidate := range priorityGroups[p] {
+			if _, unavailable := loadBalancer.HardUnavailableReason(ctx, candidate.Channel); unavailable {
+				deferredUnavailable = append(deferredUnavailable, candidate)
+				continue
+			}
+			group = append(group, candidate)
+		}
+		if len(group) == 0 {
+			continue
+		}
 
 		// Apply load balancing to sort candidates within this priority group.
 		useStream := req.Stream != nil && *req.Stream
@@ -909,12 +1002,17 @@ func (s *LoadBalancedSelector) sortCandidates(
 		}
 	}
 
+	if len(result) < requiredCount {
+		result = append(result, deferredUnavailable[:min(requiredCount-len(result), len(deferredUnavailable))]...)
+	}
+
 	if log.DebugEnabled(ctx) {
 		log.Debug(ctx, "Load balanced candidates for model",
 			log.String("model", req.Model),
 			log.Int("total_candidates", len(candidates)),
 			log.Int("sorted_candidates", len(result)),
-			log.Int("required_count", requiredCount))
+			log.Int("required_count", requiredCount),
+			log.Any("priority_tiers", priorities))
 	}
 
 	return result
