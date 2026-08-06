@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 
 	"github.com/samber/lo"
 
@@ -67,11 +66,16 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 
 		quotaSelector := WithProviderQuotaSelector(selector, quotaProvider, systemService)
 		selector = quotaSelector
-		channelQuotaSelector := WithChannelQuotaSelector(selector, inbound.state.QuotaService)
-		selector = channelQuotaSelector
 
-		if inbound.state.LoadBalancer != nil {
-			selector = WithLoadBalancedSelector(selector, inbound.state.LoadBalancer, inbound.state.RetryPolicyProvider)
+		if len(inbound.state.LoadBalancers) > 0 {
+			selector = WithRoutingPolicyLoadBalancedSelector(
+				selector,
+				inbound.state.LoadBalancers,
+				inbound.state.RetryPolicyProvider,
+				inbound.state.RequestService,
+				inbound.state.APIKey,
+				&inbound.state.RoutingPolicy,
+			)
 		}
 
 		candidates, err := selector.Select(ctx, llmRequest)
@@ -79,12 +83,12 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 			return nil, err
 		}
 
-		candidates = randomizeAliasModelOrder(candidates)
-
 		if log.DebugEnabled(ctx) {
 			log.Debug(ctx, "selected candidates",
 				log.Int("candidate_count", len(candidates)),
 				log.String("model", llmRequest.Model),
+				log.String("load_balance_strategy", inbound.state.RoutingPolicy.LoadBalancerStrategy),
+				log.String("trace_sticky_mode", string(inbound.state.RoutingPolicy.TraceStickyMode)),
 				log.Any("candidates", lo.Map(candidates, func(candidate *ChannelModelsCandidate, _ int) map[string]any {
 					return map[string]any{
 						"channel_name": candidate.Channel.Name,
@@ -105,7 +109,7 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 		settings := systemService.QuotaEnforcementSettingsOrDefault(ctx)
 
 		if len(candidates) == 0 {
-			if channelQuotaSelector.FilteredCount > 0 || (settings.Enabled && quotaSelector.FilteredCount > 0) {
+			if settings.Enabled && quotaSelector.FilteredCount > 0 {
 				return nil, NewQuotaExhaustedError(llmRequest.Model)
 			}
 			return nil, fmt.Errorf("%w: %s", biz.ErrInvalidModel, llmRequest.Model)
@@ -115,7 +119,7 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 			// In DePrioritize mode the quota selector doesn't filter candidates,
 			// so we must check quota status again here to determine if all
 			// remaining channels are exhausted.
-			if areAllChannelsExhausted(candidates, quotaProvider, llmRequest) {
+			if areAllChannelsExhausted(ctx, candidates, quotaProvider, llmRequest) {
 				return nil, NewQuotaExhaustedError(llmRequest.Model)
 			}
 		}
@@ -127,90 +131,7 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 	})
 }
 
-func randomizeAliasModelOrder(candidates []*ChannelModelsCandidate) []*ChannelModelsCandidate {
-	if len(candidates) == 0 {
-		return candidates
-	}
-
-	randomized := make([]*ChannelModelsCandidate, len(candidates))
-	for i, candidate := range candidates {
-		if candidate == nil || len(candidate.Models) < 2 {
-			randomized[i] = candidate
-			continue
-		}
-
-		cloned := *candidate
-		cloned.Models = randomizeDuplicateRequestModelGroups(candidate.Models)
-		randomized[i] = &cloned
-	}
-
-	return randomized
-}
-
-func randomizeDuplicateRequestModelGroups(models []biz.ChannelModelEntry) []biz.ChannelModelEntry {
-	return randomizeDuplicateRequestModelGroupsWithRand(models, rand.IntN)
-}
-
-func randomizeDuplicateRequestModelGroupsWithRand(
-	models []biz.ChannelModelEntry,
-	intN func(int) int,
-) []biz.ChannelModelEntry {
-	if len(models) < 2 {
-		return models
-	}
-
-	countByRequestModel := make(map[string]int, len(models))
-	for _, model := range models {
-		countByRequestModel[model.RequestModel]++
-	}
-
-	hasDuplicateRequestModel := false
-	for _, count := range countByRequestModel {
-		if count > 1 {
-			hasDuplicateRequestModel = true
-			break
-		}
-	}
-	if !hasDuplicateRequestModel {
-		return models
-	}
-
-	randomized := append([]biz.ChannelModelEntry(nil), models...)
-	entriesByRequestModel := make(map[string][]biz.ChannelModelEntry, len(countByRequestModel))
-	for _, model := range models {
-		if countByRequestModel[model.RequestModel] < 2 {
-			continue
-		}
-
-		entriesByRequestModel[model.RequestModel] = append(entriesByRequestModel[model.RequestModel], model)
-	}
-
-	for requestModel, entries := range entriesByRequestModel {
-		shuffled := append([]biz.ChannelModelEntry(nil), entries...)
-		for i := len(shuffled) - 1; i > 0; i-- {
-			j := intN(i + 1)
-			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-		}
-
-		entriesByRequestModel[requestModel] = shuffled
-	}
-
-	nextIndexByRequestModel := make(map[string]int, len(entriesByRequestModel))
-	for i, model := range randomized {
-		entries, ok := entriesByRequestModel[model.RequestModel]
-		if !ok {
-			continue
-		}
-
-		nextIndex := nextIndexByRequestModel[model.RequestModel]
-		randomized[i] = entries[nextIndex]
-		nextIndexByRequestModel[model.RequestModel] = nextIndex + 1
-	}
-
-	return randomized
-}
-
-func areAllChannelsExhausted(candidates []*ChannelModelsCandidate, quotaProvider ProviderQuotaStatusProvider, llmRequest *llm.Request) bool {
+func areAllChannelsExhausted(ctx context.Context, candidates []*ChannelModelsCandidate, quotaProvider ProviderQuotaStatusProvider, llmRequest *llm.Request) bool {
 	if len(candidates) == 0 || quotaProvider == nil {
 		return false
 	}
@@ -218,7 +139,7 @@ func areAllChannelsExhausted(candidates []*ChannelModelsCandidate, quotaProvider
 	limitType := provider_quota.RequestModality(llmRequest.Image != nil)
 
 	for _, c := range candidates {
-		quotaStatus := quotaProvider.GetQuotaStatus(c.Channel.ID)
+		quotaStatus := quotaProvider.GetQuotaStatus(ctx, c.Channel.ID)
 		if quotaStatus == nil {
 			return false
 		}

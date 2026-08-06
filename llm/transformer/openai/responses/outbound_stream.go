@@ -422,14 +422,24 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 			},
 		}
 
-	case StreamEventTypeReasoningSummaryTextDelta:
+	case StreamEventTypeReasoningSummaryTextDelta, StreamEventTypeReasoningTextDelta:
 		// Reasoning content delta
 		s.state.reasoningContent.WriteString(streamEvent.Delta)
+		itemID := lo.FromPtr(streamEvent.ItemID)
+		if itemID == "" {
+			return nil // Intentionally skip an unassociated reasoning delta
+		}
+		resp.TransformerMetadata = map[string]any{
+			responsesReasoningItemTransformerMetadataKey: map[string]any{
+				"id": itemID,
+			},
+		}
 
 		resp.Choices = []llm.Choice{
 			{
 				Index: 0,
 				Delta: &llm.Message{
+					ID:               itemID,
 					ReasoningContent: &streamEvent.Delta,
 				},
 			},
@@ -439,13 +449,20 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		// Text content completed - skip, content was already streamed via deltas
 		return nil // Intentionally skip this event
 
-	case StreamEventTypeReasoningSummaryTextDone:
+	case StreamEventTypeReasoningSummaryTextDone, StreamEventTypeReasoningTextDone:
 		// Reasoning content completed - skip, content was already streamed via deltas
 		return nil // Intentionally skip this event
 
 	case StreamEventTypeOutputItemDone:
 		if streamEvent.Item == nil {
 			return nil // Intentionally skip this event
+		}
+		if streamEvent.Item.Type == "compaction" || streamEvent.Item.Type == "compaction_summary" {
+			resp.Choices = []llm.Choice{{
+				Index: 0,
+				Delta: lo.ToPtr(convertOutputToMessage([]Item{*streamEvent.Item}, s.state.transformerMetadata)),
+			}}
+			break
 		}
 		if streamEvent.Item.Type == "web_search_call" {
 			appendResponseWebSearchCallMetadata(s.state.transformerMetadata, *streamEvent.Item)

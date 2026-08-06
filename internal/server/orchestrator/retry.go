@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"errors"
+	"io"
+	"net"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,12 +20,16 @@ func isRetryableError(err error) bool {
 		return false
 	}
 
-	return httpclient.IsHTTPStatusCodeRetryable(ExtractStatusCodeFromError(err))
+	return isRetryableTransportError(err) ||
+		httpclient.IsHTTPStatusCodeRetryable(ExtractStatusCodeFromError(err))
 }
 
 func isRetryableErrorForChannel(err error, ch *biz.Channel) bool {
 	if err == nil {
 		return false
+	}
+	if isRetryableTransportError(err) {
+		return true
 	}
 
 	statusCode := ExtractStatusCodeFromError(err)
@@ -37,6 +43,24 @@ func isRetryableErrorForChannel(err error, ch *biz.Channel) bool {
 
 	return slices.Contains(ch.Settings.RetryableStatusCodes, statusCode) ||
 		matchesRetryableErrorPattern(err, ch.Settings.RetryableErrorPatterns)
+}
+
+// isRetryableTransportError identifies failures where the upstream connection
+// ended before a usable response was received. The streaming pipeline only
+// invokes retry selection before response content is committed, so retrying
+// these transport failures cannot duplicate already-delivered output.
+func isRetryableTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	var netErr net.Error
+
+	return errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary())
 }
 
 func matchesRetryableErrorPattern(err error, patterns []objects.RetryableErrorPattern) bool {
@@ -90,22 +114,53 @@ func ExtractStatusCodeFromError(err error) int {
 	return 0
 }
 
-func deriveLoadBalancerStrategy(retryPolicy *biz.RetryPolicy, apiKey *ent.APIKey) string {
-	strategy := retryPolicy.LoadBalancerStrategy
+type EffectiveRoutingPolicy struct {
+	LoadBalancerStrategy string
+	TraceStickyMode      biz.TraceStickyMode
+}
+
+func deriveRoutingPolicy(
+	retryPolicy *biz.RetryPolicy,
+	apiKey *ent.APIKey,
+	modelPolicy *ModelRoutingPolicy,
+) EffectiveRoutingPolicy {
+	policy := EffectiveRoutingPolicy{
+		LoadBalancerStrategy: retryPolicy.LoadBalancerStrategy,
+		TraceStickyMode:      retryPolicy.TraceStickyMode,
+	}
+
+	if modelPolicy != nil {
+		if strategy := objects.NormalizeRoutingPolicyValue(modelPolicy.LoadBalancerStrategy); strategy != objects.RoutingPolicyDefault && objects.IsValidLoadBalancerStrategy(strategy) {
+			policy.LoadBalancerStrategy = strategy
+		}
+		if mode := objects.NormalizeRoutingPolicyValue(modelPolicy.TraceStickyMode); mode != objects.RoutingPolicyDefault && objects.IsValidTraceStickyMode(mode) {
+			policy.TraceStickyMode = biz.TraceStickyMode(mode)
+		}
+	}
+
 	if apiKey == nil {
-		return strategy
+		return policy
 	}
 
 	activeProfile := apiKey.GetActiveProfile()
 	if activeProfile == nil {
-		return strategy
+		return policy
 	}
 
-	if activeProfile.LoadBalanceStrategy == nil ||
-		*activeProfile.LoadBalanceStrategy == "" ||
-		*activeProfile.LoadBalanceStrategy == "system_default" {
-		return strategy
+	if activeProfile.LoadBalanceStrategy != nil {
+		if strategy := objects.NormalizeRoutingPolicyValue(*activeProfile.LoadBalanceStrategy); strategy != objects.RoutingPolicyDefault && objects.IsValidLoadBalancerStrategy(strategy) {
+			policy.LoadBalancerStrategy = strategy
+		}
+	}
+	if activeProfile.TraceStickyMode != nil {
+		if mode := objects.NormalizeRoutingPolicyValue(*activeProfile.TraceStickyMode); mode != objects.RoutingPolicyDefault && objects.IsValidTraceStickyMode(mode) {
+			policy.TraceStickyMode = biz.TraceStickyMode(mode)
+		}
 	}
 
-	return *activeProfile.LoadBalanceStrategy
+	return policy
+}
+
+func deriveLoadBalancerStrategy(retryPolicy *biz.RetryPolicy, apiKey *ent.APIKey) string {
+	return deriveRoutingPolicy(retryPolicy, apiKey, nil).LoadBalancerStrategy
 }

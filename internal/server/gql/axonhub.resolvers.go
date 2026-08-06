@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
@@ -42,10 +43,8 @@ func (r *channelResolver) DefaultEndpoints(ctx context.Context, obj *ent.Channel
 // AllModelEntries is the resolver for the allModelEntries field.
 func (r *channelResolver) AllModelEntries(ctx context.Context, obj *ent.Channel) ([]*biz.ChannelModelEntry, error) {
 	ch := biz.Channel{Channel: obj}
-	entryGroups := ch.GetModelEntryGroups()
-	result := lo.FlatMap(lo.Values(entryGroups), func(entries []biz.ChannelModelEntry, _ int) []biz.ChannelModelEntry {
-		return entries
-	})
+	entries := ch.GetModelEntries()
+	result := lo.Values(entries)
 
 	return lo.ToSlicePtr(result), nil
 }
@@ -752,20 +751,49 @@ func (r *queryResolver) AllChannelSummarys(ctx context.Context, includeArchived 
 		statusFilter = append(statusFilter, channel.StatusArchived)
 	}
 
-	channels, err := r.client.Channel.Query().
-		Where(channel.StatusIn(statusFilter...)).
-		Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query channels: %w", err)
-	}
-
 	projectID, ok := contexts.GetProjectID(ctx)
+	canReadChannels := authz.HasScope(ctx, scopes.ScopeReadChannels)
 	if !ok || projectID == 0 {
+		if !canReadChannels {
+			return nil, authz.RequireScope(ctx, scopes.ScopeReadChannels)
+		}
+		channels, err := r.client.Channel.Query().
+			Where(channel.StatusIn(statusFilter...)).
+			Order(ent.Desc(channel.FieldOrderingWeight)).
+			All(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query channels: %w", err)
+		}
 		return channels, nil
 	}
 
-	proj, err := r.client.Project.Get(ctx, projectID)
+	var (
+		channels []*ent.Channel
+		err      error
+	)
+	if canReadChannels {
+		channels, err = r.client.Channel.Query().
+			Where(channel.StatusIn(statusFilter...)).
+			Order(ent.Desc(channel.FieldOrderingWeight)).
+			All(ctx)
+	} else {
+		if !authz.HasScope(ctx, scopes.ScopeWriteRequests) && !authz.HasScope(ctx, scopes.ScopeWriteAPIKeys) {
+			return nil, authz.RequireScope(ctx, scopes.ScopeWriteRequests)
+		}
+		channels, err = authz.RunWithSystemBypass(ctx, "project-available-channels", func(ctx context.Context) ([]*ent.Channel, error) {
+			return r.client.Channel.Query().
+				Where(channel.StatusEQ(channel.StatusEnabled)).
+				Order(ent.Desc(channel.FieldOrderingWeight)).
+				All(ctx)
+		})
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query project channels: %w", err)
+	}
+
+	proj, err := authz.RunWithSystemBypass(ctx, "project-available-channels-profile", func(ctx context.Context) (*ent.Project, error) {
+		return r.client.Project.Get(ctx, projectID)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
@@ -874,38 +902,6 @@ func (r *queryResolver) APIKeyQuotaUsages(ctx context.Context, apiKeyID objects.
 	}
 
 	return result, nil
-}
-
-// ChannelQuotaUsage is the resolver for the channelQuotaUsage field.
-func (r *queryResolver) ChannelQuotaUsage(ctx context.Context, channelID objects.GUID) (*ChannelQuotaUsage, error) {
-	ch, err := r.client.Channel.Get(ctx, channelID.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get channel: %w", err)
-	}
-
-	if ch.Settings == nil || ch.Settings.Quota == nil {
-		return nil, nil
-	}
-
-	quotaService := biz.NewQuotaService(r.client, r.systemService)
-	quotaRes, err := quotaService.GetChannelQuota(ctx, ch.ID, ch.Settings.Quota)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get channel quota usage: %w", err)
-	}
-
-	return &ChannelQuotaUsage{
-		ChannelID: objects.GUID{Type: ent.TypeChannel, ID: ch.ID},
-		Quota:     ch.Settings.Quota,
-		Window: &APIKeyQuotaWindow{
-			Start: quotaRes.Window.Start,
-			End:   quotaRes.Window.End,
-		},
-		Usage: &APIKeyQuotaUsage{
-			RequestCount: int(quotaRes.Usage.RequestCount),
-			TotalTokens:  int(quotaRes.Usage.TotalTokens),
-			TotalCost:    quotaRes.Usage.TotalCost,
-		},
-	}, nil
 }
 
 // ID is the resolver for the id field.

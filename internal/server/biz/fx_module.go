@@ -19,6 +19,7 @@ var Module = fx.Module("biz",
 	fx.Provide(NewUsageLogService),
 	fx.Provide(NewVideoService),
 	fx.Provide(NewUserService),
+	fx.Provide(NewInvitationService),
 	fx.Provide(NewAPIKeyService),
 	fx.Provide(NewProjectService),
 	fx.Provide(NewRoleService),
@@ -34,6 +35,9 @@ var Module = fx.Module("biz",
 	fx.Provide(NewProviderQuotaService),
 	fx.Provide(NewOIDCService),
 	fx.Provide(NewAPIKeyProfileTemplateService),
+	fx.Invoke(func(channelSvc *ChannelService, quotaSvc *ProviderQuotaService) {
+		channelSvc.SetChannelProviderQuotaInvalidator(quotaSvc)
+	}),
 	fx.Invoke(func(lc fx.Lifecycle, svc *APIKeyService) {
 		lc.Append(fx.Hook{
 			OnStop: func(ctx context.Context) error {

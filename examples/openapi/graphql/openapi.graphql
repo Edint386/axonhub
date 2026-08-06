@@ -7,6 +7,7 @@ type APIKey {
   key: String!
   name: String!
   scopes: [String!]
+  allowedIps: [String!]
   profiles: APIKeyProfiles
 }
 
@@ -24,6 +25,7 @@ type APIKeyProfile {
   modelIDs: [String!]
   quota: APIKeyQuota
   loadBalanceStrategy: String
+  traceStickyMode: String
 }
 
 type APIKeyQuota {
@@ -90,6 +92,7 @@ input APIKeyProfileInput {
   modelIDs: [String!]
   quota: APIKeyQuotaInput
   loadBalanceStrategy: String
+  traceStickyMode: String
 }
 
 input APIKeyQuotaInput {

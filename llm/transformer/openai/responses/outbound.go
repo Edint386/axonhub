@@ -194,6 +194,9 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		return nil, fmt.Errorf("chat request is nil")
 	}
 
+	originalRequestType := llmReq.RequestType
+	isImageRequest := originalRequestType == llm.RequestTypeImage
+
 	//nolint:exhaustive // Checked.
 	switch llmReq.RequestType {
 	case llm.RequestTypeCompact:
@@ -277,6 +280,13 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 
 	if lo.FromPtr(payload.PromptCacheKey) == "" {
 		if sessionID, ok := shared.GetSessionID(ctx); ok {
+			// A session may multiplex several concurrent conversations
+			// (e.g. Claude Code subagents); scope the cache key to the
+			// conversation so they do not evict each other upstream.
+			if anchor := conversationAnchor(llmReq.Messages); anchor != "" {
+				sessionID = sessionID + "-" + anchor
+			}
+
 			payload.PromptCacheKey = lo.ToPtr(sessionID)
 		}
 	}
@@ -308,7 +318,7 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		return nil, err
 	}
 
-	return &httpclient.Request{
+	httpReq := &httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     fullURL,
 		Headers: headers,
@@ -321,7 +331,13 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		TransformerMetadata:   llmReq.TransformerMetadata,
 		SkipInboundQueryMerge: true,
 		Metadata:              nil,
-	}, nil
+	}
+
+	if isImageRequest {
+		httpReq.RequestType = originalRequestType.String()
+	}
+
+	return httpReq, nil
 }
 
 // buildFullRequestURL constructs the appropriate URL based on the platform.
@@ -353,7 +369,29 @@ func (t *OutboundTransformer) TransformResponse(
 		return t.transformCompactResponse(ctx, httpResp)
 	}
 
+	if httpResp.Request != nil && httpResp.Request.RequestType == llm.RequestTypeImage.String() {
+		return t.transformImageResponse(httpResp)
+	}
+
 	return t.transformStandardResponse(ctx, httpResp)
+}
+
+func (t *OutboundTransformer) transformImageResponse(httpResp *httpclient.Response) (*llm.Response, error) {
+	if httpResp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("HTTP error %d: %s", httpResp.StatusCode, strings.TrimSpace(string(httpResp.Body)))
+	}
+
+	var upstream Response
+	if err := json.Unmarshal(httpResp.Body, &upstream); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal responses api image response: %w", err)
+	}
+
+	metadata := map[string]any{}
+	if httpResp.Request.TransformerMetadata != nil {
+		metadata = httpResp.Request.TransformerMetadata
+	}
+
+	return BuildImageResponse(&upstream, metadata)
 }
 
 func (t *OutboundTransformer) transformStandardResponse(

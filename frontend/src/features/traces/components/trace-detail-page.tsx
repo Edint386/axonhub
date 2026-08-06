@@ -127,7 +127,7 @@ export default function TraceDetailPage() {
 
   if (isLoading) {
     return (
-      <div className='flex h-screen flex-col'>
+      <div className='flex h-full flex-col'>
         <Header className='border-b'></Header>
         <Main className='flex-1'>
           <div className='flex h-full items-center justify-center'>
@@ -143,7 +143,7 @@ export default function TraceDetailPage() {
 
   if (!trace) {
     return (
-      <div className='flex h-screen flex-col'>
+      <div className='flex h-full flex-col'>
         <Header className='border-b'></Header>
         <Main className='flex-1'>
           <div className='flex h-full items-center justify-center'>
@@ -164,7 +164,7 @@ export default function TraceDetailPage() {
   }
 
   return (
-    <div className='flex h-screen flex-col'>
+    <div className='flex h-full flex-col'>
       {/* Normal Header - hidden in fullscreen */}
       {!isFullscreen && (
         <>
@@ -195,7 +195,7 @@ export default function TraceDetailPage() {
             <div className='flex items-center gap-1 sm:gap-2 shrink-0'>
               <div className='hidden sm:flex items-center gap-2'>
                 <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} id='auto-refresh-switch' />
-                <label htmlFor='auto-refresh-switch' className='text-muted-foreground cursor-pointer text-sm'>
+                <label htmlFor='auto-refresh-switch' className='text-muted-foreground cursor-pointer text-sm whitespace-nowrap'>
                   {t('common.autoRefresh')}
                 </label>
               </div>
@@ -290,7 +290,7 @@ export default function TraceDetailPage() {
                       <p className='text-base sm:text-lg font-semibold'>
                         {t('currencies.format', {
                           val: trace.usageMetadata.totalCost,
-                          currency: settings?.currencyCode,
+                          currency: settings?.currencyCode ?? 'USD',
                           locale: i18n.language === 'zh' ? 'zh-CN' : 'en-US',
                           minimumFractionDigits: 6,
                         })}

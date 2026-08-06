@@ -11,6 +11,7 @@ import {
   IconArchive,
   IconTrash,
   IconCheck,
+  IconWeight,
   IconTransform,
   IconNetwork,
   IconAdjustments,
@@ -18,13 +19,14 @@ import {
   IconCopy,
   IconCoin,
   IconLoader2,
+  IconKey,
   IconKeyOff,
   IconGauge,
   IconHistory,
   IconPlugConnected,
+  IconShieldLock,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
@@ -42,9 +44,8 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useChannels } from '../context/channels-context';
-import { useTestChannel, useUpdateChannel, useUpdateChannelStatus } from '../data/channels';
+import { useTestChannel, useUpdateChannel } from '../data/channels';
 import { CHANNEL_CONFIGS, getProvider } from '../data/config_channels';
-import { useSkipChannelStatusConfirmation } from '../hooks/use-channel-status-confirmation-preference';
 import { Channel } from '../data/schema';
 import { ChannelHealthCell } from './channel-health-cell';
 import { ChannelLimiterCell } from './channel-limiter-cell';
@@ -57,45 +58,28 @@ const MAX_WEIGHT = 100;
 const formatWeight = (value: number) => Number(value.toFixed(WEIGHT_PRECISION));
 const clampWeight = (value: number) => formatWeight(Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, value)));
 
-// Status Switch Cell Component to handle status toggle
+// Status Switch Cell Component to handle status toggle with confirmation dialog
 const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
   const channel = row.original;
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [skipStatusConfirmation] = useSkipChannelStatusConfirmation();
-  const updateChannelStatus = useUpdateChannelStatus();
+  const { channelPermissions } = usePermissions();
 
   const isEnabled = channel.status === 'enabled';
   const isArchived = channel.status === 'archived';
 
-  const handleSwitchClick = useCallback(async () => {
-    if (isArchived || updateChannelStatus.isPending) {
-      return;
-    }
-
-    if (!skipStatusConfirmation) {
+  const handleSwitchClick = useCallback(() => {
+    if (!isArchived) {
       setDialogOpen(true);
-      return;
     }
+  }, [isArchived]);
 
-    const newStatus = isEnabled ? 'disabled' : 'enabled';
-
-    try {
-      await updateChannelStatus.mutateAsync({
-        id: channel.id,
-        status: newStatus,
-      });
-    } catch (_error) {
-    }
-  }, [channel.id, isArchived, isEnabled, skipStatusConfirmation, updateChannelStatus]);
+  if (!channelPermissions.canWrite) {
+    return <Badge variant='outline'>{channel.status}</Badge>;
+  }
 
   return (
     <div className='flex justify-center'>
-      <Switch
-        checked={isEnabled}
-        onCheckedChange={handleSwitchClick}
-        disabled={isArchived || updateChannelStatus.isPending}
-        data-testid='channel-status-switch'
-      />
+      <Switch checked={isEnabled} onCheckedChange={handleSwitchClick} disabled={isArchived} data-testid='channel-status-switch' />
       {dialogOpen && <ChannelsStatusDialog open={dialogOpen} onOpenChange={setDialogOpen} currentRow={channel} />}
     </div>
   );
@@ -113,8 +97,6 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
   const isArchived = channel.status === 'archived';
   const hasError = !!channel.errorMessage;
   const hasDisabledAPIKeys = channelPermissions.canWrite && (channel.disabledAPIKeys?.length ?? 0) > 0;
-  const apiKeysCount = channel.credentials?.apiKeys?.filter((key) => key.trim().length > 0).length ?? 0;
-  const hasMultipleAPIKeys = channelPermissions.canWrite && apiKeysCount > 1;
 
   const handleDefaultTest = async () => {
     try {
@@ -238,15 +220,26 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
             <IconPlugConnected size={16} className='mr-2' />
             {t('channels.endpoints.title')}
           </DropdownMenuItem>
-          {hasMultipleAPIKeys && (
+          {channelPermissions.canWrite && (
             <DropdownMenuItem
               onClick={() => {
                 setCurrentRow(channel);
-                setOpen('testAPIKeys');
+                setOpen('keyManagement');
               }}
             >
-              <IconPlayerPlay size={16} className='mr-2' />
-              {t('channels.actions.testAPIKeys', { count: apiKeysCount })}
+              <IconKey size={16} className='mr-2' />
+              {t('channels.actions.keyManagement')}
+            </DropdownMenuItem>
+          )}
+          {channelPermissions.canWrite && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(channel);
+                setOpen('apiKeyRules');
+              }}
+            >
+              <IconShieldLock size={16} className='mr-2' />
+              {t('channels.dialogs.apiKeyRules.action')}
             </DropdownMenuItem>
           )}
           {hasDisabledAPIKeys && (
@@ -549,6 +542,7 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [weight, setWeight] = useState<string>(initialWeight?.toString() || '1');
   const updateChannel = useUpdateChannel();
+  const { channelPermissions } = usePermissions();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -593,6 +587,10 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
     [handleSave, initialWeight]
   );
 
+  if (!channelPermissions.canWrite) {
+    return <span className={cn('font-mono text-sm', initialWeight == null && 'text-muted-foreground')}>{initialWeight ?? '-'}</span>;
+  }
+
   if (isEditing) {
     return (
       <div className='flex justify-center px-2'>
@@ -625,107 +623,6 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
 });
 
 OrderingWeightCell.displayName = 'OrderingWeightCell';
-
-const PriorityCell = memo(({ row }: { row: Row<Channel> }) => {
-  const channel = row.original;
-  const initialPriority = row.getValue('priority') as number | null;
-  const { t } = useTranslation();
-  const [isEditing, setIsEditing] = useState(false);
-  const [priority, setPriority] = useState<string>((initialPriority ?? 0).toString());
-  const updateChannel = useUpdateChannel();
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [isEditing]);
-
-  const handleDoubleClick = useCallback(() => {
-    setIsEditing(true);
-    setPriority((initialPriority ?? 0).toString());
-  }, [initialPriority]);
-
-  const handleSave = useCallback(async () => {
-    const trimmedPriority = priority.trim();
-    if (trimmedPriority === '') {
-      setPriority((initialPriority ?? 0).toString());
-      setIsEditing(false);
-      return;
-    }
-
-    if (!/^[+-]?\d+$/.test(trimmedPriority)) {
-      toast.error(t('channels.dialogs.fields.priority.integer'));
-      inputRef.current?.focus();
-      inputRef.current?.select();
-      return;
-    }
-
-    const nextPriority = Number(trimmedPriority);
-    if (!Number.isSafeInteger(nextPriority)) {
-      toast.error(t('channels.dialogs.fields.priority.integer'));
-      inputRef.current?.focus();
-      inputRef.current?.select();
-      return;
-    }
-
-    if (nextPriority === (initialPriority ?? 0)) {
-      setIsEditing(false);
-      return;
-    }
-
-    try {
-      await updateChannel.mutateAsync({
-        id: channel.id,
-        input: { priority: nextPriority },
-      });
-      setIsEditing(false);
-    } catch (_error) {
-      // Error handled by mutation hook
-    }
-  }, [channel.id, priority, initialPriority, updateChannel, t]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        handleSave();
-      } else if (e.key === 'Escape') {
-        setIsEditing(false);
-        setPriority((initialPriority ?? 0).toString());
-      }
-    },
-    [handleSave, initialPriority]
-  );
-
-  if (isEditing) {
-    return (
-      <div className='flex justify-center px-2'>
-        <Input
-          ref={inputRef}
-          type='number'
-          inputMode='numeric'
-          step='1'
-          value={priority}
-          onChange={(e) => setPriority(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          className='h-7 w-20 text-center font-mono text-sm'
-          disabled={updateChannel.isPending}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className='group flex cursor-pointer items-center justify-center gap-2' onDoubleClick={handleDoubleClick}>
-      <span className='font-mono text-sm'>{initialPriority ?? 0}</span>
-      {updateChannel.isPending && <IconLoader2 className='h-3 w-3 animate-spin text-muted-foreground' />}
-    </div>
-  );
-});
-
-PriorityCell.displayName = 'PriorityCell';
 
 const CreatedAtCell = memo(({ row }: { row: Row<Channel> }) => {
   const raw = row.getValue('createdAt') as unknown;
@@ -898,17 +795,6 @@ export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrit
         className: 'text-center',
       },
       enableSorting: false,
-      enableHiding: true,
-    },
-    {
-      accessorKey: 'priority',
-      header: ({ column }) => <DataTableColumnHeader column={column} title={t('channels.columns.priority')} className='justify-center' />,
-      cell: PriorityCell,
-      meta: {
-        className: 'w-20 min-w-20 text-center',
-      },
-      sortingFn: 'alphanumeric',
-      enableSorting: true,
       enableHiding: true,
     },
     {

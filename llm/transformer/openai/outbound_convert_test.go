@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/samber/lo"
@@ -628,4 +629,289 @@ func TestRequestFromLLM_PreservesReasoningEffort(t *testing.T) {
 
 	require.NotNil(t, req)
 	require.Equal(t, "xhigh", req.ReasoningEffort, "RequestFromLLM must keep reasoning_effort unchanged; mapping happens in TransformRequest")
+}
+
+func downgradeTestMsg(role, text string) Message {
+	return Message{Role: role, Content: MessageContent{Content: lo.ToPtr(text)}}
+}
+
+func downgradeTestRoles(messages []Message) []string {
+	out := make([]string, len(messages))
+	for i, m := range messages {
+		out[i] = m.Role
+	}
+	return out
+}
+
+func TestDowngradeMidConversationSystem(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []Message
+		want  []string
+	}{
+		{
+			name:  "leading system kept",
+			input: []Message{downgradeTestMsg("system", "s"), downgradeTestMsg("user", "u"), downgradeTestMsg("assistant", "a")},
+			want:  []string{"system", "user", "assistant"},
+		},
+		{
+			name:  "mid system downgraded",
+			input: []Message{downgradeTestMsg("system", "s"), downgradeTestMsg("user", "u"), downgradeTestMsg("system", "r"), downgradeTestMsg("assistant", "a")},
+			want:  []string{"system", "user", "user", "assistant"},
+		},
+		{
+			name:  "multiple mid system downgraded",
+			input: []Message{downgradeTestMsg("system", "s"), downgradeTestMsg("user", "u"), downgradeTestMsg("system", "r1"), downgradeTestMsg("system", "r2")},
+			want:  []string{"system", "user", "user", "user"},
+		},
+		{
+			name:  "no system",
+			input: []Message{downgradeTestMsg("user", "u"), downgradeTestMsg("assistant", "a")},
+			want:  []string{"user", "assistant"},
+		},
+		{
+			name:  "no leading system",
+			input: []Message{downgradeTestMsg("user", "u"), downgradeTestMsg("system", "r")},
+			want:  []string{"user", "user"},
+		},
+		{
+			name:  "all system unchanged",
+			input: []Message{downgradeTestMsg("system", "s1"), downgradeTestMsg("system", "s2")},
+			want:  []string{"system", "system"},
+		},
+		{
+			name:  "empty",
+			input: []Message{},
+			want:  []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := downgradeMidConversationSystem(tt.input)
+			require.Equal(t, tt.want, downgradeTestRoles(got))
+		})
+	}
+}
+
+func TestDowngradeMidConversationSystem_PreservesMultimediaContent(t *testing.T) {
+	msgs := []Message{
+		downgradeTestMsg("system", "base"),
+		downgradeTestMsg("user", "u"),
+		{
+			Role: "system",
+			Content: MessageContent{MultipleContent: []MessageContentPart{
+				{Type: "text", Text: lo.ToPtr("reminder")},
+				{Type: "image_url", ImageURL: &ImageURL{URL: "http://example.com/img.png"}},
+			}},
+		},
+	}
+
+	got := downgradeMidConversationSystem(msgs)
+
+	require.Equal(t, "user", got[2].Role, "mid-conversation system must be downgraded to user")
+	require.Len(t, got[2].Content.MultipleContent, 2, "content parts must be preserved")
+	require.Equal(t, "reminder", *got[2].Content.MultipleContent[0].Text)
+	require.Equal(t, "http://example.com/img.png", got[2].Content.MultipleContent[1].ImageURL.URL)
+}
+
+func TestRequestFromLLM_DisabledByDefault(t *testing.T) {
+	llmReq := &llm.Request{
+		Model: "gpt-4",
+		Messages: []llm.Message{
+			{Role: "system", Content: llm.MessageContent{Content: lo.ToPtr("sys")}},
+			{Role: "user", Content: llm.MessageContent{Content: lo.ToPtr("u")}},
+			{Role: "system", Content: llm.MessageContent{Content: lo.ToPtr("reminder")}},
+		},
+	}
+
+	req := RequestFromLLM(llmReq, ReasoningFieldNone)
+
+	require.NotNil(t, req)
+	require.Equal(t, []string{"system", "user", "system"}, downgradeTestRoles(req.Messages),
+		"mid-conversation system must be kept by default (nil switch = disabled)")
+}
+
+func TestRequestFromLLM_DisabledSwitchKeepsMidSystem(t *testing.T) {
+	llmReq := &llm.Request{
+		Model: "gpt-4",
+		Messages: []llm.Message{
+			{Role: "system", Content: llm.MessageContent{Content: lo.ToPtr("sys")}},
+			{Role: "user", Content: llm.MessageContent{Content: lo.ToPtr("u")}},
+			{Role: "system", Content: llm.MessageContent{Content: lo.ToPtr("reminder")}},
+		},
+		TransformOptions: llm.TransformOptions{DowngradeMidConversationSystem: lo.ToPtr(false)},
+	}
+
+	req := RequestFromLLM(llmReq, ReasoningFieldNone)
+
+	require.NotNil(t, req)
+	require.Equal(t, []string{"system", "user", "system"}, downgradeTestRoles(req.Messages),
+		"explicit false must keep mid-conversation system messages untouched")
+}
+
+func TestRequestFromLLM_EnabledSwitchDowngradesMidSystem(t *testing.T) {
+	llmReq := &llm.Request{
+		Model: "gpt-4",
+		Messages: []llm.Message{
+			{Role: "system", Content: llm.MessageContent{Content: lo.ToPtr("sys")}},
+			{Role: "user", Content: llm.MessageContent{Content: lo.ToPtr("u")}},
+			{Role: "system", Content: llm.MessageContent{Content: lo.ToPtr("reminder")}},
+		},
+		TransformOptions: llm.TransformOptions{DowngradeMidConversationSystem: lo.ToPtr(true)},
+	}
+
+	req := RequestFromLLM(llmReq, ReasoningFieldNone)
+
+	require.NotNil(t, req)
+	require.Equal(t, []string{"system", "user", "user"}, downgradeTestRoles(req.Messages),
+		"explicit true must downgrade mid-conversation system messages to user")
+}
+
+// Assistant messages that carry tool calls but no content must still serialize a
+// content field. Omitting it (nil content) or emitting null (all parts filtered
+// out) is accepted by OpenAI but rejected by stricter OpenAI-compatible upstreams
+// whose schema only allows a string or an array.
+func TestMessageFromLLM_ToolCallOnlyMessageKeepsContentField(t *testing.T) {
+	toolCalls := []llm.ToolCall{
+		{
+			ID:   "call_1",
+			Type: "function",
+			Function: llm.FunctionCall{
+				Name:      "shell_command",
+				Arguments: `{"command":"ls"}`,
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		message llm.Message
+	}{
+		{
+			name: "no content at all",
+			message: llm.Message{
+				Role:      "assistant",
+				ToolCalls: toolCalls,
+			},
+		},
+		{
+			name: "every content part filtered out",
+			message: llm.Message{
+				Role: "assistant",
+				Content: llm.MessageContent{
+					MultipleContent: []llm.MessageContentPart{
+						{
+							Type:    "compaction",
+							Compact: &llm.CompactContent{ID: "cmp_1", EncryptedContent: "secret"},
+						},
+					},
+				},
+				ToolCalls: toolCalls,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := MessageFromLLM(tt.message)
+
+			data, err := json.Marshal(msg)
+			require.NoError(t, err)
+
+			var decoded map[string]any
+			require.NoError(t, json.Unmarshal(data, &decoded))
+
+			content, ok := decoded["content"]
+			require.True(t, ok, "content field must be present, got %s", data)
+			require.NotNil(t, content, "content must not be null, got %s", data)
+			require.Equal(t, "", content)
+		})
+	}
+}
+
+// Content that survives conversion must be preserved as-is.
+func TestMessageFromLLM_ToolCallMessageKeepsExistingContent(t *testing.T) {
+	msg := MessageFromLLM(llm.Message{
+		Role:    "assistant",
+		Content: llm.MessageContent{Content: lo.ToPtr("calling a tool")},
+		ToolCalls: []llm.ToolCall{
+			{
+				ID:       "call_1",
+				Type:     "function",
+				Function: llm.FunctionCall{Name: "shell_command", Arguments: "{}"},
+			},
+		},
+	})
+
+	require.NotNil(t, msg.Content.Content)
+	require.Equal(t, "calling a tool", *msg.Content.Content)
+}
+
+// Messages without tool calls keep their existing serialization, so the
+// normalization above cannot change unrelated payloads.
+func TestMessageFromLLM_WithoutToolCallsContentUnchanged(t *testing.T) {
+	msg := MessageFromLLM(llm.Message{Role: "user"})
+
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	_, ok := decoded["content"]
+	require.False(t, ok, "content must stay omitted for messages without tool calls, got %s", data)
+}
+
+// Responses splits text parts into input_text/output_text, but Chat Completions
+// only knows "text". Types it does understand must not be rewritten.
+func TestMessageContentPartFromLLM_NormalizesTextPartTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		partType string
+		expected string
+	}{
+		{name: "input_text becomes text", partType: "input_text", expected: "text"},
+		{name: "output_text becomes text", partType: "output_text", expected: "text"},
+		{name: "text is unchanged", partType: "text", expected: "text"},
+		{name: "image_url is unchanged", partType: "image_url", expected: "image_url"},
+		{name: "video_url is unchanged", partType: "video_url", expected: "video_url"},
+		{name: "input_audio is unchanged", partType: "input_audio", expected: "input_audio"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			part := MessageContentPartFromLLM(llm.MessageContentPart{
+				Type: tt.partType,
+				Text: lo.ToPtr("hello"),
+			})
+
+			require.Equal(t, tt.expected, part.Type)
+		})
+	}
+}
+
+// Multi-part content is the path where Responses text types actually reach an
+// upstream: a lone text part is collapsed into a plain string before this point.
+func TestRequestFromLLM_NormalizesTextPartTypesInMessages(t *testing.T) {
+	req := RequestFromLLM(&llm.Request{
+		Model: "gpt-4o",
+		Messages: []llm.Message{
+			{
+				Role: "user",
+				Content: llm.MessageContent{
+					MultipleContent: []llm.MessageContentPart{
+						{Type: "input_text", Text: lo.ToPtr("describe this")},
+						{Type: "image_url", ImageURL: &llm.ImageURL{URL: "https://example.com/a.png"}},
+					},
+				},
+			},
+		},
+	}, ReasoningFieldNone)
+
+	require.NotNil(t, req)
+	require.Len(t, req.Messages, 1)
+	require.Len(t, req.Messages[0].Content.MultipleContent, 2)
+	require.Equal(t, "text", req.Messages[0].Content.MultipleContent[0].Type)
+	require.Equal(t, "image_url", req.Messages[0].Content.MultipleContent[1].Type)
 }

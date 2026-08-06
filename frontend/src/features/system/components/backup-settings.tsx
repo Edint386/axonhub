@@ -36,6 +36,7 @@ export function BackupSettings() {
     ?.filter(s => s.status === 'active' && s.type !== 'database') ?? [];
 
   const [backupOptions, setBackupOptions] = useState<BackupOptionsInput>({
+    includeSystemConfigs: false,
     includeChannels: true,
     includeModelPrices: true,
     includeModels: true,
@@ -45,6 +46,7 @@ export function BackupSettings() {
   });
 
   const [restoreOptions, setRestoreOptions] = useState<RestoreOptionsInput>({
+    includeSystemConfigs: true,
     includeChannels: true,
     includeModelPrices: true,
     includeModels: true,
@@ -63,6 +65,7 @@ export function BackupSettings() {
     enabled: false,
     frequency: 'daily' as BackupFrequency,
     dataStorageID: 0,
+    includeSystemConfigs: false,
     includeChannels: true,
     includeModels: true,
     includeAPIKeys: false,
@@ -79,6 +82,7 @@ export function BackupSettings() {
        autoBackupForm.enabled !== autoBackupSettings.data.enabled ||
        autoBackupForm.frequency !== autoBackupSettings.data.frequency ||
        autoBackupForm.dataStorageID !== autoBackupSettings.data.dataStorageID ||
+       autoBackupForm.includeSystemConfigs !== autoBackupSettings.data.includeSystemConfigs ||
        autoBackupForm.includeChannels !== autoBackupSettings.data.includeChannels ||
        autoBackupForm.includeModels !== autoBackupSettings.data.includeModels ||
        autoBackupForm.includeAPIKeys !== autoBackupSettings.data.includeAPIKeys ||
@@ -95,6 +99,7 @@ export function BackupSettings() {
         enabled: autoBackupSettings.data.enabled,
         frequency: autoBackupSettings.data.frequency,
         dataStorageID: autoBackupSettings.data.dataStorageID,
+        includeSystemConfigs: autoBackupSettings.data.includeSystemConfigs,
         includeChannels: autoBackupSettings.data.includeChannels,
         includeModels: autoBackupSettings.data.includeModels,
         includeAPIKeys: autoBackupSettings.data.includeAPIKeys,
@@ -127,6 +132,7 @@ export function BackupSettings() {
       enabled: autoBackupForm.enabled,
       frequency: autoBackupForm.frequency,
       dataStorageID: autoBackupForm.dataStorageID,
+      includeSystemConfigs: autoBackupForm.includeSystemConfigs,
       includeChannels: autoBackupForm.includeChannels,
       includeModels: autoBackupForm.includeModels,
       includeAPIKeys: autoBackupForm.includeAPIKeys,
@@ -153,6 +159,14 @@ export function BackupSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="include-system-configs">{t('system.backup.includeSystemConfigs')}</Label>
+              <Switch
+                id="include-system-configs"
+                checked={backupOptions.includeSystemConfigs}
+                onCheckedChange={(checked) => setBackupOptions({ ...backupOptions, includeSystemConfigs: checked })}
+              />
+            </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="include-channels">{t('system.backup.includeChannels')}</Label>
               <Switch
@@ -234,7 +248,7 @@ export function BackupSettings() {
               type="file"
               accept=".json"
               onChange={handleFileChange}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
             />
             {selectedFile && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -244,6 +258,17 @@ export function BackupSettings() {
             )}
           </div>
           <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-1 items-center justify-between">
+                <Label htmlFor="restore-include-system-configs">{t('system.backup.includeSystemConfigs')}</Label>
+                <Switch
+                  id="restore-include-system-configs"
+                  checked={restoreOptions.includeSystemConfigs}
+                  onCheckedChange={(checked) => setRestoreOptions({ ...restoreOptions, includeSystemConfigs: checked })}
+                  disabled={!selectedFile}
+                />
+              </div>
+            </div>
             <div className="flex items-center gap-4">
               <div className="flex flex-1 items-center justify-between">
                 <Label htmlFor="restore-include-channels">{t('system.backup.includeChannels')}</Label>
@@ -460,6 +485,14 @@ export function BackupSettings() {
 
           <div className="space-y-4">
             <Label className="text-base font-medium">{t('system.autoBackup.options.title')}</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="auto-include-system-configs">{t('system.backup.includeSystemConfigs')}</Label>
+              <Switch
+                id="auto-include-system-configs"
+                checked={autoBackupForm.includeSystemConfigs}
+                onCheckedChange={(checked) => setAutoBackupForm({ ...autoBackupForm, includeSystemConfigs: checked })}
+              />
+            </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="auto-include-channels">{t('system.backup.includeChannels')}</Label>
               <Switch

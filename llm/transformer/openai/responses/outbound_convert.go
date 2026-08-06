@@ -201,21 +201,30 @@ func convertAssistantMessage(msg llm.Message) []Item {
 	// Handle reasoning content first.
 	// For Requests, reasoning is represented as an `input` item with type="reasoning".
 	// The Responses API uses the `summary` field to hold the reasoning summary text.
-	var encryptedContent *string
-	if msg.ReasoningSignature != nil {
-		encryptedContent = shared.DecodeOpenAIEncryptedContent(msg.ReasoningSignature)
+	reasoningItems := msg.ReasoningItems
+	if len(reasoningItems) == 0 && msg.ReasoningSignature != nil {
+		reasoningItems = []llm.ReasoningItem{{
+			Content:   lo.FromPtr(msg.ReasoningContent),
+			Signature: *msg.ReasoningSignature,
+		}}
 	}
 
-	if encryptedContent != nil {
+	for _, reasoningItem := range reasoningItems {
+		encryptedContent := shared.DecodeOpenAIEncryptedContent(&reasoningItem.Signature)
+		if encryptedContent == nil {
+			continue
+		}
+
 		summary := []ReasoningSummary{}
-		if msg.ReasoningContent != nil && *msg.ReasoningContent != "" {
+		if reasoningItem.Content != "" {
 			summary = append(summary, ReasoningSummary{
 				Type: "summary_text",
-				Text: *msg.ReasoningContent,
+				Text: reasoningItem.Content,
 			})
 		}
 
 		items = append(items, Item{
+			ID:               reasoningItem.ID,
 			Type:             "reasoning",
 			EncryptedContent: encryptedContent,
 			Summary:          summary,
@@ -307,11 +316,31 @@ func convertToolMessageWithType(msg llm.Message, itemType string) Item {
 		output.Text = msg.Content.Content
 	} else if len(msg.Content.MultipleContent) > 0 {
 		for _, p := range msg.Content.MultipleContent {
-			if p.Type == "text" && p.Text != nil {
-				output.Items = append(output.Items, Item{
-					Type: "input_text",
-					Text: p.Text,
-				})
+			switch p.Type {
+			case "text":
+				if p.Text != nil {
+					output.Items = append(output.Items, Item{
+						Type: "input_text",
+						Text: p.Text,
+					})
+				}
+			case "image_url":
+				// Tool results can carry images (Codex's view_image, MCP screenshot
+				// tools, ...); the Responses schema allows text/image/file content in
+				// function_call_output and custom_tool_call_output. Skipping them left
+				// output empty, which the fallback below turned into "" — a blank but
+				// successful tool result the model cannot distinguish from a real one.
+				if p.ImageURL != nil {
+					// `detail` is required by InputImageContent, which is what a
+					// custom_tool_call_output's content array resolves to; the
+					// function_call_output param schema makes it optional. Both
+					// document "auto" as the default, so always send one.
+					output.Items = append(output.Items, Item{
+						Type:     "input_image",
+						ImageURL: &p.ImageURL.URL,
+						Detail:   lo.ToPtr(lo.FromPtrOr(p.ImageURL.Detail, "auto")),
+					})
+				}
 			}
 		}
 	}
@@ -623,6 +652,7 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 		textContent          strings.Builder
 		reasoningContent     strings.Builder
 		reasoningSignature   *string
+		reasoningItems       []llm.ReasoningItem
 		messageID            string
 		toolCalls            []llm.ToolCall
 		annotations          []llm.Annotation
@@ -691,12 +721,23 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 				},
 			})
 		case "reasoning":
+			var itemReasoning strings.Builder
 			for _, summary := range outputItem.Summary {
 				reasoningContent.WriteString(summary.Text)
+				itemReasoning.WriteString(summary.Text)
 			}
 
+			itemSignature := ""
 			if outputItem.EncryptedContent != nil && *outputItem.EncryptedContent != "" {
 				reasoningSignature = shared.EncodeOpenAIEncryptedContent(outputItem.EncryptedContent)
+				itemSignature = lo.FromPtr(reasoningSignature)
+			}
+			if itemReasoning.Len() > 0 || itemSignature != "" {
+				reasoningItems = append(reasoningItems, llm.ReasoningItem{
+					ID:        outputItem.ID,
+					Content:   itemReasoning.String(),
+					Signature: itemSignature,
+				})
 			}
 		case "image_generation_call":
 			flushText()
@@ -770,6 +811,9 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 
 	if reasoningSignature != nil {
 		msg.ReasoningSignature = reasoningSignature
+	}
+	if len(reasoningItems) > 0 {
+		msg.ReasoningItems = reasoningItems
 	}
 
 	if len(contentParts) == 1 && contentParts[0].Type == "text" && len(toolCalls) == 0 {

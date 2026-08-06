@@ -10,12 +10,12 @@ import { toast } from 'sonner';
 import { extractNumberID } from '@/lib/utils';
 import { formatDuration } from '@/utils/format-duration';
 import { usePaginationSearch } from '@/hooks/use-pagination-search';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useGeneralSettings, useSecuritySettings, useUpdateSecuritySettings } from '@/features/system/data/system';
-import { usePermissions } from '@/hooks/usePermissions';
 import { useRequestPermissions } from '../../../hooks/useRequestPermissions';
 import { Request } from '../data/schema';
 import { calculateTokensPerSecond, useDisplayMode } from '../utils/tokens-per-second';
@@ -26,38 +26,41 @@ interface UseRequestsColumnsOptions {
   onViewDetail?: (requestId: string) => void;
 }
 
-function getCacheHitRateColor(rate: number): string {
-  if (rate >= 98) return 'text-green-700 dark:text-green-300';
-  if (rate >= 90) return 'text-green-600 dark:text-green-400';
-  if (rate >= 75) return 'text-emerald-600 dark:text-emerald-400';
-  if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
-  if (rate >= 20) return 'text-orange-600 dark:text-orange-400';
-  return 'text-red-600 dark:text-red-400';
-}
+export const DEFAULT_MOBILE_HIDDEN_COLUMN_IDS = [
+  'apiFormat',
+  'passThrough',
+  'reasoningEffort',
+  'stream',
+  'source',
+  'clientIP',
+  'channel',
+  'apiKey',
+  'tokens',
+  'readCache',
+  'writeCache',
+  'cost',
+  'latency',
+  'details',
+];
+
+export const MODEL_ID_COLUMN = 'modelID' as const;
 
 export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnDef<Request>[] {
   const { t, i18n } = useTranslation();
   const locale = i18n.language === 'zh' ? zhCN : enUS;
   const permissions = useRequestPermissions();
-  const { hasScope } = usePermissions();
+  const { hasSystemScope } = usePermissions();
   const { data: settings } = useGeneralSettings();
   const { data: securitySettings } = useSecuritySettings();
   const updateSecuritySettings = useUpdateSecuritySettings();
   const { navigateWithSearch } = usePaginationSearch({ defaultPageSize: 20 });
   const [displayMode, setDisplayMode] = useDisplayMode();
-  const canManageSecuritySettings = hasScope('write_settings');
+  const canManageSecuritySettings = hasSystemScope('write_settings');
 
   const blockedIPs = securitySettings?.blockedIPs ?? [];
   const showIPBanIcon = securitySettings?.showRequestLogIPBanIcon === true;
 
-  const normalizeBlockedIPs = (ips: string[]) =>
-    Array.from(
-      new Set(
-        ips
-          .map((ip) => ip.trim())
-          .filter((ip) => ip.length > 0)
-      )
-    );
+  const normalizeBlockedIPs = (ips: string[]) => Array.from(new Set(ips.map((ip) => ip.trim()).filter((ip) => ip.length > 0)));
 
   const handleBlockIP = async (clientIP: string) => {
     const normalizedIP = clientIP.trim();
@@ -187,7 +190,12 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
       enableSorting: false,
       enableHiding: true,
       cell: ({ row }) => {
-        const reasoningEffort = row.original.reasoningEffort;
+        const latestExecution = row.original.executions?.edges?.[0]?.node;
+        const reasoningEffort = latestExecution
+          ? latestExecution.reasoningEffort
+          : row.original.status === 'processing'
+            ? undefined
+            : row.original.reasoningEffort;
 
         if (!reasoningEffort) {
           return <div className='text-muted-foreground text-xs'>-</div>;
@@ -495,18 +503,20 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
 
         const cachedTokens = usageLog.promptCachedTokens || 0;
         const promptTokens = usageLog.promptTokens || 0;
-        const cacheHitRate = promptTokens > 0 ? (cachedTokens / promptTokens) * 100 : 0;
 
         if (cachedTokens === 0) {
           return <div className='text-muted-foreground text-xs'>-</div>;
         }
 
+        const hitRate = promptTokens > 0 ? (cachedTokens / promptTokens) * 100 : 0;
+        const isLowHitRate = hitRate < 80 && promptTokens >= 40000;
+
         return (
           <div className='text-xs'>
             <div className='text-sm font-medium'>{cachedTokens.toLocaleString()}</div>
-            <div className={getCacheHitRateColor(cacheHitRate)}>
+            <div className={isLowHitRate ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}>
               {t('requests.columns.cacheHitRate', {
-                rate: cacheHitRate.toFixed(1),
+                rate: hitRate.toFixed(1),
               })}
             </div>
           </div>
@@ -576,7 +586,7 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
           <div className='font-mono text-xs font-medium'>
             {t('currencies.format', {
               val: cost,
-              currency: settings?.currencyCode,
+              currency: settings?.currencyCode ?? 'USD',
               locale: i18n.language === 'zh' ? 'zh-CN' : 'en-US',
               minimumFractionDigits: 6,
             })}

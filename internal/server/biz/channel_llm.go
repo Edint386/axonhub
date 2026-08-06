@@ -155,16 +155,16 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 // buildChannelWithTransformer should validate channel credentials before constructing transformers.
 func getAPIKeyProvider(ch *Channel) auth.APIKeyProvider {
 	if ch.apiKeyOverride != "" {
-		return auth.NewStaticKeyProvider(ch.apiKeyOverride)
+		return NewChannelAPIKeyContextProvider(auth.NewStaticKeyProvider(ch.apiKeyOverride))
 	}
 
 	enabled := ch.cachedEnabledAPIKeys
 	if len(enabled) > 1 {
-		return NewTraceStickyKeyProvider(ch)
+		return NewChannelAPIKeyContextProvider(NewTraceStickyKeyProvider(ch))
 	}
 
 	if len(enabled) == 1 {
-		return auth.NewStaticKeyProvider(enabled[0])
+		return NewChannelAPIKeyContextProvider(auth.NewStaticKeyProvider(enabled[0]))
 	}
 
 	panic(fmt.Errorf("no enabled api key configured for channel %s", ch.Name))
@@ -395,6 +395,7 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 			Transport:      transport,
 		})
 	case llm.APIFormatOpenAIEmbedding.String(),
+		llm.APIFormatOpenAIModeration.String(),
 		llm.APIFormatOpenAIImageGeneration.String(),
 		llm.APIFormatOpenAIImageEdit.String(),
 		llm.APIFormatOpenAIImageVariation.String(),
@@ -475,6 +476,10 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		// These channel types don't use API keys:
 		// - anthropic_gcp uses GCP credentials JSON
 		// - *_fake are test-only
+	case channel.TypeOllama, channel.TypeOllamaAnthropic:
+		// Ollama is often run locally without an API key. An apiKeyOverride
+		// (channel key test flow) may also supply a key when none are stored,
+		// so skip the stored-key check here.
 	default:
 		if len(enabledKeys) == 0 {
 			return nil, fmt.Errorf("missing api key for channel %s", c.Name)
@@ -977,7 +982,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 	case channel.TypeOpenai, channel.TypeAtlascloud, channel.TypeDeepinfra, channel.TypeQiniu, channel.TypeMinimax,
 		channel.TypePpio, channel.TypeSiliconflow,
 		channel.TypeVercel, channel.TypeAihubmix, channel.TypeBurncloud, channel.TypeGithub,
-		channel.TypeOpencodeGo, channel.TypeEvolink:
+		channel.TypeOpencodeGo, channel.TypeEvolink, channel.TypeGroq:
 		var reasoningEffortMapping []llm.ReasoningEffortMapping
 		if c.Settings != nil {
 			reasoningEffortMapping = c.Settings.TransformOptions.ReasoningEffortMapping
@@ -1063,9 +1068,11 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 
 		return ch, nil
 	case channel.TypeOllama:
-		// Ollama is often used locally without API key, but may also be configured with one
+		// Ollama is often used locally without API key, but may also be configured with one.
+		// The apiKeyOverride branch covers the channel key test flow, which supplies a key
+		// even when the channel has no stored enabled keys.
 		var apiKeyProvider auth.APIKeyProvider
-		if len(ch.cachedEnabledAPIKeys) > 0 {
+		if len(ch.cachedEnabledAPIKeys) > 0 || ch.apiKeyOverride != "" {
 			apiKeyProvider = getAPIKeyProvider(ch)
 		}
 
@@ -1075,6 +1082,27 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create ollama outbound transformer: %w", err)
+		}
+
+		ch.Outbound = transformer
+
+		return ch, nil
+	case channel.TypeOllamaAnthropic:
+		// Ollama with Anthropic Messages API format, using Bearer token auth.
+		// Mirrors the TypeOllama key handling: optional for local no-auth deployments,
+		// but still honors apiKeyOverride (e.g. channel key test flow) when no keys are stored.
+		var apiKeyProvider auth.APIKeyProvider
+		if len(ch.cachedEnabledAPIKeys) > 0 || ch.apiKeyOverride != "" {
+			apiKeyProvider = getAPIKeyProvider(ch)
+		}
+
+		transformer, err := anthropic.NewOutboundTransformerWithConfig(&anthropic.Config{
+			Type:           anthropic.PlatformOllama,
+			BaseURL:        c.BaseURL,
+			APIKeyProvider: apiKeyProvider,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ollama anthropic outbound transformer: %w", err)
 		}
 
 		ch.Outbound = transformer

@@ -119,13 +119,14 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 		AbstractService: &AbstractService{
 			db: params.Ent,
 		},
-		SystemService:      params.SystemService,
-		WebhookNotifier:    params.WebhookNotifier,
-		httpClient:         params.HttpClient,
-		channelPerfMetrics: make(map[int]*channelMetrics),
-		channelErrorCounts: make(map[int]map[int]int),
-		apiKeyErrorCounts:  make(map[int]map[string]map[int]int),
-		perfCh:             make(chan *PerformanceRecord, 1024),
+		SystemService:             params.SystemService,
+		WebhookNotifier:           params.WebhookNotifier,
+		httpClient:                params.HttpClient,
+		channelPerfMetrics:        make(map[int]*channelMetrics),
+		channelErrorCounts:        make(map[int]map[int]int),
+		apiKeyErrorCounts:         make(map[int]map[string]map[int]int),
+		apiKeyRuleActionsInFlight: make(map[int]map[string]bool),
+		perfCh:                    make(chan *PerformanceRecord, 1024),
 	}
 	watcherMode := params.CacheConfig.Mode
 	if watcherMode == "" {
@@ -185,6 +186,10 @@ type ChannelService struct {
 	// Optional: when nil, mutations skip the call (used in tests / before wiring).
 	limiterForgetter ChannelLimiterForgetter
 
+	// providerQuotaInvalidator discards stale quota state after a channel changes
+	// its provider identity. Optional for direct service construction in tests.
+	providerQuotaInvalidator ChannelProviderQuotaInvalidator
+
 	// perfWindowSeconds is the configurable sliding window size for performance metrics (in seconds)
 	// If not set (0), uses defaultPerformanceWindowSize (600 seconds = 10 minutes)
 	perfWindowSeconds int64
@@ -201,8 +206,10 @@ type ChannelService struct {
 
 	// apiKeyErrorCounts stores the error counts for each API key and status code
 	// channelID -> apiKey -> statusCode -> count
-	apiKeyErrorCounts     map[int]map[string]map[int]int
-	apiKeyErrorCountsLock sync.Mutex
+	apiKeyErrorCounts         map[int]map[string]map[int]int
+	apiKeyRuleActionsInFlight map[int]map[string]bool
+	apiKeyErrorCountsLock     sync.Mutex
+	apiKeyOpsLock             sync.Mutex
 
 	modelSyncMu sync.Mutex
 
@@ -217,12 +224,21 @@ type ChannelService struct {
 }
 
 func (svc *ChannelService) RegisterScheduledTasks(ctx context.Context, s *scheduler.Scheduler) error {
-	return s.Register(ctx, scheduler.TaskSpec{
+	if err := s.Register(ctx, scheduler.TaskSpec{
 		Name:        "channel-model-sync",
 		Description: "Sync channel models every hour",
 		CronExpr:    "11 * * * *",
 		Timezone:    "UTC",
-	}, svc.runSyncChannelModelsPeriodically)
+	}, svc.runSyncChannelModelsPeriodically); err != nil {
+		return err
+	}
+
+	return s.Register(ctx, scheduler.TaskSpec{
+		Name:        "channel-disabled-api-key-cleanup",
+		Description: "Recover temporarily disabled channel API keys",
+		CronExpr:    "*/5 * * * *",
+		Timezone:    "UTC",
+	}, svc.cleanupExpiredDisabledAPIKeys)
 }
 
 func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []*Channel, lastUpdate time.Time) ([]*Channel, time.Time, bool, error) {
@@ -320,6 +336,9 @@ func (svc *ChannelService) cleanupSwappedChannels(channels []*Channel) {
 			ch.stopTokenProvider()
 		}
 		stopChannelOutbounds(ch)
+		if ch != nil && ch.HTTPClient != nil && ch.HTTPClient != svc.httpClient {
+			ch.HTTPClient.CloseIdleConnections()
+		}
 	}
 }
 
@@ -525,6 +544,10 @@ func (svc *ChannelService) ListModels(ctx context.Context, input ListModelsInput
 // createChannel creates a new channel without triggering a reload.
 // This is useful for batch operations where reload should happen once at the end.
 func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateChannelInput) (*ent.Channel, error) {
+	if err := NormalizeAPIKeyAutoDisableRules(input.Policies); err != nil {
+		return nil, err
+	}
+
 	if input.Settings != nil {
 		if input.Settings.BodyOverrideOperations != nil {
 			if err := ValidateBodyOverrideOperations(input.Settings.BodyOverrideOperations); err != nil {
@@ -692,9 +715,69 @@ func NormalizeRetryableErrorPatterns(settings *objects.ChannelSettings) error {
 	return nil
 }
 
+// NormalizeAPIKeyAutoDisableRules validates and canonicalizes channel-scoped
+// API key rules before they are persisted.
+func NormalizeAPIKeyAutoDisableRules(policies *objects.ChannelPolicies) error {
+	if policies == nil || len(policies.APIKeyAutoDisableRules) == 0 {
+		return nil
+	}
+
+	rules := slices.Clone(policies.APIKeyAutoDisableRules)
+	for i := range rules {
+		rule := &rules[i]
+		if rule.Times < 1 {
+			return fmt.Errorf("API key rule %d consecutive error count must be at least 1", i+1)
+		}
+
+		switch rule.Action {
+		case objects.APIKeyAutoDisableActionTemporary:
+			if rule.DisableDurationMinutes == nil {
+				return fmt.Errorf("API key rule %d requires a disable duration for temporary disable", i+1)
+			}
+			if *rule.DisableDurationMinutes < 1 {
+				return fmt.Errorf("API key rule %d disable duration must be at least 1 minute", i+1)
+			}
+		case objects.APIKeyAutoDisableActionPermanent:
+			rule.DisableDurationMinutes = nil
+		default:
+			return fmt.Errorf("API key rule %d has unsupported action %q", i+1, rule.Action)
+		}
+
+		codes := slices.Clone(rule.StatusCodes)
+		for _, code := range codes {
+			if code < 100 || code > 599 {
+				return fmt.Errorf("API key rule %d has invalid HTTP status code %d", i+1, code)
+			}
+		}
+		slices.Sort(codes)
+		rule.StatusCodes = slices.Compact(codes)
+
+		patterns := make([]string, 0, len(rule.KeywordPatterns))
+		seen := make(map[string]struct{}, len(rule.KeywordPatterns))
+		for _, pattern := range rule.KeywordPatterns {
+			pattern = strings.TrimSpace(pattern)
+			if pattern == "" {
+				continue
+			}
+			if _, ok := seen[pattern]; ok {
+				continue
+			}
+			seen[pattern] = struct{}{}
+			patterns = append(patterns, pattern)
+		}
+		rule.KeywordPatterns = patterns
+	}
+
+	policies.APIKeyAutoDisableRules = rules
+	return nil
+}
+
 // UpdateChannel updates an existing channel with the provided input.
 func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent.UpdateChannelInput) (*ent.Channel, error) {
 	log.Debug(ctx, "UpdateChannel", log.Int("id", id), log.Any("input", input))
+	if err := NormalizeAPIKeyAutoDisableRules(input.Policies); err != nil {
+		return nil, err
+	}
 
 	// Check if name is being updated and if it conflicts with existing channels
 	if input.Name != nil {
@@ -751,8 +834,22 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	}
 
 	var updated *ent.Channel
+	providerIdentityChanged := false
 	err := svc.RunInTransaction(ctx, func(ctx context.Context) error {
 		db := svc.entFromContext(ctx)
+
+		var existingIdentity *ent.Channel
+		if input.Type != nil || input.BaseURL != nil {
+			var err error
+			existingIdentity, err = db.Channel.Query().
+				Where(channel.IDEQ(id)).
+				Select(channel.FieldType, channel.FieldBaseURL, channel.FieldUpdatedAt).
+				Only(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to load channel provider identity: %w", err)
+			}
+		}
+
 		mut := db.Channel.UpdateOneID(id).
 			SetNillableType(input.Type).
 			SetNillableBaseURL(input.BaseURL).
@@ -761,6 +858,11 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 			SetNillableOrderingWeight(input.OrderingWeight).
 			SetNillablePriority(input.Priority).
 			SetNillableAutoSyncSupportedModels(input.AutoSyncSupportedModels)
+		if existingIdentity != nil {
+			// Reject a stale provider edit if any concurrent channel update changed
+			// the row after the identity snapshot was read.
+			mut.Where(channel.UpdatedAtEQ(existingIdentity.UpdatedAt))
+		}
 
 		if input.SupportedModels != nil {
 			mut.SetSupportedModels(input.SupportedModels)
@@ -810,7 +912,14 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 
 		channel, err := mut.Save(ctx)
 		if err != nil {
+			if existingIdentity != nil && ent.IsNotFound(err) {
+				return fmt.Errorf("channel was updated concurrently; retry the operation")
+			}
 			return fmt.Errorf("failed to update channel: %w", err)
+		}
+		if existingIdentity != nil {
+			providerIdentityChanged = channel.Type != existingIdentity.Type ||
+				channel.BaseURL != existingIdentity.BaseURL
 		}
 
 		if input.SupportedModels != nil {
@@ -828,6 +937,11 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	}
 	if ent.TxFromContext(ctx) == nil {
 		updated.Unwrap()
+	}
+	if providerIdentityChanged {
+		runAfterCommit(ctx, func(ctx context.Context) {
+			svc.invalidateProviderQuota(ctx, id)
+		})
 	}
 
 	// Intentionally NO forgetLimiter call: ChannelLimiterManager.GetOrCreate
@@ -870,23 +984,8 @@ func (svc *ChannelService) asyncReloadChannels() {
 // reloadChannelsAfterCommit waits for a caller-owned Ent transaction, including
 // the GraphQL Transactioner, before publishing the channel cache refresh.
 func (svc *ChannelService) reloadChannelsAfterCommit(ctx context.Context) {
-	tx := ent.TxFromContext(ctx)
-	if tx == nil {
+	runAfterCommit(ctx, func(context.Context) {
 		svc.asyncReloadChannels()
-
-		return
-	}
-
-	tx.OnCommit(func(next ent.Committer) ent.Committer {
-		return ent.CommitFunc(func(ctx context.Context, tx *ent.Tx) error {
-			if err := next.Commit(ctx, tx); err != nil {
-				return err
-			}
-
-			svc.asyncReloadChannels()
-
-			return nil
-		})
 	})
 }
 

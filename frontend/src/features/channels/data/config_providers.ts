@@ -31,6 +31,7 @@ import {
   Fireworks,
   Ollama,
   OpenCode,
+  Groq,
 } from '@lobehub/icons';
 import { AtlasCloudIcon } from '../components/atlas-cloud-icon';
 import { EvolinkIcon } from '../components/evolink-icon';
@@ -259,7 +260,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     provider: 'ollama',
     icon: Ollama,
     color: 'bg-slate-100 text-slate-800 border-slate-200',
-    channelTypes: ['ollama'],
+    channelTypes: ['ollama', 'ollama_anthropic'],
   },
   evolink: {
     provider: 'evolink',
@@ -272,6 +273,12 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     icon: Cline,
     color: 'bg-purple-100 text-purple-800 border-purple-200',
     channelTypes: ['cline'],
+  },
+  groq: {
+    provider: 'groq',
+    icon: Groq,
+    color: 'bg-orange-100 text-orange-800 border-orange-200',
+    channelTypes: ['groq'],
   },
 };
 

@@ -42,6 +42,13 @@ func RequestFromLLM(r *llm.Request, reasoningField ReasoningField) *Request {
 		return MessageFromLLMWithConfig(m, reasoningField)
 	})
 
+	// Downgrade mid-conversation system messages (e.g. Claude Code reminders) to user so
+	// OpenAI-compatible upstreams keep a stable system prefix for prompt caching.
+	// Disabled by default; a channel opts in via TransformOptions.
+	if r.TransformOptions.DowngradeMidConversationSystem != nil && *r.TransformOptions.DowngradeMidConversationSystem {
+		req.Messages = downgradeMidConversationSystem(req.Messages)
+	}
+
 	// Convert Stop
 	if r.Stop != nil {
 		req.Stop = &Stop{
@@ -92,6 +99,42 @@ func RequestFromLLM(r *llm.Request, reasoningField ReasoningField) *Request {
 	}
 
 	return req
+}
+
+// downgradeMidConversationSystem downgrades mid-conversation system messages to user so
+// OpenAI-compatible upstreams keep a stable system prefix for prompt caching.
+//
+// Background: clients like Claude Code inject role=system reminder messages in the middle of
+// the conversation (task tool reminders, hook context, date changes, etc.). OpenAI-compatible
+// upstreams hoist all system messages to the front of the prompt, so every newly injected
+// reminder rewrites the entire system prefix and defeats prompt caching. Downgrading these
+// mid-conversation system messages to user keeps them as conversation content in place, leaving
+// the leading system block (the real system prompt, carried over from the top-level system
+// field by the inbound transformer) stable across turns.
+//
+// Rules:
+//   - The leading contiguous system block is the real system prompt and is left untouched.
+//   - Any system message after it has its role changed to "user"; content and position are kept.
+//   - Non-system messages are unaffected; a no-op when there is no mid-conversation system message.
+func downgradeMidConversationSystem(messages []Message) []Message {
+	end := 0
+	for end < len(messages) && messages[end].Role == "system" {
+		end++
+	}
+
+	changed := false
+	for i := end; i < len(messages); i++ {
+		if messages[i].Role == "system" {
+			messages[i].Role = "user"
+			changed = true
+		}
+	}
+
+	if !changed {
+		return messages
+	}
+
+	return messages
 }
 
 // applyReasoningEffortMapping replaces reasoning_effort according to a per-channel mapping.
@@ -186,6 +229,16 @@ func MessageFromLLMWithConfig(m llm.Message, reasoningField ReasoningField) Mess
 		})
 	}
 
+	// An assistant turn that only requests tool calls has no content to send, and
+	// a message whose parts were all filtered out (e.g. compaction) is left with an
+	// empty part list. Both cases would reach the wire as a missing or null content
+	// field, which the OpenAI spec permits but stricter OpenAI-compatible upstreams
+	// reject because their schema only accepts a string or an array. Normalize to an
+	// empty string, which every implementation accepts and OpenAI treats as no content.
+	if len(msg.ToolCalls) > 0 && msg.Content.Content == nil && len(msg.Content.MultipleContent) == 0 {
+		msg.Content = MessageContent{Content: lo.ToPtr("")}
+	}
+
 	// Convert Annotations
 	if len(m.Annotations) > 0 {
 		msg.Annotations = lo.Map(m.Annotations, func(a llm.Annotation, _ int) Annotation {
@@ -237,7 +290,7 @@ func MessageContentFromLLM(c llm.MessageContent) MessageContent {
 // MessageContentPartFromLLM creates OpenAI MessageContentPart from unified llm.MessageContentPart.
 func MessageContentPartFromLLM(p llm.MessageContentPart) MessageContentPart {
 	part := MessageContentPart{
-		Type: p.Type,
+		Type: normalizeContentPartType(p.Type),
 		Text: p.Text,
 	}
 
@@ -262,6 +315,20 @@ func MessageContentPartFromLLM(p llm.MessageContentPart) MessageContentPart {
 	}
 
 	return part
+}
+
+// normalizeContentPartType maps Responses-only text part types onto the plain
+// "text" type used by Chat Completions. The Responses API distinguishes input
+// from output text, but Chat Completions has a single text part type, and strict
+// OpenAI-compatible upstreams reject the ones they do not know. Types that Chat
+// Completions does understand (image_url, video_url, input_audio, ...) pass through.
+func normalizeContentPartType(partType string) string {
+	switch partType {
+	case "input_text", "output_text":
+		return "text"
+	default:
+		return partType
+	}
 }
 
 // ToolFromLLM creates OpenAI Tool from unified llm.Tool.

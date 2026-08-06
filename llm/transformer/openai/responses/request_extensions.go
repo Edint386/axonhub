@@ -17,16 +17,14 @@ func attachOpenAIResponsesRequestExtensions(chatReq *llm.Request, req *Request, 
 		reasoningContext = req.Reasoning.Context
 	}
 	requestExt := &llm.OpenAIResponsesRequestExtensions{
-		ReasoningContext:   reasoningContext,
-		RawTools:           buildRawOnlyToolFragments(req.Tools, raw.Tools),
-		ToolSignatures:     buildRepresentedToolSignatures(req.Tools),
-		RawToolChoice:      rawUnsupportedToolChoice(req.ToolChoice, raw.ToolChoice),
-		RawInputItems:      buildRawOnlyInputFragments(req.Input, raw.InputItems),
-		NamespaceTools:     buildNamespaceToolMappings(req.Tools, raw.Tools),
-		PlainFunctionNames: buildPlainFunctionNames(req.Tools),
+		ReasoningContext: reasoningContext,
+		RawTools:         buildRawOnlyToolFragments(req.Tools, raw.Tools),
+		ToolSignatures:   buildRepresentedToolSignatures(req.Tools),
+		RawToolChoice:    rawUnsupportedToolChoice(req.ToolChoice, raw.ToolChoice),
+		RawInputItems:    buildRawOnlyInputFragments(req.Input, raw.InputItems),
 	}
 
-	if requestExt.ReasoningContext == "" && len(requestExt.RawTools) == 0 && len(requestExt.RawToolChoice) == 0 && len(requestExt.RawInputItems) == 0 && len(requestExt.NamespaceTools) == 0 {
+	if requestExt.ReasoningContext == "" && len(requestExt.RawTools) == 0 && len(requestExt.RawToolChoice) == 0 && len(requestExt.RawInputItems) == 0 {
 		return
 	}
 
@@ -85,7 +83,6 @@ func buildRepresentedToolSignatures(tools []Tool) []string {
 					}))
 				}
 			}
-
 			continue
 		}
 		if !isStructurallyRepresentedToolType(tool.Type) {
@@ -95,21 +92,6 @@ func buildRepresentedToolSignatures(tools []Tool) []string {
 	}
 
 	return signatures
-}
-
-func buildPlainFunctionNames(tools []Tool) []string {
-	if len(tools) == 0 {
-		return nil
-	}
-
-	names := make([]string, 0, len(tools))
-	for _, tool := range tools {
-		if tool.Type == "function" && tool.Name != "" {
-			names = append(names, tool.Name)
-		}
-	}
-
-	return names
 }
 
 func buildRawOnlyToolFragments(tools []Tool, rawTools []json.RawMessage) []llm.OpenAIResponsesRawFragment {
@@ -141,7 +123,6 @@ func representedNamespaceToolCount(tool Tool) int {
 	}
 
 	count := 0
-
 	for _, subTool := range tool.Tools {
 		if subTool.Type == "function" {
 			count++
@@ -149,43 +130,6 @@ func representedNamespaceToolCount(tool Tool) int {
 	}
 
 	return count
-}
-
-func buildNamespaceToolMappings(tools []Tool, rawTools []json.RawMessage) []llm.OpenAIResponsesNamespaceTool {
-	if len(tools) == 0 {
-		return nil
-	}
-
-	var mappings []llm.OpenAIResponsesNamespaceTool
-	for i := range tools {
-		if tools[i].Type != "namespace" || tools[i].Name == "" || i >= len(rawTools) || len(rawTools[i]) == 0 {
-			continue
-		}
-
-		var raw struct {
-			Tools []struct {
-				Type string `json:"type"`
-				Name string `json:"name"`
-			} `json:"tools"`
-		}
-		if err := json.Unmarshal(rawTools[i], &raw); err != nil {
-			continue
-		}
-
-		for _, child := range raw.Tools {
-			// Mirror the flattening rule in convertToolsToLLM so the mapping
-			// always lines up with the tools the model actually sees.
-			if child.Name == "" || child.Type != "function" {
-				continue
-			}
-			mappings = append(mappings, llm.OpenAIResponsesNamespaceTool{
-				Namespace: tools[i].Name,
-				Name:      child.Name,
-			})
-		}
-	}
-
-	return mappings
 }
 
 func isStructurallyRepresentedToolType(toolType string) bool {
@@ -358,14 +302,12 @@ func mergeRawOnlyTools(structuredRaw json.RawMessage, requestExt *llm.OpenAIResp
 	}
 
 	representedCount := 0
-
 	for _, fragment := range requestExt.RawTools {
 		if fragment.RepresentedToolCount < 0 {
 			return nil, false
 		}
 		representedCount += fragment.RepresentedToolCount
 	}
-
 	if representedCount > len(structuredTools) {
 		return nil, false
 	}
@@ -384,12 +326,10 @@ func mergeRawOnlyTools(structuredRaw json.RawMessage, requestExt *llm.OpenAIResp
 	for i := 0; i < total; i++ {
 		if fragment, ok := rawByIndex[i]; ok {
 			tools = append(tools, cloneRaw(fragment.Raw))
-
 			structuredIndex += fragment.RepresentedToolCount
 			if structuredIndex > len(structuredTools) {
 				return nil, false
 			}
-
 			continue
 		}
 		if structuredIndex >= len(structuredTools) {

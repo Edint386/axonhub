@@ -226,6 +226,11 @@ func (_q *APIKeyQuery) collectField(ctx context.Context, oneNode bool, opCtx *gr
 				selectedFields = append(selectedFields, apikey.FieldProfiles)
 				fieldSeen[apikey.FieldProfiles] = struct{}{}
 			}
+		case "allowedIps":
+			if _, ok := fieldSeen[apikey.FieldAllowedIps]; !ok {
+				selectedFields = append(selectedFields, apikey.FieldAllowedIps)
+				fieldSeen[apikey.FieldAllowedIps] = struct{}{}
+			}
 		case "id":
 		case "__typename":
 		default:
@@ -4025,6 +4030,11 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 			if _, ok := fieldSeen[requestexecution.FieldFormat]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldFormat)
 				fieldSeen[requestexecution.FieldFormat] = struct{}{}
+			}
+		case "reasoningEffort":
+			if _, ok := fieldSeen[requestexecution.FieldReasoningEffort]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldReasoningEffort)
+				fieldSeen[requestexecution.FieldReasoningEffort] = struct{}{}
 			}
 		case "requestBody":
 			if _, ok := fieldSeen[requestexecution.FieldRequestBody]; !ok {

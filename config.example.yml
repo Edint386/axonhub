@@ -15,11 +15,16 @@ server:
     thread_header: "AH-Thread-Id" # Thread ID header name (env: AXONHUB_SERVER_TRACE_THREAD_HEADER)
     trace_header: "AH-Trace-Id" # Trace ID header name (env: AXONHUB_SERVER_TRACE_TRACE_HEADER)
     extra_trace_headers: [] # Extra trace headers (env: AXONHUB_SERVER_TRACE_EXTRA_TRACE_HEADERS)
+    response_trace_headers: [] # Response headers for the resolved trace ID (env: AXONHUB_SERVER_TRACE_RESPONSE_TRACE_HEADERS)
     extra_trace_body_fields: [] # Extra trace body fields (env: AXONHUB_SERVER_TRACE_EXTRA_TRACE_BODY_FIELDS)
     claude_code_trace_enabled: false # Enable extracting trace IDs from Claude Code request metadata (env: AXONHUB_SERVER_TRACE_CLAUDE_CODE_TRACE_ENABLED)
     codex_trace_enabled: false # Enable extracting trace IDs from Codex Session_id header (env: AXONHUB_SERVER_TRACE_CODEX_TRACE_ENABLED)
   debug: false                  # Enable debug mode (env: AXONHUB_SERVER_DEBUG)
   disable_ssl_verify: false     # Disable SSL certificate verification for self-signed certificates (env: AXONHUB_SERVER_DISABLE_SSL_VERIFY)
+  # Max multipart form memory for large uploads (e.g. backup restore).
+  # Accepts plain bytes or K/M/G suffixes: "32M", "512MB", "1G", "536870912".
+  # Default: "32M" (env: AXONHUB_SERVER_MAX_MULTIPART_MEMORY)
+  max_multipart_memory: "32M"
   cors:
     enabled: true               # Enable CORS middleware (env: AXONHUB_SERVER_CORS_ENABLED)
     debug: false                # Enable CORS debug logging (env: AXONHUB_SERVER_CORS_DEBUG)
@@ -143,7 +148,7 @@ log:
 metrics:
   enabled: false                 # Enable metrics collection (env: AXONHUB_METRICS_ENABLED)
   exporter: 
-    type: "oltphttp"          # Metrics exporter type: prometheus, console (env: AXONHUB_METRICS_EXPORTER_TYPE)
+    type: "otlphttp"          # Metrics exporter type: prometheus, console (env: AXONHUB_METRICS_EXPORTER_TYPE)
     endpoint: "localhost:8080" # Metrics exporter endpoint (env: AXONHUB_METRICS_EXPORTER_ENDPOINT)
     insecure: true             # Enable insecure connection (env: AXONHUB_METRICS_EXPORTER_INSECURE)
     

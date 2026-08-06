@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { getTokenFromStorage } from '@/stores/authStore';
 import i18n from '@/lib/i18n';
 import { useErrorHandler } from '@/hooks/use-error-handler';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { ProxyConfig } from '@/features/channels/data/schema';
 import type { ModelAssociation } from '@/features/models/data/schema';
 
@@ -22,8 +23,8 @@ const SYSTEM_VERSION_QUERY = `
 `;
 
 export const CHECK_FOR_UPDATE_QUERY = `
-  query CheckForUpdate {
-    checkForUpdate {
+  query CheckForUpdate($includeBeta: Boolean! = false) {
+    checkForUpdate(includeBeta: $includeBeta) {
       currentVersion
       latestVersion
       hasUpdate
@@ -99,6 +100,7 @@ const RETRY_POLICY_QUERY = `
       streamFirstEventTimeoutSeconds
       nonStreamResponseTimeoutSeconds
       loadBalancerStrategy
+      traceStickyMode
       enabled
       emptyResponseDetection
       upstreamErrorPolicy {
@@ -349,6 +351,7 @@ export interface RetryPolicy {
   streamFirstEventTimeoutSeconds: number;
   nonStreamResponseTimeoutSeconds: number;
   loadBalancerStrategy: string;
+  traceStickyMode: TraceStickyMode;
   enabled: boolean;
   autoDisableChannel: AutoDisableChannel;
   emptyResponseDetection: boolean;
@@ -377,11 +380,14 @@ export interface RetryPolicyInput {
   streamFirstEventTimeoutSeconds?: number;
   nonStreamResponseTimeoutSeconds?: number;
   loadBalancerStrategy?: string;
+  traceStickyMode?: TraceStickyMode;
   enabled?: boolean;
   autoDisableChannel?: AutoDisableChannelInput;
   emptyResponseDetection?: boolean;
   upstreamErrorPolicy?: Partial<UpstreamErrorPolicy>;
 }
+
+export type TraceStickyMode = 'DISABLED' | 'PREFER_PREVIOUS_CHANNEL';
 
 export interface UpdateDefaultDataStorageInput {
   dataStorageID: string;
@@ -449,10 +455,11 @@ export interface ClearCachePayload {
 // Hooks
 export function useBrandSettings(options?: { enabled?: boolean }) {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['brandSettings'],
-    enabled: options?.enabled,
+    enabled: options?.enabled !== false && hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ brandSettings: BrandSettings }>(BRAND_SETTINGS_QUERY);
@@ -467,9 +474,11 @@ export function useBrandSettings(options?: { enabled?: boolean }) {
 
 export function useStoragePolicy() {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['storagePolicy'],
+    enabled: hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ storagePolicy: StoragePolicy }>(STORAGE_POLICY_QUERY);
@@ -614,9 +623,11 @@ export function useUpdateWebhookNotifierConfig() {
 
 export function useDefaultDataStorageID() {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['defaultDataStorageID'],
+    enabled: hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ defaultDataStorageID: string | null }>(DEFAULT_DATA_STORAGE_QUERY);
@@ -731,11 +742,11 @@ export function useSystemVersion() {
   });
 }
 
-export function useCheckForUpdate() {
+export function useCheckForUpdate(includeBeta = false) {
   return useQuery({
-    queryKey: ['checkForUpdate'],
+    queryKey: ['checkForUpdate', includeBeta],
     queryFn: async () => {
-      const data = await graphqlRequest<{ checkForUpdate: VersionCheck }>(CHECK_FOR_UPDATE_QUERY);
+      const data = await graphqlRequest<{ checkForUpdate: VersionCheck }>(CHECK_FOR_UPDATE_QUERY, { includeBeta });
       return data.checkForUpdate;
     },
     retry: false,
@@ -889,6 +900,8 @@ const CHANNEL_SETTINGS_QUERY = `
       autoSync {
         frequency
       }
+      testSystemPrompt
+      testUserPrompt
     }
   }
 `;
@@ -971,9 +984,11 @@ export interface DeveloperModelSettings {
 
 export function useModelSettings() {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['modelSettings'],
+    enabled: hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ systemModelSettings: ModelSettings }>(MODEL_SETTINGS_QUERY);
@@ -1021,6 +1036,8 @@ export interface ChannelModelAutoSyncSetting {
 export interface ChannelSetting {
   probe: ChannelProbeSetting;
   autoSync: ChannelModelAutoSyncSetting;
+  testSystemPrompt: string;
+  testUserPrompt: string;
 }
 
 export interface UpdateChannelProbeSettingInput {
@@ -1035,13 +1052,17 @@ export interface UpdateChannelModelAutoSyncSettingInput {
 export interface UpdateSystemChannelSettingsInput {
   probe?: UpdateChannelProbeSettingInput;
   autoSync?: UpdateChannelModelAutoSyncSettingInput;
+  testSystemPrompt?: string;
+  testUserPrompt?: string;
 }
 
-export function useChannelSetting() {
+export function useChannelSetting(options?: { enabled?: boolean }) {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['channelSetting'],
+    enabled: options?.enabled !== false && hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ systemChannelSettings: ChannelSetting }>(CHANNEL_SETTINGS_QUERY);
@@ -1075,9 +1096,11 @@ export function useUpdateChannelSetting() {
 
 export function useGeneralSettings() {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['generalSettings'],
+    enabled: hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ systemGeneralSettings: SystemGeneralSettings }>(SYSTEM_GENERAL_SETTINGS_QUERY);
@@ -1150,9 +1173,11 @@ export function useUpdateVideoStorageSettings() {
 
 export function useSecuritySettings() {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['securitySettings'],
+    enabled: hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ securitySettings: SecuritySettings }>(SECURITY_SETTINGS_QUERY);
@@ -1204,6 +1229,7 @@ const RESTORE_MUTATION = `
 `;
 
 export interface BackupOptionsInput {
+  includeSystemConfigs: boolean;
   includeChannels: boolean;
   includeModelPrices: boolean;
   includeModels: boolean;
@@ -1219,6 +1245,7 @@ export interface BackupPayload {
 }
 
 export interface RestoreOptionsInput {
+  includeSystemConfigs: boolean;
   includeChannels: boolean;
   includeModelPrices: boolean;
   includeModels: boolean;
@@ -1314,6 +1341,7 @@ export function useRestore() {
 const AUTO_BACKUP_SETTINGS_QUERY = `
   query AutoBackupSettings {
     autoBackupSettings {
+      includeSystemConfigs
       enabled
       frequency
       dataStorageID
@@ -1348,6 +1376,7 @@ const TRIGGER_AUTO_BACKUP_MUTATION = `
 export type BackupFrequency = 'daily' | 'weekly' | 'monthly';
 
 export interface AutoBackupSettings {
+  includeSystemConfigs: boolean;
   enabled: boolean;
   frequency: BackupFrequency;
   dataStorageID: number;
@@ -1363,6 +1392,7 @@ export interface AutoBackupSettings {
 }
 
 export interface UpdateAutoBackupSettingsInput {
+  includeSystemConfigs?: boolean;
   enabled?: boolean;
   frequency?: BackupFrequency;
   dataStorageID?: number;
@@ -1472,9 +1502,11 @@ export interface SaveProxyPresetInput {
 
 export function useProxyPresets() {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['proxyPresets'],
+    enabled: hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ proxyPresets: ProxyPreset[] }>(PROXY_PRESETS_QUERY);
@@ -1668,9 +1700,11 @@ export interface UpdateQuotaEnforcementSettingsInput {
 
 export function useQuotaEnforcementSettings() {
   const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
 
   return useQuery({
     queryKey: ['quotaEnforcementSettings'],
+    enabled: hasSystemScope('read_settings'),
     queryFn: async () => {
       try {
         const data = await graphqlRequest<{ quotaEnforcementSettings: QuotaEnforcementSettings }>(QUOTA_ENFORCEMENT_SETTINGS_QUERY);
@@ -1693,6 +1727,82 @@ export function useUpdateQuotaEnforcementSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotaEnforcementSettings'] });
+      toast.success(i18n.t('common.success.systemUpdated'));
+    },
+    onError: () => {
+      toast.error(i18n.t('common.errors.systemUpdateFailed'));
+    },
+  });
+}
+
+const PROVIDER_QUOTA_COLLECTION_SETTINGS_QUERY = `
+  query ProviderQuotaCollectionSettings {
+    providerQuotaCollectionSettings {
+      enabled
+      providers {
+        provider
+        enabled
+      }
+    }
+  }
+`;
+
+const UPDATE_PROVIDER_QUOTA_COLLECTION_SETTINGS_MUTATION = `
+  mutation UpdateProviderQuotaCollectionSettings($input: UpdateProviderQuotaCollectionSettingsInput!) {
+    updateProviderQuotaCollectionSettings(input: $input)
+  }
+`;
+
+export interface ProviderQuotaCollectionProvider {
+  provider: string;
+  enabled: boolean;
+}
+
+export interface ProviderQuotaCollectionSettings {
+  enabled: boolean;
+  providers: ProviderQuotaCollectionProvider[];
+}
+
+export interface UpdateProviderQuotaCollectionSettingsInput {
+  enabled?: boolean;
+  providers?: ProviderQuotaCollectionProvider[];
+}
+
+export function useProviderQuotaCollectionSettings() {
+  const { handleError } = useErrorHandler();
+  const { hasSystemScope } = usePermissions();
+
+  return useQuery({
+    queryKey: ['providerQuotaCollectionSettings'],
+    enabled: hasSystemScope('read_settings'),
+    queryFn: async () => {
+      try {
+        const data = await graphqlRequest<{ providerQuotaCollectionSettings: ProviderQuotaCollectionSettings }>(
+          PROVIDER_QUOTA_COLLECTION_SETTINGS_QUERY
+        );
+        return data.providerQuotaCollectionSettings;
+      } catch (error) {
+        handleError(error, i18n.t('common.errors.internalServerError'));
+        throw error;
+      }
+    },
+  });
+}
+
+export function useUpdateProviderQuotaCollectionSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateProviderQuotaCollectionSettingsInput) => {
+      const data = await graphqlRequest<{ updateProviderQuotaCollectionSettings: boolean }>(
+        UPDATE_PROVIDER_QUOTA_COLLECTION_SETTINGS_MUTATION,
+        { input }
+      );
+      return data.updateProviderQuotaCollectionSettings;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['providerQuotaCollectionSettings'] });
+      queryClient.invalidateQueries({ queryKey: ['provider-quotas'] });
       toast.success(i18n.t('common.success.systemUpdated'));
     },
     onError: () => {

@@ -22,6 +22,7 @@ import {
   bulkUpdateChannelOrderingResultSchema,
   channelSummaryConnectionSchema,
   ChannelSettings,
+  ProxyConfig,
   ChannelPolicies,
   ChannelModelPrice,
   SaveChannelModelPriceInput,
@@ -106,6 +107,7 @@ const CREATE_CHANNEL_MUTATION = `
       status
       policies {
         stream
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
       }
       supportedModels
       autoSyncSupportedModels
@@ -128,12 +130,14 @@ const CREATE_CHANNEL_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
+          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -182,6 +186,7 @@ const DUPLICATE_CHANNEL_MUTATION = `
       status
       policies {
         stream
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
       }
       supportedModels
       autoSyncSupportedModels
@@ -204,12 +209,14 @@ const DUPLICATE_CHANNEL_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
+          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -258,6 +265,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
       status
       policies {
         stream
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
       }
       supportedModels
       autoSyncSupportedModels
@@ -280,12 +288,14 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
+          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -334,6 +344,7 @@ const UPDATE_CHANNEL_MUTATION = `
       status
       policies {
         stream
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
       }
       supportedModels
       autoSyncSupportedModels
@@ -356,12 +367,14 @@ const UPDATE_CHANNEL_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
+          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -555,6 +568,7 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             forceArrayInputs
             replaceDeveloperRoleWithSystem
             reasoningEffortMapping { from to }
+            downgradeMidConversationSystem
           }
           passThroughUserAgent
           passThroughBody
@@ -621,6 +635,7 @@ const GET_CHANNEL_DISABLED_API_KEYS_QUERY = `
           disabledAt
           errorCode
           reason
+          expiresAt
         }
       }
     }
@@ -659,6 +674,38 @@ const GET_CHANNEL_MODEL_PRICES_QUERY = `
                   tiers {
                     upTo
                     pricePerUnit
+                  }
+                }
+              }
+            }
+          }
+          schedule {
+            timezone
+            overrides {
+              name
+              priority
+              when {
+                dailyTime {
+                  start
+                  end
+                }
+                weekdays
+                dateRange {
+                  start
+                  end
+                }
+              }
+              items {
+                itemCode
+                pricing {
+                  mode
+                  flatFee
+                  usagePerUnit
+                  usageTiered {
+                    tiers {
+                      upTo
+                      pricePerUnit
+                    }
                   }
                 }
               }
@@ -756,6 +803,7 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             forceArrayInputs
             replaceDeveloperRoleWithSystem
             reasoningEffortMapping { from to }
+            downgradeMidConversationSystem
           }
           passThroughUserAgent
           passThroughBody
@@ -844,6 +892,7 @@ const QUERY_CHANNELS_QUERY = `
           status
           policies {
             stream
+            apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
           }
           credentials {
             apiKey
@@ -903,12 +952,14 @@ const QUERY_CHANNELS_QUERY = `
               url
               username
               password
+              disableConnectionReuse
             }
             transformOptions {
               forceArrayInstructions
               forceArrayInputs
               replaceDeveloperRoleWithSystem
               reasoningEffortMapping { from to }
+              downgradeMidConversationSystem
             }
             passThroughUserAgent
             passThroughBody
@@ -947,6 +998,7 @@ const QUERY_CHANNELS_QUERY = `
             disabledAt
             errorCode
             reason
+            expiresAt
           }
           liveLimiterStats {
             inFlight
@@ -1506,7 +1558,7 @@ export function useTestChannel(options?: { silent?: boolean }) {
     }: {
       channelID: string;
       modelID?: string;
-      proxy?: { type: string; url?: string; username?: string; password?: string };
+      proxy?: ProxyConfig;
     }) => {
       try {
         const data = await graphqlRequest<{
@@ -1884,6 +1936,7 @@ export function useChannelDisabledAPIKeys(channelId: string, options?: { enabled
               disabledAt: string;
               errorCode: number;
               reason?: string | null;
+              expiresAt?: string | null;
             }>;
           };
         }>(GET_CHANNEL_DISABLED_API_KEYS_QUERY, { id: channelId });

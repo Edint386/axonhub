@@ -20,6 +20,7 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"enabled", "disabled", "archived"}, Default: "enabled"},
 		{Name: "scopes", Type: field.TypeJSON, Nullable: true},
 		{Name: "profiles", Type: field.TypeJSON, Nullable: true},
+		{Name: "allowed_ips", Type: field.TypeJSON, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt, Default: 1},
 		{Name: "user_id", Type: field.TypeInt, Nullable: true},
 	}
@@ -31,13 +32,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "api_keys_projects_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[10]},
+				Columns:    []*schema.Column{APIKeysColumns[11]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "api_keys_users_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[11]},
+				Columns:    []*schema.Column{APIKeysColumns[12]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -46,12 +47,12 @@ var (
 			{
 				Name:    "api_keys_by_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[11]},
+				Columns: []*schema.Column{APIKeysColumns[12]},
 			},
 			{
 				Name:    "api_keys_by_project_id",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[10]},
+				Columns: []*schema.Column{APIKeysColumns[11]},
 			},
 			{
 				Name:    "api_keys_by_key",
@@ -98,7 +99,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
 		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
 		{Name: "deleted_at", Type: field.TypeInt, Default: 0},
-		{Name: "type", Type: field.TypeEnum, Enums: []string{"openai", "openai_responses", "atlascloud", "cline", "codex", "vercel", "anthropic", "anthropic_aws", "anthropic_gcp", "gemini_openai", "gemini", "gemini_vertex", "deepseek", "deepseek_anthropic", "deepinfra", "qiniu", "fireworks", "doubao", "doubao_anthropic", "moonshot", "moonshot_anthropic", "zhipu", "zai", "zhipu_anthropic", "zai_anthropic", "anthropic_fake", "openai_fake", "openrouter", "xiaomi", "xiaomi_anthropic", "xai", "ppio", "siliconflow", "volcengine", "volcengine_anthropic", "longcat", "longcat_anthropic", "minimax", "minimax_anthropic", "aihubmix", "aihubmix_anthropic", "burncloud", "modelscope", "bailian", "bailian_anthropic", "moonshot_coding", "jina", "github", "github_copilot", "claudecode", "cerebras", "antigravity", "nanogpt", "nanogpt_responses", "opencode_go", "opencode_go_anthropic", "ollama", "evolink", "evolink_anthropic"}},
+		{Name: "type", Type: field.TypeEnum, Enums: []string{"openai", "openai_responses", "atlascloud", "cline", "codex", "vercel", "anthropic", "anthropic_aws", "anthropic_gcp", "gemini_openai", "gemini", "gemini_vertex", "deepseek", "deepseek_anthropic", "deepinfra", "qiniu", "fireworks", "doubao", "doubao_anthropic", "moonshot", "moonshot_anthropic", "zhipu", "zai", "zhipu_anthropic", "zai_anthropic", "anthropic_fake", "openai_fake", "openrouter", "xiaomi", "xiaomi_anthropic", "xai", "ppio", "siliconflow", "volcengine", "volcengine_anthropic", "longcat", "longcat_anthropic", "minimax", "minimax_anthropic", "aihubmix", "aihubmix_anthropic", "burncloud", "modelscope", "bailian", "bailian_anthropic", "moonshot_coding", "jina", "github", "github_copilot", "claudecode", "cerebras", "antigravity", "nanogpt", "nanogpt_responses", "opencode_go", "opencode_go_anthropic", "ollama", "ollama_anthropic", "evolink", "evolink_anthropic", "groq"}},
 		{Name: "base_url", Type: field.TypeString, Nullable: true},
 		{Name: "name", Type: field.TypeString},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"enabled", "disabled", "archived"}, Default: "disabled"},
@@ -280,6 +281,45 @@ var (
 				Name:    "data_sources_by_name",
 				Unique:  true,
 				Columns: []*schema.Column{DataStoragesColumns[4]},
+			},
+		},
+	}
+	// InvitationsColumns holds the columns for the "invitations" table.
+	InvitationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "deleted_at", Type: field.TypeInt, Default: 0},
+		{Name: "token_hash", Type: field.TypeString},
+		{Name: "role_id", Type: field.TypeInt, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "max_uses", Type: field.TypeInt, Default: 1},
+		{Name: "used_count", Type: field.TypeInt, Default: 0},
+		{Name: "project_id", Type: field.TypeInt},
+	}
+	// InvitationsTable holds the schema information for the "invitations" table.
+	InvitationsTable = &schema.Table{
+		Name:       "invitations",
+		Columns:    InvitationsColumns,
+		PrimaryKey: []*schema.Column{InvitationsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "invitations_projects_invitations",
+				Columns:    []*schema.Column{InvitationsColumns[9]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "invitation_token_hash",
+				Unique:  true,
+				Columns: []*schema.Column{InvitationsColumns[4]},
+			},
+			{
+				Name:    "invitation_project_id",
+				Unique:  false,
+				Columns: []*schema.Column{InvitationsColumns[9]},
 			},
 		},
 	}
@@ -591,6 +631,7 @@ var (
 		{Name: "external_id", Type: field.TypeString, Nullable: true, Size: 512},
 		{Name: "model_id", Type: field.TypeString},
 		{Name: "format", Type: field.TypeString, Default: "openai/chat_completions"},
+		{Name: "reasoning_effort", Type: field.TypeString, Nullable: true},
 		{Name: "request_body", Type: field.TypeJSON},
 		{Name: "response_body", Type: field.TypeJSON, Nullable: true},
 		{Name: "response_chunks", Type: field.TypeJSON, Nullable: true},
@@ -616,19 +657,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "request_executions_channels_executions",
-				Columns:    []*schema.Column{RequestExecutionsColumns[20]},
+				Columns:    []*schema.Column{RequestExecutionsColumns[21]},
 				RefColumns: []*schema.Column{ChannelsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "request_executions_data_storages_executions",
-				Columns:    []*schema.Column{RequestExecutionsColumns[21]},
+				Columns:    []*schema.Column{RequestExecutionsColumns[22]},
 				RefColumns: []*schema.Column{DataStoragesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "request_executions_requests_executions",
-				Columns:    []*schema.Column{RequestExecutionsColumns[22]},
+				Columns:    []*schema.Column{RequestExecutionsColumns[23]},
 				RefColumns: []*schema.Column{RequestsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -637,17 +678,17 @@ var (
 			{
 				Name:    "request_executions_by_request_id_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{RequestExecutionsColumns[22], RequestExecutionsColumns[12], RequestExecutionsColumns[1]},
+				Columns: []*schema.Column{RequestExecutionsColumns[23], RequestExecutionsColumns[13], RequestExecutionsColumns[1]},
 			},
 			{
 				Name:    "request_executions_by_request_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{RequestExecutionsColumns[22], RequestExecutionsColumns[1]},
+				Columns: []*schema.Column{RequestExecutionsColumns[23], RequestExecutionsColumns[1]},
 			},
 			{
 				Name:    "request_executions_by_channel_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{RequestExecutionsColumns[20], RequestExecutionsColumns[1]},
+				Columns: []*schema.Column{RequestExecutionsColumns[21], RequestExecutionsColumns[1]},
 			},
 		},
 	}
@@ -1002,6 +1043,7 @@ var (
 		ChannelOverrideTemplatesTable,
 		ChannelProbesTable,
 		DataStoragesTable,
+		InvitationsTable,
 		ModelsTable,
 		OidcIdentitiesTable,
 		ProjectsTable,
@@ -1029,6 +1071,7 @@ func init() {
 	ChannelModelPriceVersionsTable.ForeignKeys[0].RefTable = ChannelModelPricesTable
 	ChannelOverrideTemplatesTable.ForeignKeys[0].RefTable = UsersTable
 	ChannelProbesTable.ForeignKeys[0].RefTable = ChannelsTable
+	InvitationsTable.ForeignKeys[0].RefTable = ProjectsTable
 	OidcIdentitiesTable.ForeignKeys[0].RefTable = UsersTable
 	PromptsTable.ForeignKeys[0].RefTable = ProjectsTable
 	ProviderQuotaStatusTable.ForeignKeys[0].RefTable = ChannelsTable
