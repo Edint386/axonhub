@@ -26,6 +26,15 @@ interface UseRequestsColumnsOptions {
   onViewDetail?: (requestId: string) => void;
 }
 
+function getCacheHitRateColor(rate: number): string {
+  if (rate >= 98) return 'text-green-700 dark:text-green-300';
+  if (rate >= 90) return 'text-green-600 dark:text-green-400';
+  if (rate >= 75) return 'text-emerald-600 dark:text-emerald-400';
+  if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
+  if (rate >= 20) return 'text-orange-600 dark:text-orange-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
 export const DEFAULT_MOBILE_HIDDEN_COLUMN_IDS = [
   'apiFormat',
   'passThrough',
@@ -510,11 +519,14 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
 
         const hitRate = promptTokens > 0 ? (cachedTokens / promptTokens) * 100 : 0;
         const isLowHitRate = hitRate < 80 && promptTokens >= 40000;
+        const hitRateClassName = isLowHitRate
+          ? 'font-medium text-red-600 dark:text-red-400'
+          : getCacheHitRateColor(hitRate);
 
         return (
           <div className='text-xs'>
             <div className='text-sm font-medium'>{cachedTokens.toLocaleString()}</div>
-            <div className={isLowHitRate ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}>
+            <div className={hitRateClassName}>
               {t('requests.columns.cacheHitRate', {
                 rate: hitRate.toFixed(1),
               })}
