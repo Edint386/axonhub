@@ -49,6 +49,19 @@ func TestQueryResolver_AllChannelSummarys_ProjectProfileUsesIntersection(t *test
 		SetSupportedModels([]string{"matching-model"}).
 		SetDefaultTestModel("matching-model").
 		SetStatus(channel.StatusEnabled).
+		SetPriority(10).
+		SetTags([]string{"allowed"}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	highPriorityChannel, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("High Priority Matching").
+		SetCredentials(objects.ChannelCredentials{APIKey: "key-3"}).
+		SetSupportedModels([]string{"matching-model-high"}).
+		SetDefaultTestModel("matching-model-high").
+		SetStatus(channel.StatusEnabled).
+		SetPriority(100).
 		SetTags([]string{"allowed"}).
 		Save(ctx)
 	require.NoError(t, err)
@@ -61,7 +74,7 @@ func TestQueryResolver_AllChannelSummarys_ProjectProfileUsesIntersection(t *test
 			Profiles: []objects.ProjectProfile{
 				{
 					Name:        "production",
-					ChannelIDs:  []int{idOnlyChannel.ID, matchingChannel.ID},
+					ChannelIDs:  []int{idOnlyChannel.ID, matchingChannel.ID, highPriorityChannel.ID},
 					ChannelTags: []string{"allowed"},
 				},
 			},
@@ -73,8 +86,9 @@ func TestQueryResolver_AllChannelSummarys_ProjectProfileUsesIntersection(t *test
 
 	channels, err := resolver.AllChannelSummarys(projectCtx, nil)
 	require.NoError(t, err)
-	require.Len(t, channels, 1)
-	require.Equal(t, matchingChannel.ID, channels[0].ID)
+	require.Len(t, channels, 2)
+	require.Equal(t, highPriorityChannel.ID, channels[0].ID)
+	require.Equal(t, matchingChannel.ID, channels[1].ID)
 }
 
 func TestQueryResolver_AllChannelSummarys_RequiresChannelReadScopeWithoutProject(t *testing.T) {

@@ -759,7 +759,7 @@ func (r *queryResolver) AllChannelSummarys(ctx context.Context, includeArchived 
 		}
 		channels, err := r.client.Channel.Query().
 			Where(channel.StatusIn(statusFilter...)).
-			Order(ent.Desc(channel.FieldOrderingWeight)).
+			Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight)).
 			All(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to query channels: %w", err)
@@ -774,7 +774,7 @@ func (r *queryResolver) AllChannelSummarys(ctx context.Context, includeArchived 
 	if canReadChannels {
 		channels, err = r.client.Channel.Query().
 			Where(channel.StatusIn(statusFilter...)).
-			Order(ent.Desc(channel.FieldOrderingWeight)).
+			Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight)).
 			All(ctx)
 	} else {
 		if !authz.HasScope(ctx, scopes.ScopeWriteRequests) && !authz.HasScope(ctx, scopes.ScopeWriteAPIKeys) {
@@ -783,7 +783,7 @@ func (r *queryResolver) AllChannelSummarys(ctx context.Context, includeArchived 
 		channels, err = authz.RunWithSystemBypass(ctx, "project-available-channels", func(ctx context.Context) ([]*ent.Channel, error) {
 			return r.client.Channel.Query().
 				Where(channel.StatusEQ(channel.StatusEnabled)).
-				Order(ent.Desc(channel.FieldOrderingWeight)).
+				Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight)).
 				All(ctx)
 		})
 	}
@@ -902,6 +902,11 @@ func (r *queryResolver) APIKeyQuotaUsages(ctx context.Context, apiKeyID objects.
 	}
 
 	return result, nil
+}
+
+// ChannelQuotaUsage is the resolver for the channelQuotaUsage field.
+func (r *queryResolver) ChannelQuotaUsage(ctx context.Context, channelID objects.GUID) (*ChannelQuotaUsage, error) {
+	panic(fmt.Errorf("not implemented: ChannelQuotaUsage - channelQuotaUsage"))
 }
 
 // ID is the resolver for the id field.
