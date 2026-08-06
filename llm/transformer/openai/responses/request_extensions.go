@@ -17,12 +17,13 @@ func attachOpenAIResponsesRequestExtensions(chatReq *llm.Request, req *Request, 
 		reasoningContext = req.Reasoning.Context
 	}
 	requestExt := &llm.OpenAIResponsesRequestExtensions{
-		ReasoningContext: reasoningContext,
-		RawTools:         buildRawOnlyToolFragments(req.Tools, raw.Tools),
-		ToolSignatures:   buildRepresentedToolSignatures(req.Tools),
-		RawToolChoice:    rawUnsupportedToolChoice(req.ToolChoice, raw.ToolChoice),
-		RawInputItems:    buildRawOnlyInputFragments(req.Input, raw.InputItems),
-		NamespaceTools:   buildNamespaceToolMappings(req.Tools, raw.Tools),
+		ReasoningContext:   reasoningContext,
+		RawTools:           buildRawOnlyToolFragments(req.Tools, raw.Tools),
+		ToolSignatures:     buildRepresentedToolSignatures(req.Tools),
+		RawToolChoice:      rawUnsupportedToolChoice(req.ToolChoice, raw.ToolChoice),
+		RawInputItems:      buildRawOnlyInputFragments(req.Input, raw.InputItems),
+		NamespaceTools:     buildNamespaceToolMappings(req.Tools, raw.Tools),
+		PlainFunctionNames: buildPlainFunctionNames(req.Tools),
 	}
 
 	if requestExt.ReasoningContext == "" && len(requestExt.RawTools) == 0 && len(requestExt.RawToolChoice) == 0 && len(requestExt.RawInputItems) == 0 && len(requestExt.NamespaceTools) == 0 {
@@ -94,6 +95,21 @@ func buildRepresentedToolSignatures(tools []Tool) []string {
 	}
 
 	return signatures
+}
+
+func buildPlainFunctionNames(tools []Tool) []string {
+	if len(tools) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Type == "function" && tool.Name != "" {
+			names = append(names, tool.Name)
+		}
+	}
+
+	return names
 }
 
 func buildRawOnlyToolFragments(tools []Tool, rawTools []json.RawMessage) []llm.OpenAIResponsesRawFragment {

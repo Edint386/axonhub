@@ -885,22 +885,64 @@ func getResponseWebSearchCallsFromMetadata(metadata map[string]any) []Item {
 func namespaceToolMappings(ctx context.Context, metadata map[string]any) []llm.OpenAIResponsesNamespaceTool {
 	if raw, ok := metadata[responsesNamespaceToolsTransformerMetadataKey]; ok && raw != nil {
 		if typed, ok := raw.([]llm.OpenAIResponsesNamespaceTool); ok {
-			return typed
+			if mappings := validNamespaceToolMappings(typed); len(mappings) > 0 {
+				return mappings
+			}
 		}
 
 		var mappings []llm.OpenAIResponsesNamespaceTool
 		if data, err := json.Marshal(raw); err == nil {
 			if err := json.Unmarshal(data, &mappings); err == nil {
-				return mappings
+				if mappings = validNamespaceToolMappings(mappings); len(mappings) > 0 {
+					return mappings
+				}
 			}
 		}
 	}
 
 	if requestExt := openAIResponsesRequestExtensions(llm.RequestFromContext(ctx)); requestExt != nil {
-		return requestExt.NamespaceTools
+		return validNamespaceToolMappings(requestExt.NamespaceTools)
 	}
 
 	return nil
+}
+
+func validNamespaceToolMappings(mappings []llm.OpenAIResponsesNamespaceTool) []llm.OpenAIResponsesNamespaceTool {
+	if len(mappings) == 0 {
+		return nil
+	}
+
+	result := make([]llm.OpenAIResponsesNamespaceTool, 0, len(mappings))
+	seen := make(map[string]struct{}, len(mappings))
+	for _, mapping := range mappings {
+		if mapping.Namespace == "" || mapping.Name == "" {
+			continue
+		}
+
+		key := mapping.Namespace + "\x00" + mapping.Name
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, mapping)
+	}
+
+	return result
+}
+
+func requestHasPlainFunctionName(ctx context.Context, name string) bool {
+	requestExt := openAIResponsesRequestExtensions(llm.RequestFromContext(ctx))
+	if requestExt == nil {
+		return false
+	}
+
+	for _, plainName := range requestExt.PlainFunctionNames {
+		if plainName == name {
+			return true
+		}
+	}
+
+	return false
 }
 
 // resolveNamespaceFunctionCall maps a function name reported by the provider
@@ -919,6 +961,9 @@ func resolveNamespaceFunctionCall(ctx context.Context, metadata map[string]any, 
 
 	mappings := namespaceToolMappings(ctx, metadata)
 	if len(mappings) == 0 {
+		return "", name
+	}
+	if requestHasPlainFunctionName(ctx, name) {
 		return "", name
 	}
 

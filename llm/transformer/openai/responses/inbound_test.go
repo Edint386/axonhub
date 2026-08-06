@@ -817,6 +817,137 @@ func TestInboundTransformer_TransformResponse_DoesNotNamespaceAmbiguousFunctionC
 	require.Empty(t, resp.Output[0].Namespace)
 }
 
+func TestInboundTransformer_TransformResponse_DoesNotNamespaceCollidingPlainFunction(t *testing.T) {
+	trans := NewInboundTransformer()
+
+	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
+		Body: []byte(`{
+			"model": "gpt-5",
+			"input": "check",
+			"tools": [
+				{
+					"type": "namespace",
+					"name": "mcp__node_repl",
+					"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
+				},
+				{"type": "function", "name": "mcp__node_repl__js", "parameters": {"type": "object"}}
+			]
+		}`),
+	})
+	require.NoError(t, err)
+
+	llmResp := &llm.Response{
+		ID:      "resp_namespace_collision",
+		Object:  "chat.completion",
+		Model:   "gpt-5",
+		Created: 1700000000,
+		Choices: []llm.Choice{{
+			Index: 0,
+			Message: &llm.Message{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{{
+					ID:   "call_collision",
+					Type: "function",
+					Function: llm.FunctionCall{
+						Name:      "mcp__node_repl__js",
+						Arguments: `{}`,
+					},
+				}},
+			},
+			FinishReason: lo.ToPtr("tool_calls"),
+		}},
+	}
+
+	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(result.Body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "mcp__node_repl__js", resp.Output[0].Name)
+	require.Empty(t, resp.Output[0].Namespace)
+}
+
+func TestInboundTransformer_TransformResponse_FallsBackWhenNamespaceMetadataIsEmpty(t *testing.T) {
+	trans := NewInboundTransformer()
+
+	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
+		Body: []byte(`{
+			"model": "gpt-5",
+			"input": "run it",
+			"tools": [{
+				"type": "namespace",
+				"name": "mcp__node_repl",
+				"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
+			}]
+		}`),
+	})
+	require.NoError(t, err)
+
+	llmResp := &llm.Response{
+		ID:      "resp_namespace_empty_metadata",
+		Object:  "chat.completion",
+		Model:   "gpt-5",
+		Created: 1700000000,
+		TransformerMetadata: map[string]any{
+			responsesNamespaceToolsTransformerMetadataKey: []llm.OpenAIResponsesNamespaceTool{},
+		},
+		Choices: []llm.Choice{{
+			Index: 0,
+			Message: &llm.Message{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{{
+					ID:   "call_js",
+					Type: "function",
+					Function: llm.FunctionCall{
+						Name:      "mcp__node_repl__js",
+						Arguments: `{}`,
+					},
+				}},
+			},
+			FinishReason: lo.ToPtr("tool_calls"),
+		}},
+	}
+
+	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(result.Body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "js", resp.Output[0].Name)
+	require.Equal(t, "mcp__node_repl", resp.Output[0].Namespace)
+}
+
+func TestNamespaceToolMappings_FallsBackWhenMetadataHasNoValidMappings(t *testing.T) {
+	want := []llm.OpenAIResponsesNamespaceTool{{Namespace: "mcp__node_repl", Name: "js"}}
+	req := &llm.Request{
+		ProviderExtensions: &llm.ProviderExtensions{
+			OpenAIResponses: &llm.OpenAIResponsesProviderExtensions{
+				Request: &llm.OpenAIResponsesRequestExtensions{NamespaceTools: want},
+			},
+		},
+	}
+	ctx := llm.WithRequest(context.Background(), req)
+
+	tests := map[string]any{
+		"empty typed mappings": []llm.OpenAIResponsesNamespaceTool{},
+		"missing namespace":    []llm.OpenAIResponsesNamespaceTool{{Name: "js"}},
+		"missing name":         []llm.OpenAIResponsesNamespaceTool{{Namespace: "mcp__node_repl"}},
+		"generic invalid item": []map[string]any{{"namespace": "", "name": ""}},
+	}
+
+	for name, metadata := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := namespaceToolMappings(ctx, map[string]any{
+				responsesNamespaceToolsTransformerMetadataKey: metadata,
+			})
+
+			require.Equal(t, want, got)
+		})
+	}
+}
+
 func TestInboundTransformer_TransformRequest_PreservesWebSearchTools(t *testing.T) {
 	trans := NewInboundTransformer()
 

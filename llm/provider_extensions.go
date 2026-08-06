@@ -13,12 +13,13 @@ type OpenAIResponsesProviderExtensions struct {
 }
 
 type OpenAIResponsesRequestExtensions struct {
-	ReasoningContext string                         `json:"-"`
-	RawTools         []OpenAIResponsesRawFragment   `json:"-"`
-	ToolSignatures   []string                       `json:"-"`
-	RawToolChoice    json.RawMessage                `json:"-"`
-	RawInputItems    []OpenAIResponsesRawFragment   `json:"-"`
-	NamespaceTools   []OpenAIResponsesNamespaceTool `json:"-"`
+	ReasoningContext   string                         `json:"-"`
+	RawTools           []OpenAIResponsesRawFragment   `json:"-"`
+	ToolSignatures     []string                       `json:"-"`
+	RawToolChoice      json.RawMessage                `json:"-"`
+	RawInputItems      []OpenAIResponsesRawFragment   `json:"-"`
+	NamespaceTools     []OpenAIResponsesNamespaceTool `json:"-"`
+	PlainFunctionNames []string                       `json:"-"`
 }
 
 type OpenAIResponsesRawFragment struct {
@@ -62,12 +63,13 @@ func CloneProviderExtensions(src *ProviderExtensions) *ProviderExtensions {
 		cloned.OpenAIResponses = &OpenAIResponsesProviderExtensions{}
 		if src.OpenAIResponses.Request != nil {
 			cloned.OpenAIResponses.Request = &OpenAIResponsesRequestExtensions{
-				ReasoningContext: src.OpenAIResponses.Request.ReasoningContext,
-				RawTools:         cloneOpenAIResponsesRawFragments(src.OpenAIResponses.Request.RawTools),
-				ToolSignatures:   append([]string(nil), src.OpenAIResponses.Request.ToolSignatures...),
-				RawToolChoice:    cloneRawMessage(src.OpenAIResponses.Request.RawToolChoice),
-				RawInputItems:    cloneOpenAIResponsesRawFragments(src.OpenAIResponses.Request.RawInputItems),
-				NamespaceTools:   append([]OpenAIResponsesNamespaceTool(nil), src.OpenAIResponses.Request.NamespaceTools...),
+				ReasoningContext:   src.OpenAIResponses.Request.ReasoningContext,
+				RawTools:           cloneOpenAIResponsesRawFragments(src.OpenAIResponses.Request.RawTools),
+				ToolSignatures:     append([]string(nil), src.OpenAIResponses.Request.ToolSignatures...),
+				RawToolChoice:      cloneRawMessage(src.OpenAIResponses.Request.RawToolChoice),
+				RawInputItems:      cloneOpenAIResponsesRawFragments(src.OpenAIResponses.Request.RawInputItems),
+				NamespaceTools:     append([]OpenAIResponsesNamespaceTool(nil), src.OpenAIResponses.Request.NamespaceTools...),
+				PlainFunctionNames: append([]string(nil), src.OpenAIResponses.Request.PlainFunctionNames...),
 			}
 		}
 	}
