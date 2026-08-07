@@ -1,0 +1,7 @@
+{
+  "title": "ai: apply openpatch.diff",
+  "originalName": "openpatch.diff",
+  "patchPath": ".ai-patches/openpatch-20260807-132300-c02d.diff",
+  "createdAt": "2026-08-07T05:23:00.179Z",
+  "tool": "openpatch"
+}
