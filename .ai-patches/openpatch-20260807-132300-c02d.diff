@@ -1,0 +1,15 @@
+diff --git a/.github/workflows/custom-build.yml b/.github/workflows/custom-build.yml
+index 1bd5ba1e3785ca52d09235820751d722d0cda9f8..d726f559a8dcb1f69f6003a9707ba327f0b06b0c 100644
+--- a/.github/workflows/custom-build.yml
++++ b/.github/workflows/custom-build.yml
+@@ -79,7 +79,9 @@ jobs:
+           cp config.example.yml package/
+           cp LICENSE package/
+           cp README.md package/
+-          cp README.zh-CN.md package/
++          if [ -f README.zh-CN.md ]; then
++            cp README.zh-CN.md package/
++          fi
+           chmod +x package/axonhub
+ 
+       - name: Upload runnable package
