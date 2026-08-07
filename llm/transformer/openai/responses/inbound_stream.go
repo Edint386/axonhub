@@ -787,7 +787,7 @@ func (s *responsesInboundStream) startToolCallItem(toolCallIndex int) error {
 		}
 
 	default:
-		namespace, name := resolveNamespaceToolCall(s.ctx, s.transformerMetadata, tc)
+		namespace, name := resolveNamespaceToolCall(s.ctx, s.transformerMetadata, *tc)
 
 		item := &Item{
 			ID:        itemID,
