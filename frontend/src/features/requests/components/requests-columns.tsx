@@ -24,6 +24,15 @@ interface UseRequestsColumnsOptions {
   onViewDetail?: (requestId: string) => void;
 }
 
+function getCacheHitRateColor(rate: number): string {
+  if (rate >= 98) return 'text-green-700 dark:text-green-300';
+  if (rate >= 90) return 'text-green-600 dark:text-green-400';
+  if (rate >= 75) return 'text-emerald-600 dark:text-emerald-400';
+  if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
+  if (rate >= 20) return 'text-orange-600 dark:text-orange-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
 export const DEFAULT_HIDDEN_COLUMN_IDS = ['status', 'source', 'apiFormat', 'clientIP', 'tokensPerSecond'];
 
 export const DEFAULT_MOBILE_HIDDEN_COLUMN_IDS = [
@@ -309,6 +318,11 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
         const readCacheTokens = usageLog.promptCachedTokens ?? 0;
         const writeCacheTokens = usageLog.promptWriteCachedTokens ?? 0;
         const hasCache = readCacheTokens > 0 || writeCacheTokens > 0;
+        const hitRate = promptTokens > 0 ? (readCacheTokens / promptTokens) * 100 : 0;
+        const isLowHitRate = hitRate < 80 && promptTokens >= 40000;
+        const hitRateClassName = isLowHitRate
+          ? 'font-medium text-red-600 dark:text-red-400'
+          : getCacheHitRateColor(hitRate);
 
         return (
           <div className='min-w-[170px] space-y-1 text-xs'>
@@ -337,6 +351,11 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                 ? `${t('requests.columns.cache')} ${readCacheTokens.toLocaleString()} (${t('requests.columns.read')})  ${writeCacheTokens.toLocaleString()} (${t('requests.columns.write')})`
                 : `${t('requests.columns.cache')} -`}
             </div>
+            {readCacheTokens > 0 && (
+              <div className={hitRateClassName}>
+                {t('requests.columns.cacheHitRate', { rate: hitRate.toFixed(1) })}
+              </div>
+            )}
           </div>
         );
       },
