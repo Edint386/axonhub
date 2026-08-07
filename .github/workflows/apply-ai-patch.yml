@@ -1,0 +1,445 @@
+name: Apply AI Patch
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - ".ai-patches/*.diff"
+      - ".ai-patches/*.patch"
+      - ".ai-patches/*.zip"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-patch-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  apply-patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find patch file
+        id: patch
+        run: |
+          PATCH_FILE=$(git diff-tree --no-commit-id --diff-filter=AM --name-only -r "${{ github.sha }}" | grep -E '^.ai-patches/.*\.(diff|patch|zip)$' | tail -n 1 || true)
+
+          if [ -z "$PATCH_FILE" ]; then
+            echo "No patch file found in current commit."
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PATCH_NAME=$(basename "$PATCH_FILE")
+          META_FILE="${PATCH_FILE%.*}.json"
+          PACKAGE_TYPE="${PATCH_FILE##*.}"
+
+          echo "has_patch=true" >> "$GITHUB_OUTPUT"
+          echo "patch_file=$PATCH_FILE" >> "$GITHUB_OUTPUT"
+          echo "patch_name=$PATCH_NAME" >> "$GITHUB_OUTPUT"
+          echo "meta_file=$META_FILE" >> "$GITHUB_OUTPUT"
+          echo "package_type=$PACKAGE_TYPE" >> "$GITHUB_OUTPUT"
+
+      - name: Read patch metadata
+        id: metadata
+        if: steps.patch.outputs.has_patch == 'true'
+        run: |
+          META_FILE="${{ steps.patch.outputs.meta_file }}"
+
+          if [ -f "$META_FILE" ]; then
+            COMMIT_TITLE=$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write((m.title || '').replace(/\n/g, ' ').trim())" "$META_FILE")
+          else
+            COMMIT_TITLE=""
+          fi
+
+          if [ -z "$COMMIT_TITLE" ] && [ "${{ steps.patch.outputs.package_type }}" = "zip" ]; then
+            COMMIT_TITLE="ai: apply changed files package ${{ steps.patch.outputs.patch_name }}"
+          fi
+
+          if [ -z "$COMMIT_TITLE" ]; then
+            COMMIT_TITLE="ai: apply ${{ steps.patch.outputs.patch_name }}"
+          fi
+
+          echo "commit_title=$COMMIT_TITLE" >> "$GITHUB_OUTPUT"
+
+      - name: Apply changed files zip
+        if: steps.patch.outputs.has_patch == 'true' && steps.patch.outputs.package_type == 'zip'
+        run: |
+          ZIP_FILE="${{ steps.patch.outputs.patch_file }}"
+          EXTRACT_DIR="$RUNNER_TEMP/openpatch-files"
+          mkdir -p "$EXTRACT_DIR"
+
+          python3 - "$ZIP_FILE" <<'PY'
+          import os
+          import stat
+          import sys
+          import zipfile
+
+          zip_path = sys.argv[1]
+
+          def validate_path(name):
+            path = name.replace("\\", "/").strip()
+            if not path or path.endswith("/"):
+              return
+            if path.startswith("__MACOSX/") or path.endswith(".DS_Store"):
+              return
+            if path.startswith("/") or path.startswith("../") or "/../" in path or path == "..":
+              raise ValueError(f"Unsafe zip path: {name}")
+            if path.startswith(".git/") or path == ".git":
+              raise ValueError(f"Unsafe zip path: {name}")
+            if path.startswith(".ai-patches/") or path == ".ai-patches":
+              raise ValueError(f"Unsafe zip path: {name}")
+            if path.startswith(".github/workflows/") or path == ".github/workflows":
+              raise ValueError(f"Workflow changes are not allowed from zip: {name}")
+
+          with zipfile.ZipFile(zip_path) as archive:
+            for entry in archive.infolist():
+              validate_path(entry.filename)
+              mode = (entry.external_attr >> 16) & 0o170000
+              if stat.S_ISLNK(mode):
+                raise ValueError(f"Symlinks are not allowed in zip: {entry.filename}")
+          PY
+
+          unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR"
+
+          node - "$EXTRACT_DIR" <<'NODE'
+          const fs = require("fs");
+          const path = require("path");
+          const [extractDir] = process.argv.slice(2);
+          const repoRoot = process.cwd();
+          const deleteListName = ".openpatch-delete.txt";
+
+          function normalizeRelative(input) {
+            return String(input || "")
+              .replace(/\\/g, "/")
+              .replace(/^\.\//, "")
+              .trim();
+          }
+
+          function assertSafe(relativePath) {
+            const value = normalizeRelative(relativePath);
+            const parts = value.split("/").filter(Boolean);
+            if (!value || path.isAbsolute(value) || parts.includes("..")) {
+              throw new Error(`Unsafe path: ${relativePath}`);
+            }
+            if (parts[0] === ".git" || parts[0] === ".ai-patches") {
+              throw new Error(`Unsafe path: ${relativePath}`);
+            }
+            if (parts[0] === ".github" && parts[1] === "workflows") {
+              throw new Error(`Workflow changes are not allowed from zip: ${relativePath}`);
+            }
+            return value;
+          }
+
+          function walk(dir) {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            const files = [];
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              const stat = fs.lstatSync(fullPath);
+              if (stat.isSymbolicLink()) {
+                throw new Error(`Symlinks are not allowed: ${entry.name}`);
+              }
+              if (entry.isDirectory()) {
+                files.push(...walk(fullPath));
+              } else if (entry.isFile()) {
+                files.push(fullPath);
+              }
+            }
+            return files;
+          }
+
+          const files = walk(extractDir);
+
+          for (const file of files) {
+            const relative = path.relative(extractDir, file).split(path.sep).join("/");
+            if (relative.startsWith("__MACOSX/") || relative.endsWith(".DS_Store")) {
+              continue;
+            }
+            if (relative === deleteListName) {
+              const deletePaths = fs.readFileSync(file, "utf8")
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter((line) => line && !line.startsWith("#"));
+
+              for (const deletePath of deletePaths) {
+                const safePath = assertSafe(deletePath);
+                fs.rmSync(path.join(repoRoot, safePath), { force: true, recursive: true });
+              }
+              continue;
+            }
+
+            const safePath = assertSafe(relative);
+            const destination = path.join(repoRoot, safePath);
+            fs.mkdirSync(path.dirname(destination), { recursive: true });
+            fs.copyFileSync(file, destination);
+          }
+          NODE
+
+      - name: Normalize patch
+        id: normalized
+        if: steps.patch.outputs.has_patch == 'true' && steps.patch.outputs.package_type != 'zip'
+        run: |
+          NORMALIZED_PATCH="$RUNNER_TEMP/openpatch-normalized.patch"
+          LOOSE_APPLIER="$RUNNER_TEMP/openpatch-loose-apply.js"
+
+          node - "${{ steps.patch.outputs.patch_file }}" "$NORMALIZED_PATCH" <<'NODE'
+          const fs = require("fs");
+          const [inputPath, outputPath] = process.argv.slice(2);
+
+          function cleanPath(path) {
+            let value = String(path || "").trim().replace(/^([ab])\//, "");
+            if (value === "/dev/null") return value;
+            return value
+              .replace(/\.title_before$/i, "")
+              .replace(/_before$/i, "")
+              .replace(/\.before$/i, "")
+              .replace(/\.orig$/i, "")
+              .replace(/\.old$/i, "");
+          }
+
+          const input = fs.readFileSync(inputPath, "utf8");
+          const lines = input.split(/\r?\n/);
+          const out = [];
+          let currentTarget = "";
+
+          for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i];
+            const match = line.match(/^diff --git\s+(.+?)\s+(.+)$/);
+            if (match) {
+              const oldPath = cleanPath(match[1]);
+              const newPath = cleanPath(match[2]);
+              currentTarget = newPath !== "/dev/null" ? newPath : oldPath;
+              out.push(`diff --git a/${currentTarget} b/${currentTarget}`);
+
+              let next = i + 1;
+              while (next < lines.length && lines[next] === "") {
+                next += 1;
+              }
+
+              if (lines[next]?.startsWith("@@")) {
+                out.push(`--- a/${currentTarget}`);
+                out.push(`+++ b/${currentTarget}`);
+              }
+
+              continue;
+            }
+
+            if (line.startsWith("--- ")) {
+              const oldPath = cleanPath(line.replace(/^---\s+/, "").split(/\t/)[0]);
+              const nextLine = lines[i + 1] || "";
+              const plusMatch = nextLine.match(/^\+\+\+\s+(.+)$/);
+
+              if (!currentTarget && plusMatch) {
+                const newPath = cleanPath(plusMatch[1].split(/\t/)[0]);
+                currentTarget = newPath !== "/dev/null" ? newPath : oldPath;
+                out.push(`diff --git a/${currentTarget} b/${currentTarget}`);
+              }
+
+              if (currentTarget) {
+                out.push(`--- a/${currentTarget}`);
+                continue;
+              }
+            }
+
+            if (line.startsWith("+++ ") && currentTarget) {
+              out.push(`+++ b/${currentTarget}`);
+              continue;
+            }
+
+            out.push(line);
+          }
+
+          fs.writeFileSync(outputPath, out.join("\n"));
+          NODE
+
+          cat > "$LOOSE_APPLIER" <<'NODE'
+          const fs = require("fs");
+          const args = process.argv.slice(2);
+          const checkOnly = args.includes("--check");
+          const patchPath = args.find((arg) => arg !== "--check");
+
+          function splitText(text) {
+            return text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n");
+          }
+
+          function countMatches(lines, needle) {
+            let count = 0;
+            let index = -1;
+            if (needle.length === 0) return { count, index };
+
+            for (let i = 0; i <= lines.length - needle.length; i += 1) {
+              let ok = true;
+              for (let j = 0; j < needle.length; j += 1) {
+                if (lines[i + j] !== needle[j]) {
+                  ok = false;
+                  break;
+                }
+              }
+              if (ok) {
+                count += 1;
+                index = i;
+              }
+            }
+
+            return { count, index };
+          }
+
+          const patch = fs.readFileSync(patchPath, "utf8").split(/\r?\n/);
+          const files = [];
+          let file = null;
+          let hunkCount = 0;
+
+          for (let i = 0; i < patch.length; i += 1) {
+            const diff = patch[i].match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
+            if (diff) {
+              file = { path: diff[2], hunks: [] };
+              files.push(file);
+              continue;
+            }
+
+            const hunk = patch[i].match(/^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/);
+            if (hunk && file) {
+              const lines = [];
+              i += 1;
+              while (i < patch.length && !patch[i].startsWith("diff --git ") && !patch[i].startsWith("@@ ")) {
+                lines.push(patch[i]);
+                i += 1;
+              }
+              i -= 1;
+              file.hunks.push({ oldStart: Number(hunk[1]), lines });
+              hunkCount += 1;
+            }
+          }
+
+          if (files.length === 0 || hunkCount === 0) {
+            throw new Error("No patch hunks were parsed.");
+          }
+
+          for (const filePatch of files) {
+            if (filePatch.hunks.length === 0) {
+              throw new Error(`No hunks found for ${filePatch.path}.`);
+            }
+
+            if (!fs.existsSync(filePatch.path)) {
+              throw new Error(`File not found: ${filePatch.path}`);
+            }
+
+            let lines = splitText(fs.readFileSync(filePatch.path, "utf8"));
+
+            for (const hunk of filePatch.hunks) {
+              const oldParts = hunk.lines
+                .filter((line) => line.startsWith(" ") || line.startsWith("-"))
+                .map((line) => line.slice(1));
+              const newParts = hunk.lines
+                .filter((line) => line.startsWith(" ") || line.startsWith("+"))
+                .map((line) => line.slice(1));
+              const removeParts = hunk.lines
+                .filter((line) => line.startsWith("-"))
+                .map((line) => line.slice(1));
+              const addParts = hunk.lines
+                .filter((line) => line.startsWith("+"))
+                .map((line) => line.slice(1));
+
+              let found = countMatches(lines, oldParts);
+              if (found.count === 1) {
+                lines.splice(found.index, oldParts.length, ...newParts);
+                continue;
+              }
+
+              found = countMatches(lines, removeParts);
+              if (found.count === 1) {
+                lines.splice(found.index, removeParts.length, ...addParts);
+                continue;
+              }
+
+              throw new Error(`Cannot safely apply hunk in ${filePatch.path} near original line ${hunk.oldStart}`);
+            }
+
+            if (!checkOnly) {
+              fs.writeFileSync(filePatch.path, `${lines.join("\n")}\n`);
+            }
+          }
+          NODE
+
+          echo "patch_file=$NORMALIZED_PATCH" >> "$GITHUB_OUTPUT"
+          echo "loose_applier=$LOOSE_APPLIER" >> "$GITHUB_OUTPUT"
+
+      - name: Validate patch
+        id: apply_mode
+        if: steps.patch.outputs.has_patch == 'true' && steps.patch.outputs.package_type != 'zip'
+        run: |
+          for STRIP in "" -p0 -p1 -p2 -p3 -p4 -p5 -p6 -p7 -p8 -p9 -p10 -p11 -p12; do
+            if git apply $STRIP --check "${{ steps.normalized.outputs.patch_file }}"; then
+              echo "mode=git" >> "$GITHUB_OUTPUT"
+              echo "strip=$STRIP" >> "$GITHUB_OUTPUT"
+              echo "already_applied=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          for STRIP in "" -p0 -p1 -p2 -p3 -p4 -p5 -p6 -p7 -p8 -p9 -p10 -p11 -p12; do
+            if git apply $STRIP --reverse --check "${{ steps.normalized.outputs.patch_file }}"; then
+              echo "Patch has already been applied. Temporary patch files will be removed."
+              echo "mode=git" >> "$GITHUB_OUTPUT"
+              echo "strip=$STRIP" >> "$GITHUB_OUTPUT"
+              echo "already_applied=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          if node "${{ steps.normalized.outputs.loose_applier }}" --check "${{ steps.normalized.outputs.patch_file }}"; then
+            echo "mode=loose" >> "$GITHUB_OUTPUT"
+            echo "strip=" >> "$GITHUB_OUTPUT"
+            echo "already_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Patch cannot be applied with tested strip levels."
+          exit 1
+
+      - name: Apply patch
+        if: steps.patch.outputs.has_patch == 'true' && steps.apply_mode.outputs.already_applied != 'true' && steps.apply_mode.outputs.mode == 'git'
+        run: |
+          git apply ${{ steps.apply_mode.outputs.strip }} "${{ steps.normalized.outputs.patch_file }}"
+
+      - name: Apply loose patch
+        if: steps.patch.outputs.has_patch == 'true' && steps.apply_mode.outputs.already_applied != 'true' && steps.apply_mode.outputs.mode == 'loose'
+        run: |
+          node "${{ steps.normalized.outputs.loose_applier }}" "${{ steps.normalized.outputs.patch_file }}"
+
+      - name: Remove temporary patch files
+        if: steps.patch.outputs.has_patch == 'true'
+        run: |
+          git rm -f "${{ steps.patch.outputs.patch_file }}" || true
+          git rm -f "${{ steps.patch.outputs.meta_file }}" || true
+
+      - name: Commit applied changes
+        if: steps.patch.outputs.has_patch == 'true'
+        run: |
+          git config user.name "openpatch-bot"
+          git config user.email "openpatch-bot@users.noreply.github.com"
+
+          git add .
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 1
+          fi
+
+          git commit -m "${{ steps.metadata.outputs.commit_title }}"
+
+      - name: Push target branch
+        if: steps.patch.outputs.has_patch == 'true'
+        run: |
+          git push origin HEAD:${{ github.ref_name }}
