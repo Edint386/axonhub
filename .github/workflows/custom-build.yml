@@ -79,7 +79,6 @@ jobs:
           cp config.example.yml package/
           cp LICENSE package/
           cp README.md package/
-          cp README.zh-CN.md package/
           chmod +x package/axonhub
 
       - name: Upload runnable package
