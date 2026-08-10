@@ -14,75 +14,21 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAllChannelSummarys, useBulkUpdateChannelOrdering } from '../data/channels';
 import { ChannelSummary, ChannelSummaryConnection } from '../data/schema';
-
-type OrderingMode = 'weight' | 'priority';
+import {
+  applyOrderingMove,
+  clampWeight,
+  isValidGraphQLInt,
+  MAX_WEIGHT,
+  MIN_WEIGHT,
+  sortChannelsByMode,
+  type OrderingMode,
+} from './channel-ordering';
 
 interface OrderedChannel {
   channel: ChannelSummary;
   orderingWeight: number;
   priority: number;
 }
-
-const MIN_WEIGHT = 0;
-const MAX_WEIGHT = 100;
-const MIN_GRAPHQL_INT = -2147483648;
-const MAX_GRAPHQL_INT = 2147483647;
-const PRIORITY_STEP = 10;
-
-const formatWeight = (value: number) => Math.round(value);
-
-const clampWeight = (value: number) => formatWeight(Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, value)));
-
-const isValidGraphQLInt = (value: number) => Number.isInteger(value) && value >= MIN_GRAPHQL_INT && value <= MAX_GRAPHQL_INT;
-
-const calculateRelativeWeight = (prev?: number, next?: number) => {
-  if (prev == null && next == null) {
-    return clampWeight(1);
-  }
-  if (prev == null) {
-    return clampWeight((next ?? 0) + 1);
-  }
-  if (next == null) {
-    return clampWeight(prev - 1);
-  }
-  if (prev === next) {
-    return clampWeight(prev);
-  }
-  return clampWeight(Math.floor((prev + next) / 2));
-};
-
-const sortChannelsByMode = (items: OrderedChannel[], mode: OrderingMode) => {
-  const newItems = [...items];
-  newItems.sort((a, b) => {
-    if (mode === 'priority') {
-      return b.priority - a.priority || b.orderingWeight - a.orderingWeight;
-    }
-
-    return b.orderingWeight - a.orderingWeight || b.priority - a.priority;
-  });
-
-  return newItems;
-};
-
-const normalizePrioritiesByOrder = (items: OrderedChannel[]) => {
-  const maxPriority = Math.max(...items.map((item) => item.priority), 0);
-  const priorityLevels = new Set(items.map((item) => item.priority));
-  const startPriority = Math.max(maxPriority, priorityLevels.size * PRIORITY_STEP);
-  const normalizedByOriginalPriority = new Map<number, number>();
-
-  return items.map((item) => {
-    let nextPriority = normalizedByOriginalPriority.get(item.priority);
-    if (nextPriority === undefined) {
-      nextPriority = startPriority - normalizedByOriginalPriority.size * PRIORITY_STEP;
-      normalizedByOriginalPriority.set(item.priority, nextPriority);
-    }
-
-    return {
-      ...item,
-      priority: nextPriority,
-    };
-  });
-};
 
 const createOrderedChannels = (channelsData: ChannelSummaryConnection | undefined, mode: OrderingMode) => {
   if (!channelsData?.edges) {
@@ -341,6 +287,25 @@ export function ChannelsBulkOrderingDialog({ open, onOpenChange }: ChannelsBulkO
     })
   );
 
+  const moveChannel = useCallback(
+    (oldIndex: number, newIndex: number) => {
+      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) {
+        return;
+      }
+
+      const movedItems = arrayMove(orderedChannels, oldIndex, newIndex);
+      const result = applyOrderingMove(movedItems, newIndex, mode);
+      if (!result.ok) {
+        toast.error(t('channels.dialogs.bulkOrdering.weightCapacityError'));
+        return;
+      }
+
+      setOrderedChannels(result.items);
+      markDirty(mode);
+    },
+    [markDirty, mode, orderedChannels, t]
+  );
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -349,33 +314,11 @@ export function ChannelsBulkOrderingDialog({ open, onOpenChange }: ChannelsBulkO
         return;
       }
 
-      setOrderedChannels((items) => {
-        const oldIndex = items.findIndex((item) => item.channel.id === active.id);
-        const newIndex = items.findIndex((item) => item.channel.id === over.id);
-
-        if (oldIndex === -1 || newIndex === -1) {
-          return items;
-        }
-
-        const newItems = arrayMove(items, oldIndex, newIndex);
-        markDirty(mode);
-
-        if (mode === 'priority') {
-          return normalizePrioritiesByOrder(newItems);
-        }
-
-        const prevWeight = newItems[newIndex - 1]?.orderingWeight;
-        const nextWeight = newItems[newIndex + 1]?.orderingWeight;
-
-        newItems[newIndex] = {
-          ...newItems[newIndex],
-          orderingWeight: calculateRelativeWeight(prevWeight, nextWeight),
-        };
-
-        return newItems;
-      });
+      const oldIndex = orderedChannels.findIndex((item) => item.channel.id === active.id);
+      const newIndex = orderedChannels.findIndex((item) => item.channel.id === over.id);
+      moveChannel(oldIndex, newIndex);
     },
-    [markDirty, mode]
+    [moveChannel, orderedChannels]
   );
 
   const handleWeightChange = useCallback(
@@ -403,55 +346,16 @@ export function ChannelsBulkOrderingDialog({ open, onOpenChange }: ChannelsBulkO
 
   const handleMoveToTop = useCallback(
     (index: number) => {
-      setOrderedChannels((items) => {
-        if (!items.length || index === 0) {
-          return items;
-        }
-
-        const newItems = arrayMove(items, index, 0);
-        markDirty(mode);
-
-        if (mode === 'priority') {
-          return normalizePrioritiesByOrder(newItems);
-        }
-
-        const nextWeight = newItems[1]?.orderingWeight;
-        newItems[0] = {
-          ...newItems[0],
-          orderingWeight: calculateRelativeWeight(undefined, nextWeight),
-        };
-
-        return newItems;
-      });
+      moveChannel(index, 0);
     },
-    [markDirty, mode]
+    [moveChannel]
   );
 
   const handleMoveToBottom = useCallback(
     (index: number) => {
-      setOrderedChannels((items) => {
-        if (!items.length || index === items.length - 1) {
-          return items;
-        }
-
-        const targetIndex = items.length - 1;
-        const newItems = arrayMove(items, index, targetIndex);
-        markDirty(mode);
-
-        if (mode === 'priority') {
-          return normalizePrioritiesByOrder(newItems);
-        }
-
-        const prevWeight = newItems[targetIndex - 1]?.orderingWeight;
-        newItems[targetIndex] = {
-          ...newItems[targetIndex],
-          orderingWeight: calculateRelativeWeight(prevWeight, undefined),
-        };
-
-        return newItems;
-      });
+      moveChannel(index, orderedChannels.length - 1);
     },
-    [markDirty, mode]
+    [moveChannel, orderedChannels.length]
   );
 
   const handleSave = async () => {
@@ -543,7 +447,10 @@ export function ChannelsBulkOrderingDialog({ open, onOpenChange }: ChannelsBulkO
                     })}
                   </Badge>
                   {mode === 'priority' && duplicatePriorityCount > 0 && (
-                    <Badge variant='outline' className='border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-400'>
+                    <Badge
+                      variant='outline'
+                      className='border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-400'
+                    >
                       {t('channels.dialogs.bulkOrdering.duplicatePriorityHint')}
                     </Badge>
                   )}
