@@ -13,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/server/biz"
 )
 
 func setupTestQueryResolver(t *testing.T) (*queryResolver, context.Context, *ent.Client) {
@@ -26,6 +27,77 @@ func setupTestQueryResolver(t *testing.T) (*queryResolver, context.Context, *ent
 	resolver := &queryResolver{&Resolver{client: client}}
 
 	return resolver, ctx, client
+}
+
+func TestQueryResolver_ChannelQuotaUsage(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=1")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	quota := &objects.APIKeyQuota{
+		Requests: lo.ToPtr(int64(100)),
+		Period: objects.APIKeyQuotaPeriod{
+			Type: objects.APIKeyQuotaPeriodTypeAllTime,
+		},
+	}
+	channelEntity, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Quota Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "test-key"}).
+		SetSupportedModels([]string{"gpt-4o-mini"}).
+		SetDefaultTestModel("gpt-4o-mini").
+		SetStatus(channel.StatusEnabled).
+		SetSettings(&objects.ChannelSettings{Quota: quota}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	channelService := biz.NewChannelServiceForTest(client)
+	defer channelService.Stop()
+	quotaService := biz.NewQuotaService(
+		client,
+		biz.NewSystemService(biz.SystemServiceParams{Ent: client}),
+	)
+	resolver := &queryResolver{&Resolver{
+		client:         client,
+		channelService: channelService,
+		quotaService:   quotaService,
+	}}
+	channelID := objects.GUID{Type: ent.TypeChannel, ID: channelEntity.ID}
+
+	usage, err := resolver.ChannelQuotaUsage(ctx, channelID)
+	require.NoError(t, err)
+	require.NotNil(t, usage)
+	require.Equal(t, channelID, usage.ChannelID)
+	require.Equal(t, quota, usage.Quota)
+	require.NotNil(t, usage.Window)
+	require.Nil(t, usage.Window.Start)
+	require.NotNil(t, usage.Window.End)
+	require.NotNil(t, usage.Usage)
+	require.Zero(t, usage.Usage.RequestCount)
+	require.Zero(t, usage.Usage.TotalTokens)
+	require.True(t, usage.Usage.TotalCost.IsZero())
+
+	unconfiguredChannel, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Unconfigured Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "test-key"}).
+		SetSupportedModels([]string{"gpt-4o-mini"}).
+		SetDefaultTestModel("gpt-4o-mini").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	usage, err = resolver.ChannelQuotaUsage(ctx, objects.GUID{
+		Type: ent.TypeChannel,
+		ID:   unconfiguredChannel.ID,
+	})
+	require.NoError(t, err)
+	require.Nil(t, usage)
 }
 
 func TestQueryResolver_AllChannelSummarys_ProjectProfileUsesIntersection(t *testing.T) {

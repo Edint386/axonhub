@@ -906,7 +906,33 @@ func (r *queryResolver) APIKeyQuotaUsages(ctx context.Context, apiKeyID objects.
 
 // ChannelQuotaUsage is the resolver for the channelQuotaUsage field.
 func (r *queryResolver) ChannelQuotaUsage(ctx context.Context, channelID objects.GUID) (*ChannelQuotaUsage, error) {
-	panic(fmt.Errorf("not implemented: ChannelQuotaUsage - channelQuotaUsage"))
+	channelEntity, err := r.channelService.GetChannel(ctx, channelID.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get channel: %w", err)
+	}
+	if channelEntity.Settings == nil || channelEntity.Settings.Quota == nil {
+		return nil, nil
+	}
+
+	quota := channelEntity.Settings.Quota
+	quotaResult, err := r.quotaService.GetChannelQuota(ctx, channelID.ID, quota)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get channel quota usage: %w", err)
+	}
+
+	return &ChannelQuotaUsage{
+		ChannelID: channelID,
+		Quota:     quota,
+		Window: &APIKeyQuotaWindow{
+			Start: quotaResult.Window.Start,
+			End:   quotaResult.Window.End,
+		},
+		Usage: &APIKeyQuotaUsage{
+			RequestCount: int(quotaResult.Usage.RequestCount),
+			TotalTokens:  int(quotaResult.Usage.TotalTokens),
+			TotalCost:    quotaResult.Usage.TotalCost,
+		},
+	}, nil
 }
 
 // ID is the resolver for the id field.
