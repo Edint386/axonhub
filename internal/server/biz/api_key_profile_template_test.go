@@ -141,6 +141,68 @@ func TestAPIKeyProfileTemplate(t *testing.T) {
 	})
 }
 
+func TestAPIKeyProfileTemplateServiceRejectsInvalidLatencyThreshold(t *testing.T) {
+	svc, client := setupTestTemplateService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	projectEntity, err := client.Project.Create().
+		SetName(fmt.Sprintf("latency-template-project-%d", time.Now().UnixNano())).
+		SetDescription("latency template validation").
+		SetStatus(project.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+
+	zero := int64(0)
+	_, err = svc.CreateTemplate(ctx, ent.CreateAPIKeyProfileTemplateInput{
+		Name:      "invalid",
+		ProjectID: projectEntity.ID,
+	}, &objects.APIKeyProfile{
+		Name:                   "invalid",
+		MaxFirstTokenLatencyMs: &zero,
+	})
+	require.ErrorContains(t, err, "maxFirstTokenLatencyMs must be greater than zero")
+
+	valid := int64(500)
+	template, err := svc.CreateTemplate(ctx, ent.CreateAPIKeyProfileTemplateInput{
+		Name:      "valid",
+		ProjectID: projectEntity.ID,
+	}, &objects.APIKeyProfile{
+		Name:                   "valid",
+		MaxFirstTokenLatencyMs: &valid,
+	})
+	require.NoError(t, err)
+
+	negative := int64(-1)
+	_, err = svc.UpdateTemplate(ctx, template.ID, ent.UpdateAPIKeyProfileTemplateInput{}, &objects.APIKeyProfile{
+		Name:                   "valid",
+		MaxFirstTokenLatencyMs: &negative,
+	})
+	require.ErrorContains(t, err, "maxFirstTokenLatencyMs must be greater than zero")
+
+	invalidTemplate, err := client.APIKeyProfileTemplate.Create().
+		SetName("legacy-invalid").
+		SetProjectID(projectEntity.ID).
+		SetProfile(&objects.APIKeyProfile{
+			Name:                   "legacy-invalid",
+			MaxFirstTokenLatencyMs: &zero,
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	apiKey, err := client.APIKey.Create().
+		SetName("template-load-key").
+		SetKey(fmt.Sprintf("ah-template-load-%d", time.Now().UnixNano())).
+		SetProjectID(projectEntity.ID).
+		SetType(apikey.TypeUser).
+		SetProfiles(&objects.APIKeyProfiles{ActiveProfile: "default", Profiles: []objects.APIKeyProfile{{Name: "default"}}}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = svc.LoadTemplate(ctx, invalidTemplate.ID, apiKey.ID)
+	require.ErrorContains(t, err, "maxFirstTokenLatencyMs must be greater than zero")
+}
+
 // TestLoadTemplate_HappyPath tests loading a template into an API key with different profile names.
 // Profile appended, existing profiles unchanged, active profile unchanged.
 func TestLoadTemplate_HappyPath(t *testing.T) {

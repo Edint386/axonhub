@@ -320,6 +320,14 @@ input TestChannelInput {
 
 type TestChannelPayload {
   latency: Float!
+  """Time to the first decoded upstream stream event, in milliseconds."""
+  ttfbMs: Float
+  """Time to the first non-empty, deliverable output chunk, in milliseconds."""
+  ttftMs: Float
+  """Time until the response has been fully consumed, in milliseconds."""
+  totalMs: Float!
+  """Whether the probe used a streaming request."""
+  stream: Boolean!
   success: Boolean!
   message: String
   error: String
@@ -329,6 +337,10 @@ type TestAPIKeyResult {
   keyPrefix: String!
   success: Boolean!
   latency: Float!
+  ttfbMs: Float
+  ttftMs: Float
+  totalMs: Float!
+  stream: Boolean!
   error: String
   disabled: Boolean!
 }
@@ -409,6 +421,8 @@ input APIKeyProfileInput {
   quota: APIKeyQuotaInput
   loadBalanceStrategy: String
   traceStickyMode: String
+  """Optional channel latency ceiling used by best-effort candidate filtering."""
+  maxFirstTokenLatencyMs: Int
 }
 
 input UpdateProjectProfilesInput {
@@ -454,6 +468,7 @@ type APIKeyProfile {
   quota: APIKeyQuota
   loadBalanceStrategy: String
   traceStickyMode: String
+  maxFirstTokenLatencyMs: Int
 }
 
 enum ChannelTagsMatchMode {

@@ -22,6 +22,9 @@ export function ChannelsStatusDialog({ open, onOpenChange, currentRow }: Props) 
   const [testResult, setTestResult] = useState<{
     success: boolean;
     latency?: number;
+    ttfbMs?: number | null;
+    ttftMs?: number | null;
+    totalMs?: number;
     message?: string | null;
     error?: string | null;
   } | null>(null);
@@ -49,6 +52,9 @@ export function ChannelsStatusDialog({ open, onOpenChange, currentRow }: Props) 
       setTestResult({
         success: result.success,
         latency: result.latency,
+        ttfbMs: result.ttfbMs,
+        ttftMs: result.ttftMs,
+        totalMs: result.totalMs,
         message: result.message,
         error: result.error,
       });
@@ -109,6 +115,24 @@ export function ChannelsStatusDialog({ open, onOpenChange, currentRow }: Props) 
                       ? t('channels.dialogs.status.enable.testSuccess', { latency: testResult.latency?.toFixed(2) })
                       : t('channels.dialogs.status.enable.testFailed')}
                   </div>
+
+                  {testResult.success && typeof testResult.latency === 'number' && (
+                    <div className='space-y-0.5 text-xs opacity-75'>
+                      <div>
+                        {t('channels.dialogs.test.totalLatency')}: {((testResult.totalMs ?? testResult.latency * 1000) / 1000).toFixed(2)}s
+                      </div>
+                      {testResult.ttfbMs != null && (
+                        <div>
+                          {t('channels.dialogs.test.firstByteLatency')}: {testResult.ttfbMs.toFixed(0)}ms
+                        </div>
+                      )}
+                      {testResult.ttftMs != null && (
+                        <div>
+                          {t('channels.dialogs.test.firstTokenLatency')}: {testResult.ttftMs.toFixed(0)}ms
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Show test message if available */}
                   {testResult.message && testResult.success && (

@@ -22,6 +22,9 @@ type APIKeyProfile struct {
 	ChannelTags          []string             `json:"channelTags,omitempty"`
 	ChannelTagsMatchMode ChannelTagsMatchMode `json:"channelTagsMatchMode,omitempty"`
 	ModelIDs             []string             `json:"modelIDs,omitempty"`
+	// MaxFirstTokenLatencyMs is an optional best-effort routing ceiling based on
+	// the channel's recent latency telemetry. A nil value disables the filter.
+	MaxFirstTokenLatencyMs *int64 `json:"maxFirstTokenLatencyMs,omitempty"`
 }
 
 // ChannelTagsMatchMode controls how profile channel tags are matched.
@@ -133,6 +136,10 @@ func (p *APIKeyProfile) Clone() *APIKeyProfile {
 	if p.TraceStickyMode != nil {
 		s := *p.TraceStickyMode
 		cp.TraceStickyMode = &s
+	}
+	if p.MaxFirstTokenLatencyMs != nil {
+		latency := *p.MaxFirstTokenLatencyMs
+		cp.MaxFirstTokenLatencyMs = &latency
 	}
 	return &cp
 }

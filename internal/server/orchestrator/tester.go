@@ -90,10 +90,77 @@ func buildChannelTestRequest(model string, useStream bool, systemPrompt string, 
 
 // TestChannelResult represents the result of a channel test.
 type TestChannelResult struct {
+	// Latency is kept in seconds for compatibility with the existing API.
 	Latency float64
+	// TTFBMs is the elapsed time until the first decoded upstream stream event.
+	// For non-streaming responses it is a documented fallback to TotalMs because
+	// the provider response is delivered as one complete body by the pipeline.
+	TTFBMs *float64
+	// TTFTMs is the elapsed time until the first response chunk containing
+	// deliverable output. Role, usage-only, and empty delta chunks do not count.
+	TTFTMs *float64
+	// TotalMs is the elapsed time until the response has been fully consumed.
+	TotalMs float64
+	Stream  bool
 	Success bool
 	Message *string
 	Error   *string
+}
+
+// newTestChannelResult creates a result with a consistent timing snapshot.
+// Timing fields are intentionally measured at the point a result is returned,
+// so failures before an upstream response still report their total duration.
+func newTestChannelResult(startTime time.Time, useStream bool) *TestChannelResult {
+	result := &TestChannelResult{Stream: useStream}
+	finalizeTestChannelResult(result, startTime)
+
+	return result
+}
+
+func finalizeTestChannelResult(result *TestChannelResult, startTime time.Time) {
+	if result == nil {
+		return
+	}
+
+	elapsed := time.Since(startTime)
+	result.Latency = elapsed.Seconds()
+	result.TotalMs = float64(elapsed) / float64(time.Millisecond)
+}
+
+func markTestChannelFirstByte(result *TestChannelResult, startTime time.Time) {
+	if result == nil || result.TTFBMs != nil {
+		return
+	}
+
+	value := float64(time.Since(startTime)) / float64(time.Millisecond)
+	result.TTFBMs = &value
+}
+
+func markTestChannelFirstToken(result *TestChannelResult, startTime time.Time) {
+	if result == nil || result.TTFTMs != nil {
+		return
+	}
+
+	value := float64(time.Since(startTime)) / float64(time.Millisecond)
+	result.TTFTMs = &value
+}
+
+func setNonStreamingFirstByte(result *TestChannelResult) {
+	if result == nil || result.TTFBMs != nil {
+		return
+	}
+
+	value := result.TotalMs
+	result.TTFBMs = &value
+}
+
+func testChannelErrorResult(startTime time.Time, useStream bool, message string) *TestChannelResult {
+	result := newTestChannelResult(startTime, useStream)
+	result.Success = false
+	result.Message = new("")
+	result.Error = new(message)
+
+	return result
 }
 
 // TestChannel tests a specific channel with a simple request.
@@ -160,16 +227,11 @@ func (processor *TestChannelOrchestrator) TestChannel(
 		Body: body,
 	})
 
-	rawErr := inbound.TransformError(ctx, err)
-	message := gjson.GetBytes(rawErr.Body, "error.message").String()
-
 	if err != nil {
-		return &TestChannelResult{
-			Latency: time.Since(startTime).Seconds(),
-			Success: false,
-			Message: new(""),
-			Error:   new(message),
-		}, nil
+		rawErr := inbound.TransformError(ctx, err)
+		message := gjson.GetBytes(rawErr.Body, "error.message").String()
+
+		return testChannelErrorResult(startTime, useStream, message), nil
 	}
 
 	// Handle streaming response
@@ -177,34 +239,46 @@ func (processor *TestChannelOrchestrator) TestChannel(
 		return processor.handleStreamResponse(ctx, rawResponse.ChatCompletionStream, startTime)
 	}
 
-	latency := time.Since(startTime).Seconds()
+	return processor.handleNonStreamingResponse(rawResponse, startTime, useStream), nil
+}
 
-	// Handle non-streaming response
+func (processor *TestChannelOrchestrator) handleNonStreamingResponse(
+	rawResponse ChatCompletionResult,
+	startTime time.Time,
+	useStream bool,
+) *TestChannelResult {
+	result := newTestChannelResult(startTime, useStream)
+	setNonStreamingFirstByte(result)
+
+	if rawResponse.ChatCompletion == nil {
+		result.Success = false
+		result.Message = new("")
+		result.Error = new("No response body")
+
+		return result
+	}
+
 	response, err := xjson.To[llm.Response](rawResponse.ChatCompletion.Body)
 	if err != nil {
-		return &TestChannelResult{
-			Latency: latency,
-			Success: false,
-			Message: new(""),
-			Error:   new(err.Error()),
-		}, nil
+		result.Success = false
+		result.Message = new("")
+		result.Error = new(err.Error())
+
+		return result
 	}
 
-	if len(response.Choices) == 0 {
-		return &TestChannelResult{
-			Latency: latency,
-			Success: false,
-			Message: new(""),
-			Error:   new("No message in response"),
-		}, nil
+	if len(response.Choices) == 0 || response.Choices[0].Message == nil {
+		result.Success = false
+		result.Message = new("")
+		result.Error = new("No message in response")
+
+		return result
 	}
 
-	return &TestChannelResult{
-		Latency: latency,
-		Success: true,
-		Message: response.Choices[0].Message.Content.Content,
-		Error:   nil,
-	}, nil
+	result.Success = true
+	result.Message = response.Choices[0].Message.Content.Content
+
+	return result
 }
 
 // handleStreamResponse processes a streaming response and accumulates the content.
@@ -217,18 +291,21 @@ func (processor *TestChannelOrchestrator) handleStreamResponse(
 		_ = stream.Close()
 	}()
 
+	result := &TestChannelResult{Stream: true}
+	finalizeTestChannelResult(result, startTime)
+
 	// Accumulate stream chunks
 	var accumulatedContent string
 
 	for stream.Next() {
 		select {
 		case <-ctx.Done():
-			return &TestChannelResult{
-				Latency: time.Since(startTime).Seconds(),
-				Success: false,
-				Message: lo.ToPtr(accumulatedContent),
-				Error:   lo.ToPtr(ctx.Err().Error()),
-			}, nil
+			finalizeTestChannelResult(result, startTime)
+			result.Success = false
+			result.Message = lo.ToPtr(accumulatedContent)
+			result.Error = lo.ToPtr(ctx.Err().Error())
+
+			return result, nil
 		default:
 		}
 
@@ -236,6 +313,10 @@ func (processor *TestChannelOrchestrator) handleStreamResponse(
 		if event == nil {
 			continue
 		}
+
+		// Receiving an event is the closest observable approximation of the
+		// upstream first-byte boundary available after transformation.
+		markTestChannelFirstByte(result, startTime)
 
 		// The stream may end with a "[DONE]" message which is not valid JSON.
 		if string(event.Data) == "[DONE]" {
@@ -249,48 +330,48 @@ func (processor *TestChannelOrchestrator) handleStreamResponse(
 			continue
 		}
 
+		if responseHasOutput(&chunk) {
+			markTestChannelFirstToken(result, startTime)
+		}
+
 		// Accumulate content from the first choice
 		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta != nil && chunk.Choices[0].Delta.Content.Content != nil {
 			accumulatedContent += *chunk.Choices[0].Delta.Content.Content
 		}
 	}
 
-	// Calculate latency after processing all stream events
-	latency := time.Since(startTime).Seconds()
+	// Calculate latency after processing all stream events.
+	finalizeTestChannelResult(result, startTime)
 
 	if err := ctx.Err(); err != nil {
-		return &TestChannelResult{
-			Latency: latency,
-			Success: false,
-			Message: lo.ToPtr(accumulatedContent),
-			Error:   lo.ToPtr(err.Error()),
-		}, nil
+		result.Success = false
+		result.Message = lo.ToPtr(accumulatedContent)
+		result.Error = lo.ToPtr(err.Error())
+
+		return result, nil
 	}
 
 	if stream.Err() != nil {
-		return &TestChannelResult{
-			Latency: latency,
-			Success: false,
-			Message: lo.ToPtr(""),
-			Error:   lo.ToPtr(stream.Err().Error()),
-		}, nil
+		result.Success = false
+		result.Message = lo.ToPtr("")
+		result.Error = lo.ToPtr(stream.Err().Error())
+
+		return result, nil
 	}
 
 	if accumulatedContent == "" {
-		return &TestChannelResult{
-			Latency: latency,
-			Success: false,
-			Message: lo.ToPtr(""),
-			Error:   lo.ToPtr("No content in stream response"),
-		}, nil
+		result.Success = false
+		result.Message = lo.ToPtr("")
+		result.Error = lo.ToPtr("No content in stream response")
+
+		return result, nil
 	}
 
-	return &TestChannelResult{
-		Latency: latency,
-		Success: true,
-		Message: lo.ToPtr(accumulatedContent),
-		Error:   nil,
-	}, nil
+	result.Success = true
+	result.Message = lo.ToPtr(accumulatedContent)
+	result.Error = nil
+
+	return result, nil
 }
 
 // TestAPIKeyResult represents the result of testing a single API key.
@@ -298,8 +379,29 @@ type TestAPIKeyResult struct {
 	KeyPrefix string
 	Success   bool
 	Latency   float64
+	TTFBMs    *float64
+	TTFTMs    *float64
+	TotalMs   float64
+	Stream    bool
 	Error     *string
 	Disabled  bool
+}
+
+func testAPIKeyResultFromChannelResult(keyPrefix string, result *TestChannelResult) *TestAPIKeyResult {
+	if result == nil {
+		return &TestAPIKeyResult{KeyPrefix: keyPrefix}
+	}
+
+	return &TestAPIKeyResult{
+		KeyPrefix: keyPrefix,
+		Success:   result.Success,
+		Latency:   result.Latency,
+		TTFBMs:    result.TTFBMs,
+		TTFTMs:    result.TTFTMs,
+		TotalMs:   result.TotalMs,
+		Stream:    result.Stream,
+		Error:     result.Error,
+	}
 }
 
 // TestChannelAPIKeysResult represents the aggregated result of testing all API keys.
@@ -518,57 +620,22 @@ func (processor *TestChannelOrchestrator) testSingleKey(
 		rawErr := inbound.TransformError(ctx, err)
 		message := gjson.GetBytes(rawErr.Body, "error.message").String()
 
-		return &TestAPIKeyResult{
-			KeyPrefix: keyPrefix,
-			Success:   false,
-			Latency:   time.Since(startTime).Seconds(),
-			Error:     new(message),
-		}
+		result := testChannelErrorResult(startTime, useStream, message)
+
+		return testAPIKeyResultFromChannelResult(keyPrefix, result)
 	}
 
 	// Handle streaming response
 	if rawResponse.ChatCompletionStream != nil {
 		streamResult, _ := processor.handleStreamResponse(ctx, rawResponse.ChatCompletionStream, startTime)
 
-		return &TestAPIKeyResult{
-			KeyPrefix: keyPrefix,
-			Success:   streamResult.Success,
-			Latency:   streamResult.Latency,
-			Error:     streamResult.Error,
-		}
+		return testAPIKeyResultFromChannelResult(keyPrefix, streamResult)
 	}
 
-	latency := time.Since(startTime).Seconds()
-
-	// Handle non-streaming response
-	response, err := xjson.To[llm.Response](rawResponse.ChatCompletion.Body)
-	if err != nil {
-		errMsg := err.Error()
-
-		return &TestAPIKeyResult{
-			KeyPrefix: keyPrefix,
-			Success:   false,
-			Latency:   latency,
-			Error:     &errMsg,
-		}
-	}
-
-	if len(response.Choices) == 0 {
-		errMsg := "No message in response"
-
-		return &TestAPIKeyResult{
-			KeyPrefix: keyPrefix,
-			Success:   false,
-			Latency:   latency,
-			Error:     &errMsg,
-		}
-	}
-
-	return &TestAPIKeyResult{
-		KeyPrefix: keyPrefix,
-		Success:   true,
-		Latency:   latency,
-	}
+	return testAPIKeyResultFromChannelResult(
+		keyPrefix,
+		processor.handleNonStreamingResponse(rawResponse, startTime, useStream),
+	)
 }
 
 // maskAPIKey returns a masked version of the API key for display.

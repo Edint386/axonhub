@@ -68,7 +68,14 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
   const { data: proxyPresets = [] } = useProxyPresets();
   const saveProxyPreset = useSaveProxyPreset();
   const { hasSystemScope } = usePermissions();
-  const [testResult, setTestResult] = useState<{ success: boolean; message?: string | null; latency?: number } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message?: string | null;
+    latency?: number;
+    ttfbMs?: number | null;
+    ttftMs?: number | null;
+    totalMs?: number;
+  } | null>(null);
 
   const form = useForm<ProxyConfig>({
     resolver: zodResolver(proxyConfigSchema),
@@ -162,6 +169,9 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
         success: result.success,
         message: result.success ? result.message : result.error || 'Unknown error',
         latency: result.latency,
+        ttfbMs: result.ttfbMs,
+        ttftMs: result.ttftMs,
+        totalMs: result.totalMs,
       });
 
       if (result.success) {
@@ -333,10 +343,23 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {testResult.latency && (
-                  <p className='text-sm'>
-                    <span className='font-medium'>{t('channels.dialogs.proxy.latency')}:</span> {testResult.latency.toFixed(2)}s
-                  </p>
+                {testResult.success && typeof testResult.latency === 'number' && (
+                  <div className='space-y-0.5 text-sm'>
+                    <p>
+                      <span className='font-medium'>{t('channels.dialogs.test.totalLatency')}:</span>{' '}
+                      {((testResult.totalMs ?? testResult.latency * 1000) / 1000).toFixed(2)}s
+                    </p>
+                    {testResult.ttfbMs != null && (
+                      <p>
+                        <span className='font-medium'>{t('channels.dialogs.test.firstByteLatency')}:</span> {testResult.ttfbMs.toFixed(0)}ms
+                      </p>
+                    )}
+                    {testResult.ttftMs != null && (
+                      <p>
+                        <span className='font-medium'>{t('channels.dialogs.test.firstTokenLatency')}:</span> {testResult.ttftMs.toFixed(0)}ms
+                      </p>
+                    )}
+                  </div>
                 )}
                 {testResult.message && (
                   <div className='mt-2'>

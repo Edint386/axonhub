@@ -59,6 +59,7 @@ export function ApiKeyCreateTemplateDialog({ open, onOpenChange }: ApiKeyCreateT
         modelIDs: [] as string[],
         loadBalanceStrategy: 'default',
         traceStickyMode: 'default',
+        maxFirstTokenLatencyMs: null,
         quota: null as FormValues['profile']['quota'],
       },
     }),
@@ -256,6 +257,33 @@ export function ApiKeyCreateTemplateDialog({ open, onOpenChange }: ApiKeyCreateT
                           </Select>
                         </FormControl>
                       </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className='border-t pt-6'>
+                <FormField
+                  control={form.control}
+                  name='profile.maxFirstTokenLatencyMs'
+                  render={({ field }) => (
+                    <FormItem className='max-w-sm'>
+                      <FormLabel>{t('apikeys.profiles.maxFirstTokenLatency')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          min={1}
+                          step={1}
+                          value={(field.value as number | null | undefined) ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            field.onChange(value === '' ? null : Number(value));
+                          }}
+                          placeholder={t('apikeys.profiles.maxFirstTokenLatencyPlaceholder')}
+                        />
+                      </FormControl>
+                      <FormDescription>{t('apikeys.profiles.maxFirstTokenLatencyDescription')}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

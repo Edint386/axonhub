@@ -39,6 +39,9 @@ func (s *APIKeyProfileTemplateService) CreateTemplate(ctx context.Context, input
 		if err := normalizeAndValidateProfileRoutingPolicy(profile); err != nil {
 			return nil, err
 		}
+		if err := validateProfileLatencyThreshold(profile); err != nil {
+			return nil, err
+		}
 	}
 
 	create := client.APIKeyProfileTemplate.Create().
@@ -126,6 +129,9 @@ func (s *APIKeyProfileTemplateService) UpdateTemplate(ctx context.Context, id in
 			if err := normalizeAndValidateProfileRoutingPolicy(profile); err != nil {
 				return err
 			}
+			if err := validateProfileLatencyThreshold(publishedProfile); err != nil {
+				return err
+			}
 
 			existing, getErr := client.APIKeyProfileTemplate.Get(ctx, id)
 			if getErr != nil {
@@ -209,6 +215,9 @@ func (s *APIKeyProfileTemplateService) LoadTemplate(ctx context.Context, templat
 			return fmt.Errorf("template has no profile")
 		}
 		if err := normalizeAndValidateProfileRoutingPolicy(templateProfile); err != nil {
+			return err
+		}
+		if err := validateProfileLatencyThreshold(templateProfile); err != nil {
 			return err
 		}
 

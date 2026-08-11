@@ -20,6 +20,9 @@ interface BulkTestResult {
   modelID?: string;
   status: BulkTestStatus;
   latency?: number;
+  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  totalMs?: number;
   error?: string;
 }
 
@@ -120,7 +123,14 @@ export function ChannelsBulkTestDialog() {
         return;
       }
 
-      setResultStatus(channel, 'testing', { error: undefined, latency: undefined, modelID });
+      setResultStatus(channel, 'testing', {
+        error: undefined,
+        latency: undefined,
+        ttfbMs: undefined,
+        ttftMs: undefined,
+        totalMs: undefined,
+        modelID,
+      });
 
       try {
         const result = await testChannel.mutateAsync({
@@ -131,6 +141,9 @@ export function ChannelsBulkTestDialog() {
         setResultStatus(channel, result.success ? 'success' : 'failed', {
           modelID,
           latency: result.success ? result.latency : undefined,
+          ttfbMs: result.ttfbMs,
+          ttftMs: result.ttftMs,
+          totalMs: result.totalMs ?? result.latency * 1000,
           error: result.success ? undefined : (result.error || t('common.errors.internalServerError')),
         });
       } catch (error) {
@@ -190,7 +203,13 @@ export function ChannelsBulkTestDialog() {
     }
 
     failedChannels.forEach((channel) => {
-      setResultStatus(channel, 'idle', { error: undefined, latency: undefined });
+      setResultStatus(channel, 'idle', {
+        error: undefined,
+        latency: undefined,
+        ttfbMs: undefined,
+        ttftMs: undefined,
+        totalMs: undefined,
+      });
     });
 
     setIsTesting(true);
@@ -320,7 +339,23 @@ export function ChannelsBulkTestDialog() {
                         <TableCell className='align-top'>
                           <div className='space-y-1'>
                             {getStatusBadge(result?.status || 'idle')}
-                            {typeof result?.latency === 'number' && <div className='text-muted-foreground text-xs'>{result.latency.toFixed(2)}s</div>}
+                            {result?.status === 'success' && typeof result.latency === 'number' && (
+                              <div className='text-muted-foreground space-y-0.5 text-xs'>
+                                <div>
+                                  {t('channels.dialogs.test.totalLatency')}: {((result.totalMs ?? result.latency * 1000) / 1000).toFixed(2)}s
+                                </div>
+                                {result.ttfbMs != null && (
+                                  <div>
+                                    {t('channels.dialogs.test.firstByteLatency')}: {result.ttfbMs.toFixed(0)}ms
+                                  </div>
+                                )}
+                                {result.ttftMs != null && (
+                                  <div>
+                                    {t('channels.dialogs.test.firstTokenLatency')}: {result.ttftMs.toFixed(0)}ms
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className='align-top'>

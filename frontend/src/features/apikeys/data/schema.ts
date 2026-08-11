@@ -72,6 +72,7 @@ export const apiKeySchema = z.object({
             modelIDs: z.array(z.string()).optional().nullable(),
             loadBalanceStrategy: z.string().optional().nullable(),
             traceStickyMode: z.string().optional().nullable(),
+            maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
             quota: z
               .object({
                 requests: z.number().optional().nullable(),
@@ -171,6 +172,7 @@ export const apiKeyProfileSchema = z.object({
   modelIDs: z.array(z.string()).optional().nullable(),
   loadBalanceStrategy: z.string().optional().nullable(),
   traceStickyMode: z.string().optional().nullable(),
+  maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
   quota: z
     .object({
       requests: z.number().optional().nullable(),
@@ -255,6 +257,7 @@ export const updateApiKeyProfilesInputSchemaFactory = (t: (key: string) => strin
             modelIDs: z.array(z.string()).optional().nullable(),
             loadBalanceStrategy: z.string().optional().nullable(),
             traceStickyMode: z.string().optional().nullable(),
+            maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
             quota: z
               .object({
                 requests: z.number().int().positive().optional().nullable(),
@@ -356,6 +359,7 @@ export const updateApiKeyProfilesInputSchema = z.object({
       modelIDs: z.array(z.string()).optional().nullable(),
       loadBalanceStrategy: z.string().optional().nullable(),
       traceStickyMode: z.string().optional().nullable(),
+      maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
       quota: z
         .object({
           requests: z.number().int().positive().optional().nullable(),

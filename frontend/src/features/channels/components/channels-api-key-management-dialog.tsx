@@ -240,7 +240,15 @@ export function ChannelsAPIKeyManagementDialog({ open, onOpenChange }: ChannelsA
       if (!abortRef.current) {
         setTestResults((prev) => ({
           ...prev,
-          [key]: { keyPrefix: maskAPIKey(key), success: false, latency: 0, error: t('channels.dialogs.testAPIKeys.requestFailed'), disabled: false },
+          [key]: {
+            keyPrefix: maskAPIKey(key),
+            success: false,
+            latency: 0,
+            totalMs: 0,
+            stream: false,
+            error: t('channels.dialogs.testAPIKeys.requestFailed'),
+            disabled: false,
+          },
         }));
       }
     } finally {
@@ -275,7 +283,15 @@ export function ChannelsAPIKeyManagementDialog({ open, onOpenChange }: ChannelsA
         if (!abortRef.current) {
           setTestResults((prev) => ({
             ...prev,
-            [key]: { keyPrefix: maskAPIKey(key), success: false, latency: 0, error: t('channels.dialogs.testAPIKeys.requestFailed'), disabled: false },
+            [key]: {
+              keyPrefix: maskAPIKey(key),
+              success: false,
+              latency: 0,
+              totalMs: 0,
+              stream: false,
+              error: t('channels.dialogs.testAPIKeys.requestFailed'),
+              disabled: false,
+            },
           }));
         }
       }
@@ -489,7 +505,28 @@ export function ChannelsAPIKeyManagementDialog({ open, onOpenChange }: ChannelsA
                               <span className='text-muted-foreground'>-</span>
                             )}
                           </TableCell>
-                          <TableCell>{result && result.latency > 0 ? `${result.latency.toFixed(2)}s` : '-'}</TableCell>
+                          <TableCell>
+                            {result ? (
+                              <div className='space-y-0.5 text-xs'>
+                                <div>
+                                  {t('channels.dialogs.testAPIKeys.totalLatency')}:{' '}
+                                  {((result.totalMs > 0 ? result.totalMs : result.latency * 1000) / 1000).toFixed(2)}s
+                                </div>
+                                {result.ttfbMs != null && (
+                                  <div className='text-muted-foreground'>
+                                    {t('channels.dialogs.testAPIKeys.firstByteLatency')}: {result.ttfbMs.toFixed(0)}ms
+                                  </div>
+                                )}
+                                {result.ttftMs != null && (
+                                  <div className='text-muted-foreground'>
+                                    {t('channels.dialogs.testAPIKeys.firstTokenLatency')}: {result.ttftMs.toFixed(0)}ms
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
                           <TableCell>
                             <div className='flex items-center gap-0.5'>
                               <Tooltip>
