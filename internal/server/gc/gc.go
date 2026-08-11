@@ -11,6 +11,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/request"
@@ -27,8 +28,9 @@ import (
 var defaultBatchSize = 500
 
 type TriggerGcCleanupInput struct {
-	RequestsCleanupDays  int `json:"requests_cleanup_days"`
-	UsageLogsCleanupDays int `json:"usage_logs_cleanup_days"`
+	RequestsCleanupDays               int  `json:"requests_cleanup_days"`
+	UsageLogsCleanupDays              int  `json:"usage_logs_cleanup_days"`
+	ChannelHealthProbeRunsCleanupDays *int `json:"channel_health_probe_runs_cleanup_days"`
 }
 
 type GcCleanupPreviewItem struct {
@@ -180,6 +182,17 @@ func (w *Worker) runCleanup(ctx context.Context, manual bool, manualDays map[str
 						log.String("resource", option.ResourceType),
 						log.Int("cleanup_days", days))
 				}
+			case biz.CleanupResourceChannelHealthProbeRuns:
+				err := w.cleanupChannelHealthProbeRuns(ctx, days)
+				if err != nil {
+					log.Error(ctx, "Failed to cleanup active channel probe runs",
+						log.String("resource", option.ResourceType),
+						log.Cause(err))
+				} else {
+					log.Info(ctx, "Successfully cleaned up active channel probe runs",
+						log.String("resource", option.ResourceType),
+						log.Int("cleanup_days", days))
+				}
 			default:
 				log.Warn(ctx, "Unknown resource type for cleanup",
 					log.String("resource", option.ResourceType))
@@ -204,6 +217,43 @@ func (w *Worker) runCleanup(ctx context.Context, manual bool, manualDays map[str
 	}
 
 	log.Info(ctx, "Cleanup process completed")
+}
+
+// cleanupChannelHealthProbeRuns deletes persisted synthetic probe history older
+// than the configured retention window. Pending rows are treated like any
+// other run so a crashed worker cannot leave an unbounded backlog.
+func (w *Worker) cleanupChannelHealthProbeRuns(ctx context.Context, cleanupDays int) error {
+	if cleanupDays <= 0 {
+		return nil
+	}
+
+	cutoffTime := time.Now().AddDate(0, 0, -cleanupDays)
+	result, err := w.deleteInBatches(ctx, func() (int, error) {
+		ids, err := w.Ent.ChannelHealthProbeRun.Query().
+			Where(channelhealthproberun.CreatedAtLT(cutoffTime)).
+			Order(ent.Asc(channelhealthproberun.FieldID)).
+			Limit(w.getBatchSize()).
+			IDs(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to query old active channel probe runs: %w", err)
+		}
+		if len(ids) == 0 {
+			return 0, nil
+		}
+
+		return w.Ent.ChannelHealthProbeRun.Delete().
+			Where(channelhealthproberun.IDIn(ids...)).
+			Exec(ctx)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete old active channel probe runs: %w", err)
+	}
+
+	log.Debug(ctx, "Cleaned up active channel probe runs",
+		log.Int("deleted_count", result),
+		log.Time("cutoff_time", cutoffTime))
+
+	return nil
 }
 
 // cleanupRequests deletes requests older than the specified number of days.
@@ -667,6 +717,9 @@ func (w *Worker) RunCleanupNow(ctx context.Context, input TriggerGcCleanupInput)
 	if input.UsageLogsCleanupDays > 0 {
 		manualDays["usage_logs"] = input.UsageLogsCleanupDays
 	}
+	if input.ChannelHealthProbeRunsCleanupDays != nil && *input.ChannelHealthProbeRunsCleanupDays > 0 {
+		manualDays[biz.CleanupResourceChannelHealthProbeRuns] = *input.ChannelHealthProbeRunsCleanupDays
+	}
 	w.runCleanup(ctx, true, manualDays)
 	return nil
 }
@@ -711,6 +764,22 @@ func (w *Worker) PreviewCleanup(ctx context.Context, input TriggerGcCleanupInput
 			EstimatedCount: count,
 			CutoffTime:     cutoff,
 			RetentionDays:  input.UsageLogsCleanupDays,
+		})
+	}
+
+	if input.ChannelHealthProbeRunsCleanupDays != nil && *input.ChannelHealthProbeRunsCleanupDays > 0 {
+		cutoff := time.Now().AddDate(0, 0, -*input.ChannelHealthProbeRunsCleanupDays)
+		count, err := w.Ent.ChannelHealthProbeRun.Query().
+			Where(channelhealthproberun.CreatedAtLT(cutoff)).
+			Count(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count active channel probe runs for preview: %w", err)
+		}
+		items = append(items, GcCleanupPreviewItem{
+			ResourceType:   biz.CleanupResourceChannelHealthProbeRuns,
+			EstimatedCount: count,
+			CutoffTime:     cutoff,
+			RetentionDays:  *input.ChannelHealthProbeRunsCleanupDays,
 		})
 	}
 

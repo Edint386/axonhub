@@ -14,6 +14,8 @@ import (
 
 	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/enttest"
@@ -331,4 +333,56 @@ func TestWorker_cleanupChannelProbesDeletesInBatches(t *testing.T) {
 	totalCount, err := client.ChannelProbe.Query().Count(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 2, totalCount)
+}
+
+func TestWorker_cleanupChannelHealthProbeRunsDeletesExpiredHistory(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=1")
+	t.Cleanup(func() {
+		client.Close()
+	})
+
+	ctx := authz.WithTestBypass(context.Background())
+	ctx = ent.NewContext(ctx, client)
+	probeChannel, err := client.Channel.Create().
+		SetType(channel.TypeOpenaiFake).
+		SetName("health-probe-cleanup").
+		SetStatus(channel.StatusEnabled).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetCredentials(objects.ChannelCredentials{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	_, err = client.ChannelHealthProbeRun.Create().
+		SetChannelID(probeChannel.ID).
+		SetModelID("gpt-4").
+		SetSource(channelhealthproberun.SourceScheduled).
+		SetStatus(channelhealthproberun.StatusUnhealthy).
+		SetStream(true).
+		SetStartedAt(now.AddDate(0, 0, -5)).
+		SetCreatedAt(now.AddDate(0, 0, -5)).
+		SetTotalMs(100).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.ChannelHealthProbeRun.Create().
+		SetChannelID(probeChannel.ID).
+		SetModelID("gpt-4").
+		SetSource(channelhealthproberun.SourceManual).
+		SetStatus(channelhealthproberun.StatusHealthy).
+		SetStream(false).
+		SetStartedAt(now).
+		SetCreatedAt(now).
+		SetTotalMs(50).
+		Save(ctx)
+	require.NoError(t, err)
+
+	worker := &Worker{Ent: client, Config: Config{CRON: "0 0 * * *"}}
+	require.NoError(t, worker.cleanupChannelHealthProbeRuns(ctx, 3))
+
+	remaining, err := client.ChannelHealthProbeRun.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, remaining)
+	require.Equal(t, channelhealthproberun.StatusHealthy, client.ChannelHealthProbeRun.Query().OnlyX(ctx).Status)
 }

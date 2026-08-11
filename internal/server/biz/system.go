@@ -288,6 +288,38 @@ type CleanupOption struct {
 	CleanupDays  int    `json:"cleanup_days"`
 }
 
+const CleanupResourceChannelHealthProbeRuns = "channel_health_probe_runs"
+
+// normalizeStoragePolicy keeps cleanup options forward-compatible when an
+// older installation has a stored policy that predates a new resource type.
+// Missing options are added disabled/enabled according to the current default;
+// existing user choices are never overwritten.
+func normalizeStoragePolicy(policy *StoragePolicy) {
+	if policy == nil {
+		return
+	}
+
+	defaults := defaultStoragePolicy.CleanupOptions
+	seen := make(map[string]struct{}, len(policy.CleanupOptions))
+	for _, option := range policy.CleanupOptions {
+		seen[option.ResourceType] = struct{}{}
+	}
+
+	for _, option := range defaults {
+		if _, ok := seen[option.ResourceType]; ok {
+			continue
+		}
+
+		policy.CleanupOptions = append(policy.CleanupOptions, option)
+	}
+}
+
+func cloneDefaultStoragePolicy() StoragePolicy {
+	policy := defaultStoragePolicy
+	policy.CleanupOptions = append([]CleanupOption(nil), defaultStoragePolicy.CleanupOptions...)
+	return policy
+}
+
 const (
 	// LoadBalancerStrategyAdaptive is a dynamic load balancer strategy that adapts to the current load.
 	LoadBalancerStrategyAdaptive = "adaptive"
@@ -997,7 +1029,8 @@ func (s *SystemService) StoragePolicy(ctx context.Context) (*StoragePolicy, erro
 	value, err := s.getSystemValue(ctx, SystemKeyStoragePolicy)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return lo.ToPtr(defaultStoragePolicy), nil
+			policy := cloneDefaultStoragePolicy()
+			return &policy, nil
 		}
 
 		return nil, fmt.Errorf("failed to get storage policy: %w", err)
@@ -1017,6 +1050,8 @@ func (s *SystemService) StoragePolicy(ctx context.Context) (*StoragePolicy, erro
 		policy.StoreResponseBody = true
 	}
 
+	normalizeStoragePolicy(&policy)
+
 	return &policy, nil
 }
 
@@ -1025,11 +1060,13 @@ func (s *SystemService) StoragePolicyOrDefault(ctx context.Context) *StoragePoli
 	policy, err := s.StoragePolicy(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return lo.ToPtr(defaultStoragePolicy)
+			policy := cloneDefaultStoragePolicy()
+			return &policy
 		}
 
 		log.Warn(ctx, "failed to get storage policy", log.Cause(err))
-		return lo.ToPtr(defaultStoragePolicy)
+		policy := cloneDefaultStoragePolicy()
+		return &policy
 	}
 
 	return policy
@@ -1037,6 +1074,11 @@ func (s *SystemService) StoragePolicyOrDefault(ctx context.Context) *StoragePoli
 
 // SetStoragePolicy sets the storage policy configuration.
 func (s *SystemService) SetStoragePolicy(ctx context.Context, policy *StoragePolicy) error {
+	if policy == nil {
+		return fmt.Errorf("storage policy must not be nil")
+	}
+
+	normalizeStoragePolicy(policy)
 	for _, opt := range policy.CleanupOptions {
 		if opt.CleanupDays <= 0 {
 			return fmt.Errorf("cleanup_days for %q must be positive; set enabled=false to keep data forever", opt.ResourceType)

@@ -106,6 +106,16 @@ func (r *channelResolver) ProviderQuotaStatus(ctx context.Context, obj *ent.Chan
 }
 
 // ID is the resolver for the id field.
+func (r *channelHealthProbeRunResolver) ID(ctx context.Context, obj *ent.ChannelHealthProbeRun) (*objects.GUID, error) {
+	panic(fmt.Errorf("not implemented: ID - id"))
+}
+
+// ChannelID is the resolver for the channelID field.
+func (r *channelHealthProbeRunResolver) ChannelID(ctx context.Context, obj *ent.ChannelHealthProbeRun) (*objects.GUID, error) {
+	panic(fmt.Errorf("not implemented: ChannelID - channelID"))
+}
+
+// ID is the resolver for the id field.
 func (r *channelModelPriceResolver) ID(ctx context.Context, obj *ent.ChannelModelPrice) (*objects.GUID, error) {
 	return &objects.GUID{
 		Type: ent.TypeChannelModelPrice,
@@ -937,6 +947,11 @@ func (r *Resolver) APIKeyProfileTemplate() APIKeyProfileTemplateResolver {
 // Channel returns ChannelResolver implementation.
 func (r *Resolver) Channel() ChannelResolver { return &channelResolver{r} }
 
+// ChannelHealthProbeRun returns ChannelHealthProbeRunResolver implementation.
+func (r *Resolver) ChannelHealthProbeRun() ChannelHealthProbeRunResolver {
+	return &channelHealthProbeRunResolver{r}
+}
+
 // ChannelModelPrice returns ChannelModelPriceResolver implementation.
 func (r *Resolver) ChannelModelPrice() ChannelModelPriceResolver {
 	return &channelModelPriceResolver{r}
@@ -1016,6 +1031,7 @@ func (r *Resolver) UserRole() UserRoleResolver { return &userRoleResolver{r} }
 type aPIKeyResolver struct{ *Resolver }
 type aPIKeyProfileTemplateResolver struct{ *Resolver }
 type channelResolver struct{ *Resolver }
+type channelHealthProbeRunResolver struct{ *Resolver }
 type channelModelPriceResolver struct{ *Resolver }
 type channelModelPriceVersionResolver struct{ *Resolver }
 type channelOverrideTemplateResolver struct{ *Resolver }

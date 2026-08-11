@@ -113,12 +113,12 @@ func TestErrorAwareStrategy_Score_ConsecutiveFailures(t *testing.T) {
 	// Record consecutive failures
 	for range 3 {
 		perf := &biz.PerformanceRecord{
-			ChannelID:        ch.ID,
-			StartTime:        time.Now().Add(-time.Minute),
-			EndTime:          time.Now(),
-			Success:          false,
-			RequestCompleted: true,
-			ResponseStatusCode:  500,
+			ChannelID:          ch.ID,
+			StartTime:          time.Now().Add(-time.Minute),
+			EndTime:            time.Now(),
+			Success:            false,
+			RequestCompleted:   true,
+			ResponseStatusCode: 500,
 		}
 		channelService.RecordPerformance(ctx, perf)
 	}

@@ -70,6 +70,7 @@ type Dependencies struct {
 	ModelService                   *biz.ModelService
 	BackupService                  *backup.BackupService
 	ChannelProbeService            *biz.ChannelProbeService
+	ChannelHealthProbeService      *biz.ChannelHealthProbeService
 	PromptService                  *biz.PromptService
 	PromptProtectionRuleService    *biz.PromptProtectionRuleService
 	ProviderQuotaService           *biz.ProviderQuotaService
@@ -77,6 +78,8 @@ type Dependencies struct {
 	DefaultSelector                *orchestrator.DefaultSelector
 	CandidateSelectorDiagnostics   *orchestrator.CandidateSelectorDiagnostics
 	ChannelLimiterManager          *orchestrator.ChannelLimiterManager
+	TestChannelOrchestrator        *orchestrator.TestChannelOrchestrator
+	ChannelHealthProbeRunner       *orchestrator.ChannelHealthProbeRunner
 	HttpClient                     *httpclient.HttpClient
 	GCWorker                       *gc.Worker
 	VideoWorker                    *video_storage.Worker
@@ -109,6 +112,7 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
 			deps.ModelService,
 			deps.BackupService,
 			deps.ChannelProbeService,
+			deps.ChannelHealthProbeService,
 			deps.PromptService,
 			deps.PromptProtectionRuleService,
 			deps.ProviderQuotaService,
@@ -116,6 +120,8 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
 			deps.DefaultSelector,
 			deps.CandidateSelectorDiagnostics,
 			deps.ChannelLimiterManager,
+			deps.TestChannelOrchestrator,
+			deps.ChannelHealthProbeRunner,
 			deps.HttpClient,
 			deps.GCWorker,
 			deps.VideoWorker,
@@ -135,6 +141,7 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
 	})
 	gqlSrv.Use(&loggingTracer{})
 	skipTestChannelTransaction := entgql.SkipOperations("TestChannel", "TestChannelAPIKeys")
+	skipActiveChannelProbeTransaction := entgql.SkipOperations("RunChannelHealthProbe")
 	skipBulkImportTransaction := entgql.SkipIfHasFields("bulkImportChannels")
 	gqlSrv.Use(entgql.Transactioner{
 		TxOpener: deps.Ent,
@@ -142,7 +149,7 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
 		// operations do not require one transaction. BulkImportChannels manages one
 		// transaction per row to preserve its partial-success behavior.
 		SkipTxFunc: func(op *ast.OperationDefinition) bool {
-			return skipTestChannelTransaction(op) || skipBulkImportTransaction(op)
+			return skipTestChannelTransaction(op) || skipActiveChannelProbeTransaction(op) || skipBulkImportTransaction(op)
 		},
 	})
 

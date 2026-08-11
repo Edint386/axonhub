@@ -1,0 +1,75 @@
+"""A persisted result from an active synthetic channel generation probe."""
+type ActiveChannelHealthProbeRun {
+  id: ID!
+  channelID: ID!
+  modelID: String!
+  source: String!
+  status: String!
+  stream: Boolean!
+  ttfbMs: Float
+  ttftMs: Float
+  totalMs: Float!
+  errorMessage: String
+  startedAt: Time!
+  completedAt: Time
+  createdAt: Time!
+}
+
+type ChannelHealthProbeModelOverview {
+  modelID: String!
+  enabled: Boolean!
+  stream: Boolean!
+  latestRun: ActiveChannelHealthProbeRun
+}
+
+type ChannelHealthProbeChannel {
+  channelID: ID!
+  channelName: String!
+  channelStatus: String!
+  enabled: Boolean!
+  intervalMinutes: Int!
+  models: [ChannelHealthProbeModelOverview!]!
+}
+
+type ChannelHealthProbeHistoryPage {
+  items: [ActiveChannelHealthProbeRun!]!
+  totalCount: Int!
+}
+
+input ActiveChannelHealthProbeModelInput {
+  modelID: String!
+  enabled: Boolean!
+  stream: Boolean!
+}
+
+input UpdateChannelHealthProbeSettingsInput {
+  channelID: ID!
+  enabled: Boolean!
+  intervalMinutes: Int!
+  models: [ActiveChannelHealthProbeModelInput!]!
+}
+
+input RunChannelHealthProbeInput {
+  channelID: ID!
+  modelID: String!
+  stream: Boolean!
+}
+
+input ChannelHealthProbeHistoryInput {
+  channelID: ID
+  modelID: String
+  status: String
+  source: String
+  offset: Int!
+  limit: Int!
+}
+
+extend type Query {
+  channelHealthProbeOverview: [ChannelHealthProbeChannel!]!
+  channelHealthProbeHistory(input: ChannelHealthProbeHistoryInput!): ChannelHealthProbeHistoryPage!
+}
+
+extend type Mutation {
+  updateChannelHealthProbeSettings(input: UpdateChannelHealthProbeSettingsInput!): ChannelHealthProbeChannel!
+  runChannelHealthProbe(input: RunChannelHealthProbeInput!): ActiveChannelHealthProbeRun!
+}

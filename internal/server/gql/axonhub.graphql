@@ -150,6 +150,30 @@ input ChannelProviderQuotaSettingsInput {
   opencodeGo: OpenCodeGoQuotaSettingsInput
 }
 
+type ChannelHealthProbeModel {
+  modelID: String!
+  enabled: Boolean!
+  stream: Boolean!
+}
+
+input ChannelHealthProbeModelInput {
+  modelID: String!
+  enabled: Boolean!
+  stream: Boolean!
+}
+
+type ChannelHealthProbeSettings {
+  enabled: Boolean!
+  intervalMinutes: Int!
+  models: [ChannelHealthProbeModel!]!
+}
+
+input ChannelHealthProbeSettingsInput {
+  enabled: Boolean!
+  intervalMinutes: Int!
+  models: [ChannelHealthProbeModelInput!]!
+}
+
 type ChannelSettings {
   extraModelPrefix: String
   modelMappings: [ModelMapping!]
@@ -168,6 +192,7 @@ type ChannelSettings {
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
   providerQuota: ChannelProviderQuotaSettings
+  healthProbe: ChannelHealthProbeSettings
 }
 
 enum CapabilityPolicy {
@@ -236,6 +261,7 @@ input ChannelSettingsInput {
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
   providerQuota: ChannelProviderQuotaSettingsInput
+  healthProbe: ChannelHealthProbeSettingsInput
 }
 
 input ChannelRateLimitInput {

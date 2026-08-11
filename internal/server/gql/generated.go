@@ -20,6 +20,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/model"
@@ -69,6 +70,9 @@ type ResolverRoot interface {
 	APIKey() APIKeyResolver
 	APIKeyProfileTemplate() APIKeyProfileTemplateResolver
 	Channel() ChannelResolver
+	ChannelHealthProbeHistoryPage() ChannelHealthProbeHistoryPageResolver
+	ChannelHealthProbeModelOverview() ChannelHealthProbeModelOverviewResolver
+	ChannelHealthProbeRun() ChannelHealthProbeRunResolver
 	ChannelModelPrice() ChannelModelPriceResolver
 	ChannelModelPriceVersion() ChannelModelPriceVersionResolver
 	ChannelOverrideTemplate() ChannelOverrideTemplateResolver
@@ -97,6 +101,7 @@ type ResolverRoot interface {
 	UserInfo() UserInfoResolver
 	UserProject() UserProjectResolver
 	UserRole() UserRoleResolver
+	UpdateChannelHealthProbeSettingsInput() UpdateChannelHealthProbeSettingsInputResolver
 }
 
 type DirectiveRoot struct {
@@ -234,6 +239,22 @@ type ComplexityRoot struct {
 		TopModels       func(childComplexity int) int
 	}
 
+	ActiveChannelHealthProbeRun struct {
+		ChannelID    func(childComplexity int) int
+		CompletedAt  func(childComplexity int) int
+		CreatedAt    func(childComplexity int) int
+		ErrorMessage func(childComplexity int) int
+		ID           func(childComplexity int) int
+		ModelID      func(childComplexity int) int
+		Source       func(childComplexity int) int
+		StartedAt    func(childComplexity int) int
+		Status       func(childComplexity int) int
+		Stream       func(childComplexity int) int
+		TotalMs      func(childComplexity int) int
+		TtfbMs       func(childComplexity int) int
+		TtftMs       func(childComplexity int) int
+	}
+
 	AnalyticsDailyStat struct {
 		CachedInputTokens   func(childComplexity int) int
 		Cost                func(childComplexity int) int
@@ -359,6 +380,7 @@ type ComplexityRoot struct {
 		Endpoints               func(childComplexity int) int
 		ErrorMessage            func(childComplexity int) int
 		Executions              func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.RequestExecutionOrder, where *ent.RequestExecutionWhereInput) int
+		HealthProbeRuns         func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelHealthProbeRunOrder, where *ent.ChannelHealthProbeRunWhereInput) int
 		ID                      func(childComplexity int) int
 		LiveLimiterStats        func(childComplexity int) int
 		ManualModels            func(childComplexity int) int
@@ -401,6 +423,69 @@ type ComplexityRoot struct {
 		BaseURL   func(childComplexity int) int
 		Path      func(childComplexity int) int
 		Transport func(childComplexity int) int
+	}
+
+	ChannelHealthProbeChannel struct {
+		ChannelID       func(childComplexity int) int
+		ChannelName     func(childComplexity int) int
+		ChannelStatus   func(childComplexity int) int
+		Enabled         func(childComplexity int) int
+		IntervalMinutes func(childComplexity int) int
+		Models          func(childComplexity int) int
+	}
+
+	ChannelHealthProbeHistoryPage struct {
+		Items      func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	ChannelHealthProbeModel struct {
+		Enabled func(childComplexity int) int
+		ModelID func(childComplexity int) int
+		Stream  func(childComplexity int) int
+	}
+
+	ChannelHealthProbeModelOverview struct {
+		Enabled   func(childComplexity int) int
+		LatestRun func(childComplexity int) int
+		ModelID   func(childComplexity int) int
+		Stream    func(childComplexity int) int
+	}
+
+	ChannelHealthProbeRun struct {
+		Channel      func(childComplexity int) int
+		ChannelID    func(childComplexity int) int
+		CompletedAt  func(childComplexity int) int
+		CreatedAt    func(childComplexity int) int
+		ErrorMessage func(childComplexity int) int
+		ID           func(childComplexity int) int
+		ModelID      func(childComplexity int) int
+		ScheduleKey  func(childComplexity int) int
+		Source       func(childComplexity int) int
+		StartedAt    func(childComplexity int) int
+		Status       func(childComplexity int) int
+		Stream       func(childComplexity int) int
+		TotalMs      func(childComplexity int) int
+		TtfbMs       func(childComplexity int) int
+		TtftMs       func(childComplexity int) int
+		UpdatedAt    func(childComplexity int) int
+	}
+
+	ChannelHealthProbeRunConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	ChannelHealthProbeRunEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	ChannelHealthProbeSettings struct {
+		Enabled         func(childComplexity int) int
+		IntervalMinutes func(childComplexity int) int
+		Models          func(childComplexity int) int
 	}
 
 	ChannelLimiterStats struct {
@@ -571,6 +656,7 @@ type ComplexityRoot struct {
 		BodyOverrideOperations   func(childComplexity int) int
 		ExtraModelPrefix         func(childComplexity int) int
 		HeaderOverrideOperations func(childComplexity int) int
+		HealthProbe              func(childComplexity int) int
 		HideMappedModels         func(childComplexity int) int
 		HideOriginalModels       func(childComplexity int) int
 		LowercaseModelID         func(childComplexity int) int
@@ -1019,6 +1105,7 @@ type ComplexityRoot struct {
 		RetainThread                          func(childComplexity int, id objects.GUID) int
 		RetainTrace                           func(childComplexity int, id objects.GUID) int
 		RotateAPIKey                          func(childComplexity int, id objects.GUID) int
+		RunChannelHealthProbe                 func(childComplexity int, input biz.RunChannelHealthProbeInput) int
 		SaveChannelEndpoints                  func(childComplexity int, input biz.SaveChannelEndpointsInput) int
 		SaveChannelModelPrices                func(childComplexity int, channelID objects.GUID, input []*biz.SaveChannelModelPriceInput) int
 		SaveProxyPreset                       func(childComplexity int, input biz.ProxyPreset) int
@@ -1040,6 +1127,7 @@ type ComplexityRoot struct {
 		UpdateAutoBackupSettings              func(childComplexity int, input UpdateAutoBackupSettingsInput) int
 		UpdateBrandSettings                   func(childComplexity int, input UpdateBrandSettingsInput) int
 		UpdateChannel                         func(childComplexity int, id objects.GUID, input ent.UpdateChannelInput) int
+		UpdateChannelHealthProbeSettings      func(childComplexity int, input biz.UpdateChannelHealthProbeSettingsInput) int
 		UpdateChannelOverrideTemplate         func(childComplexity int, id objects.GUID, input ent.UpdateChannelOverrideTemplateInput) int
 		UpdateChannelStatus                   func(childComplexity int, id objects.GUID, status channel.Status) int
 		UpdateDataStorage                     func(childComplexity int, id objects.GUID, input ent.UpdateDataStorageInput) int
@@ -1364,6 +1452,8 @@ type ComplexityRoot struct {
 		AnalyticsOverview               func(childComplexity int, filter *AnalyticsFilter) int
 		AutoBackupSettings              func(childComplexity int) int
 		BrandSettings                   func(childComplexity int) int
+		ChannelHealthProbeHistory       func(childComplexity int, input biz.ChannelHealthProbeHistoryInput) int
+		ChannelHealthProbeOverview      func(childComplexity int) int
 		ChannelOverrideTemplates        func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOverrideTemplateOrder, where *ent.ChannelOverrideTemplateWhereInput) int
 		ChannelPerformanceStats         func(childComplexity int) int
 		ChannelProbeData                func(childComplexity int, input biz.GetChannelProbeDataInput) int
@@ -2161,6 +2251,17 @@ type ChannelResolver interface {
 	DisabledAPIKeys(ctx context.Context, obj *ent.Channel) ([]*objects.DisabledAPIKey, error)
 	LiveLimiterStats(ctx context.Context, obj *ent.Channel) (*ChannelLimiterStats, error)
 }
+type ChannelHealthProbeHistoryPageResolver interface {
+	Items(ctx context.Context, obj *biz.ChannelHealthProbeHistoryPage) ([]*ActiveChannelHealthProbeRun, error)
+}
+type ChannelHealthProbeModelOverviewResolver interface {
+	LatestRun(ctx context.Context, obj *biz.ChannelHealthProbeModelOverview) (*ActiveChannelHealthProbeRun, error)
+}
+type ChannelHealthProbeRunResolver interface {
+	ID(ctx context.Context, obj *ent.ChannelHealthProbeRun) (*objects.GUID, error)
+
+	ChannelID(ctx context.Context, obj *ent.ChannelHealthProbeRun) (*objects.GUID, error)
+}
 type ChannelModelPriceResolver interface {
 	ID(ctx context.Context, obj *ent.ChannelModelPrice) (*objects.GUID, error)
 
@@ -2305,6 +2406,8 @@ type MutationResolver interface {
 	Restore(ctx context.Context, file graphql.Upload, input backup.RestoreOptions) (*RestorePayload, error)
 	UpdateAutoBackupSettings(ctx context.Context, input UpdateAutoBackupSettingsInput) (bool, error)
 	TriggerAutoBackup(ctx context.Context) (*TriggerBackupPayload, error)
+	UpdateChannelHealthProbeSettings(ctx context.Context, input biz.UpdateChannelHealthProbeSettingsInput) (*ChannelHealthProbeChannel, error)
+	RunChannelHealthProbe(ctx context.Context, input biz.RunChannelHealthProbeInput) (*ActiveChannelHealthProbeRun, error)
 	CreatePrompt(ctx context.Context, input ent.CreatePromptInput) (*ent.Prompt, error)
 	UpdatePrompt(ctx context.Context, id objects.GUID, input ent.UpdatePromptInput) (*ent.Prompt, error)
 	DeletePrompt(ctx context.Context, id objects.GUID) (bool, error)
@@ -2425,6 +2528,8 @@ type QueryResolver interface {
 	QueryUnassociatedChannels(ctx context.Context) ([]*biz.UnassociatedChannel, error)
 	AutoBackupSettings(ctx context.Context) (*biz.AutoBackupSettings, error)
 	ChannelProbeData(ctx context.Context, input biz.GetChannelProbeDataInput) ([]*biz.ChannelProbeData, error)
+	ChannelHealthProbeOverview(ctx context.Context) ([]*ChannelHealthProbeChannel, error)
+	ChannelHealthProbeHistory(ctx context.Context, input biz.ChannelHealthProbeHistoryInput) (*biz.ChannelHealthProbeHistoryPage, error)
 	AnalyticsMetadata(ctx context.Context) (*AnalyticsMetadata, error)
 	AnalyticsOverview(ctx context.Context, filter *AnalyticsFilter) (*AnalyticsOverview, error)
 	AnalyticsDailyStats(ctx context.Context, filter *AnalyticsFilter) ([]*AnalyticsDailyStat, error)
@@ -2523,6 +2628,10 @@ type UserRoleResolver interface {
 	ID(ctx context.Context, obj *ent.UserRole) (*objects.GUID, error)
 	UserID(ctx context.Context, obj *ent.UserRole) (*objects.GUID, error)
 	RoleID(ctx context.Context, obj *ent.UserRole) (*objects.GUID, error)
+}
+
+type UpdateChannelHealthProbeSettingsInputResolver interface {
+	Models(ctx context.Context, obj *biz.UpdateChannelHealthProbeSettingsInput, data []*ActiveChannelHealthProbeModelInput) error
 }
 
 type executableSchema struct {
@@ -3046,6 +3155,85 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.APIKeyTokenUsageStats.TopModels(childComplexity), true
 
+	case "ActiveChannelHealthProbeRun.channelID":
+		if e.complexity.ActiveChannelHealthProbeRun.ChannelID == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.ChannelID(childComplexity), true
+	case "ActiveChannelHealthProbeRun.completedAt":
+		if e.complexity.ActiveChannelHealthProbeRun.CompletedAt == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.CompletedAt(childComplexity), true
+	case "ActiveChannelHealthProbeRun.createdAt":
+		if e.complexity.ActiveChannelHealthProbeRun.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.CreatedAt(childComplexity), true
+	case "ActiveChannelHealthProbeRun.errorMessage":
+		if e.complexity.ActiveChannelHealthProbeRun.ErrorMessage == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.ErrorMessage(childComplexity), true
+	case "ActiveChannelHealthProbeRun.id":
+		if e.complexity.ActiveChannelHealthProbeRun.ID == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.ID(childComplexity), true
+	case "ActiveChannelHealthProbeRun.modelID":
+		if e.complexity.ActiveChannelHealthProbeRun.ModelID == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.ModelID(childComplexity), true
+	case "ActiveChannelHealthProbeRun.source":
+		if e.complexity.ActiveChannelHealthProbeRun.Source == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.Source(childComplexity), true
+	case "ActiveChannelHealthProbeRun.startedAt":
+		if e.complexity.ActiveChannelHealthProbeRun.StartedAt == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.StartedAt(childComplexity), true
+	case "ActiveChannelHealthProbeRun.status":
+		if e.complexity.ActiveChannelHealthProbeRun.Status == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.Status(childComplexity), true
+	case "ActiveChannelHealthProbeRun.stream":
+		if e.complexity.ActiveChannelHealthProbeRun.Stream == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.Stream(childComplexity), true
+	case "ActiveChannelHealthProbeRun.totalMs":
+		if e.complexity.ActiveChannelHealthProbeRun.TotalMs == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.TotalMs(childComplexity), true
+	case "ActiveChannelHealthProbeRun.ttfbMs":
+		if e.complexity.ActiveChannelHealthProbeRun.TtfbMs == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.TtfbMs(childComplexity), true
+	case "ActiveChannelHealthProbeRun.ttftMs":
+		if e.complexity.ActiveChannelHealthProbeRun.TtftMs == nil {
+			break
+		}
+
+		return e.complexity.ActiveChannelHealthProbeRun.TtftMs(childComplexity), true
+
 	case "AnalyticsDailyStat.cachedInputTokens":
 		if e.complexity.AnalyticsDailyStat.CachedInputTokens == nil {
 			break
@@ -3540,6 +3728,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Channel.Executions(childComplexity, args["after"].(*entgql.Cursor[int]), args["first"].(*int), args["before"].(*entgql.Cursor[int]), args["last"].(*int), args["orderBy"].(*ent.RequestExecutionOrder), args["where"].(*ent.RequestExecutionWhereInput)), true
+	case "Channel.healthProbeRuns":
+		if e.complexity.Channel.HealthProbeRuns == nil {
+			break
+		}
+
+		args, err := ec.field_Channel_healthProbeRuns_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Channel.HealthProbeRuns(childComplexity, args["after"].(*entgql.Cursor[int]), args["first"].(*int), args["before"].(*entgql.Cursor[int]), args["last"].(*int), args["orderBy"].(*ent.ChannelHealthProbeRunOrder), args["where"].(*ent.ChannelHealthProbeRunWhereInput)), true
 	case "Channel.id":
 		if e.complexity.Channel.ID == nil {
 			break
@@ -3734,6 +3933,248 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelEndpoint.Transport(childComplexity), true
+
+	case "ChannelHealthProbeChannel.channelID":
+		if e.complexity.ChannelHealthProbeChannel.ChannelID == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeChannel.ChannelID(childComplexity), true
+	case "ChannelHealthProbeChannel.channelName":
+		if e.complexity.ChannelHealthProbeChannel.ChannelName == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeChannel.ChannelName(childComplexity), true
+	case "ChannelHealthProbeChannel.channelStatus":
+		if e.complexity.ChannelHealthProbeChannel.ChannelStatus == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeChannel.ChannelStatus(childComplexity), true
+	case "ChannelHealthProbeChannel.enabled":
+		if e.complexity.ChannelHealthProbeChannel.Enabled == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeChannel.Enabled(childComplexity), true
+	case "ChannelHealthProbeChannel.intervalMinutes":
+		if e.complexity.ChannelHealthProbeChannel.IntervalMinutes == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeChannel.IntervalMinutes(childComplexity), true
+	case "ChannelHealthProbeChannel.models":
+		if e.complexity.ChannelHealthProbeChannel.Models == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeChannel.Models(childComplexity), true
+
+	case "ChannelHealthProbeHistoryPage.items":
+		if e.complexity.ChannelHealthProbeHistoryPage.Items == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeHistoryPage.Items(childComplexity), true
+	case "ChannelHealthProbeHistoryPage.totalCount":
+		if e.complexity.ChannelHealthProbeHistoryPage.TotalCount == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeHistoryPage.TotalCount(childComplexity), true
+
+	case "ChannelHealthProbeModel.enabled":
+		if e.complexity.ChannelHealthProbeModel.Enabled == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModel.Enabled(childComplexity), true
+	case "ChannelHealthProbeModel.modelID":
+		if e.complexity.ChannelHealthProbeModel.ModelID == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModel.ModelID(childComplexity), true
+	case "ChannelHealthProbeModel.stream":
+		if e.complexity.ChannelHealthProbeModel.Stream == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModel.Stream(childComplexity), true
+
+	case "ChannelHealthProbeModelOverview.enabled":
+		if e.complexity.ChannelHealthProbeModelOverview.Enabled == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModelOverview.Enabled(childComplexity), true
+	case "ChannelHealthProbeModelOverview.latestRun":
+		if e.complexity.ChannelHealthProbeModelOverview.LatestRun == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModelOverview.LatestRun(childComplexity), true
+	case "ChannelHealthProbeModelOverview.modelID":
+		if e.complexity.ChannelHealthProbeModelOverview.ModelID == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModelOverview.ModelID(childComplexity), true
+	case "ChannelHealthProbeModelOverview.stream":
+		if e.complexity.ChannelHealthProbeModelOverview.Stream == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModelOverview.Stream(childComplexity), true
+
+	case "ChannelHealthProbeRun.channel":
+		if e.complexity.ChannelHealthProbeRun.Channel == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.Channel(childComplexity), true
+	case "ChannelHealthProbeRun.channelID":
+		if e.complexity.ChannelHealthProbeRun.ChannelID == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.ChannelID(childComplexity), true
+	case "ChannelHealthProbeRun.completedAt":
+		if e.complexity.ChannelHealthProbeRun.CompletedAt == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.CompletedAt(childComplexity), true
+	case "ChannelHealthProbeRun.createdAt":
+		if e.complexity.ChannelHealthProbeRun.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.CreatedAt(childComplexity), true
+	case "ChannelHealthProbeRun.errorMessage":
+		if e.complexity.ChannelHealthProbeRun.ErrorMessage == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.ErrorMessage(childComplexity), true
+	case "ChannelHealthProbeRun.id":
+		if e.complexity.ChannelHealthProbeRun.ID == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.ID(childComplexity), true
+	case "ChannelHealthProbeRun.modelID":
+		if e.complexity.ChannelHealthProbeRun.ModelID == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.ModelID(childComplexity), true
+	case "ChannelHealthProbeRun.scheduleKey":
+		if e.complexity.ChannelHealthProbeRun.ScheduleKey == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.ScheduleKey(childComplexity), true
+	case "ChannelHealthProbeRun.source":
+		if e.complexity.ChannelHealthProbeRun.Source == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.Source(childComplexity), true
+	case "ChannelHealthProbeRun.startedAt":
+		if e.complexity.ChannelHealthProbeRun.StartedAt == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.StartedAt(childComplexity), true
+	case "ChannelHealthProbeRun.status":
+		if e.complexity.ChannelHealthProbeRun.Status == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.Status(childComplexity), true
+	case "ChannelHealthProbeRun.stream":
+		if e.complexity.ChannelHealthProbeRun.Stream == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.Stream(childComplexity), true
+	case "ChannelHealthProbeRun.totalMs":
+		if e.complexity.ChannelHealthProbeRun.TotalMs == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.TotalMs(childComplexity), true
+	case "ChannelHealthProbeRun.ttfbMs":
+		if e.complexity.ChannelHealthProbeRun.TtfbMs == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.TtfbMs(childComplexity), true
+	case "ChannelHealthProbeRun.ttftMs":
+		if e.complexity.ChannelHealthProbeRun.TtftMs == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.TtftMs(childComplexity), true
+	case "ChannelHealthProbeRun.updatedAt":
+		if e.complexity.ChannelHealthProbeRun.UpdatedAt == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRun.UpdatedAt(childComplexity), true
+
+	case "ChannelHealthProbeRunConnection.edges":
+		if e.complexity.ChannelHealthProbeRunConnection.Edges == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRunConnection.Edges(childComplexity), true
+	case "ChannelHealthProbeRunConnection.pageInfo":
+		if e.complexity.ChannelHealthProbeRunConnection.PageInfo == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRunConnection.PageInfo(childComplexity), true
+	case "ChannelHealthProbeRunConnection.totalCount":
+		if e.complexity.ChannelHealthProbeRunConnection.TotalCount == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRunConnection.TotalCount(childComplexity), true
+
+	case "ChannelHealthProbeRunEdge.cursor":
+		if e.complexity.ChannelHealthProbeRunEdge.Cursor == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRunEdge.Cursor(childComplexity), true
+	case "ChannelHealthProbeRunEdge.node":
+		if e.complexity.ChannelHealthProbeRunEdge.Node == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeRunEdge.Node(childComplexity), true
+
+	case "ChannelHealthProbeSettings.enabled":
+		if e.complexity.ChannelHealthProbeSettings.Enabled == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeSettings.Enabled(childComplexity), true
+	case "ChannelHealthProbeSettings.intervalMinutes":
+		if e.complexity.ChannelHealthProbeSettings.IntervalMinutes == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeSettings.IntervalMinutes(childComplexity), true
+	case "ChannelHealthProbeSettings.models":
+		if e.complexity.ChannelHealthProbeSettings.Models == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeSettings.Models(childComplexity), true
 
 	case "ChannelLimiterStats.capacity":
 		if e.complexity.ChannelLimiterStats.Capacity == nil {
@@ -4346,6 +4787,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.HeaderOverrideOperations(childComplexity), true
+	case "ChannelSettings.healthProbe":
+		if e.complexity.ChannelSettings.HealthProbe == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.HealthProbe(childComplexity), true
 	case "ChannelSettings.hideMappedModels":
 		if e.complexity.ChannelSettings.HideMappedModels == nil {
 			break
@@ -6449,6 +6896,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.RotateAPIKey(childComplexity, args["id"].(objects.GUID)), true
+	case "Mutation.runChannelHealthProbe":
+		if e.complexity.Mutation.RunChannelHealthProbe == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_runChannelHealthProbe_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RunChannelHealthProbe(childComplexity, args["input"].(biz.RunChannelHealthProbeInput)), true
 	case "Mutation.saveChannelEndpoints":
 		if e.complexity.Mutation.SaveChannelEndpoints == nil {
 			break
@@ -6675,6 +7133,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateChannel(childComplexity, args["id"].(objects.GUID), args["input"].(ent.UpdateChannelInput)), true
+	case "Mutation.updateChannelHealthProbeSettings":
+		if e.complexity.Mutation.UpdateChannelHealthProbeSettings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateChannelHealthProbeSettings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateChannelHealthProbeSettings(childComplexity, args["input"].(biz.UpdateChannelHealthProbeSettingsInput)), true
 	case "Mutation.updateChannelOverrideTemplate":
 		if e.complexity.Mutation.UpdateChannelOverrideTemplate == nil {
 			break
@@ -8184,6 +8653,23 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.BrandSettings(childComplexity), true
+	case "Query.channelHealthProbeHistory":
+		if e.complexity.Query.ChannelHealthProbeHistory == nil {
+			break
+		}
+
+		args, err := ec.field_Query_channelHealthProbeHistory_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ChannelHealthProbeHistory(childComplexity, args["input"].(biz.ChannelHealthProbeHistoryInput)), true
+	case "Query.channelHealthProbeOverview":
+		if e.complexity.Query.ChannelHealthProbeOverview == nil {
+			break
+		}
+
+		return e.complexity.Query.ChannelHealthProbeOverview(childComplexity), true
 	case "Query.channelOverrideTemplates":
 		if e.complexity.Query.ChannelOverrideTemplates == nil {
 			break
@@ -11594,6 +12080,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputAPIKeyQuotaPeriodInput,
 		ec.unmarshalInputAPIKeyTokenUsageStatsInput,
 		ec.unmarshalInputAPIKeyWhereInput,
+		ec.unmarshalInputActiveChannelHealthProbeModelInput,
 		ec.unmarshalInputAddUserToProjectInput,
 		ec.unmarshalInputAnalyticsFilter,
 		ec.unmarshalInputApplyChannelOverrideTemplateInput,
@@ -11606,6 +12093,11 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBulkUpdateChannelOrderingInput,
 		ec.unmarshalInputChannelCredentialsInput,
 		ec.unmarshalInputChannelEndpointInput,
+		ec.unmarshalInputChannelHealthProbeHistoryInput,
+		ec.unmarshalInputChannelHealthProbeModelInput,
+		ec.unmarshalInputChannelHealthProbeRunOrder,
+		ec.unmarshalInputChannelHealthProbeRunWhereInput,
+		ec.unmarshalInputChannelHealthProbeSettingsInput,
 		ec.unmarshalInputChannelModelAssociationInput,
 		ec.unmarshalInputChannelModelPriceOrder,
 		ec.unmarshalInputChannelModelPriceVersionOrder,
@@ -11722,6 +12214,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputRetryableErrorPatternInput,
 		ec.unmarshalInputRoleOrder,
 		ec.unmarshalInputRoleWhereInput,
+		ec.unmarshalInputRunChannelHealthProbeInput,
 		ec.unmarshalInputS3Input,
 		ec.unmarshalInputSaveChannelEndpointsInput,
 		ec.unmarshalInputSaveChannelModelPriceInput,
@@ -11744,6 +12237,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUpdateAPIKeyScopesInput,
 		ec.unmarshalInputUpdateAutoBackupSettingsInput,
 		ec.unmarshalInputUpdateBrandSettingsInput,
+		ec.unmarshalInputUpdateChannelHealthProbeSettingsInput,
 		ec.unmarshalInputUpdateChannelInput,
 		ec.unmarshalInputUpdateChannelModelAutoSyncSettingInput,
 		ec.unmarshalInputUpdateChannelOverrideTemplateInput,
@@ -11886,7 +12380,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 	return introspection.WrapTypeFromDef(ec.Schema(), ec.Schema().Types[name]), nil
 }
 
-//go:embed "axonhub.graphql" "ent.graphql" "dashboard.graphql" "scopes.graphql" "me.graphql" "system.graphql" "filter.graphql" "model.graphql" "backup.graphql" "channel_probe.graphql" "prompt.graphql" "prompt_protection_rule.graphql" "price.graphql" "cost.graphql" "analytics.graphql"
+//go:embed "axonhub.graphql" "ent.graphql" "dashboard.graphql" "scopes.graphql" "me.graphql" "system.graphql" "filter.graphql" "model.graphql" "backup.graphql" "channel_probe.graphql" "channel_health_probe.graphql" "prompt.graphql" "prompt_protection_rule.graphql" "price.graphql" "cost.graphql" "analytics.graphql"
 var sourcesFS embed.FS
 
 func sourceData(filename string) string {
@@ -11908,6 +12402,7 @@ var sources = []*ast.Source{
 	{Name: "model.graphql", Input: sourceData("model.graphql"), BuiltIn: false},
 	{Name: "backup.graphql", Input: sourceData("backup.graphql"), BuiltIn: false},
 	{Name: "channel_probe.graphql", Input: sourceData("channel_probe.graphql"), BuiltIn: false},
+	{Name: "channel_health_probe.graphql", Input: sourceData("channel_health_probe.graphql"), BuiltIn: false},
 	{Name: "prompt.graphql", Input: sourceData("prompt.graphql"), BuiltIn: false},
 	{Name: "prompt_protection_rule.graphql", Input: sourceData("prompt_protection_rule.graphql"), BuiltIn: false},
 	{Name: "price.graphql", Input: sourceData("price.graphql"), BuiltIn: false},
@@ -11985,6 +12480,42 @@ func (ec *executionContext) field_Channel_executions_args(ctx context.Context, r
 	}
 	args["orderBy"] = arg4
 	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalORequestExecutionWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐRequestExecutionWhereInput)
+	if err != nil {
+		return nil, err
+	}
+	args["where"] = arg5
+	return args, nil
+}
+
+func (ec *executionContext) field_Channel_healthProbeRuns_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖentgoᚗioᚋcontribᚋentgqlᚐCursor)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖentgoᚗioᚋcontribᚋentgqlᚐCursor)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOChannelHealthProbeRunOrder2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunOrder)
+	if err != nil {
+		return nil, err
+	}
+	args["orderBy"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOChannelHealthProbeRunWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -12919,6 +13450,17 @@ func (ec *executionContext) field_Mutation_rotateAPIKey_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_runChannelHealthProbe_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRunChannelHealthProbeInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐRunChannelHealthProbeInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_saveChannelEndpoints_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -13171,6 +13713,17 @@ func (ec *executionContext) field_Mutation_updateBrandSettings_args(ctx context.
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateBrandSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdateBrandSettingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateChannelHealthProbeSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateChannelHealthProbeSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐUpdateChannelHealthProbeSettingsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -14096,6 +14649,17 @@ func (ec *executionContext) field_Query_apiKeys_args(ctx context.Context, rawArg
 		return nil, err
 	}
 	args["where"] = arg5
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_channelHealthProbeHistory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNChannelHealthProbeHistoryInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeHistoryInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -17993,6 +18557,383 @@ func (ec *executionContext) fieldContext_APIKeyTokenUsageStats_topModels(_ conte
 	return fc, nil
 }
 
+func (ec *executionContext) _ActiveChannelHealthProbeRun_id(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_channelID(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_channelID,
+		func(ctx context.Context) (any, error) {
+			return obj.ChannelID, nil
+		},
+		nil,
+		ec.marshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_channelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_modelID(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_modelID,
+		func(ctx context.Context) (any, error) {
+			return obj.ModelID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_modelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_source(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_source,
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_status(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_stream(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_stream,
+		func(ctx context.Context) (any, error) {
+			return obj.Stream, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_ttfbMs(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_ttfbMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtfbMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_ttfbMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_ttftMs(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_ttftMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtftMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_ttftMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_totalMs(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_totalMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalMs, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_totalMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_errorMessage(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_errorMessage,
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_startedAt(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_startedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_completedAt(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_completedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CompletedAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_completedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun_createdAt(ctx context.Context, field graphql.CollectedField, obj *ActiveChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ActiveChannelHealthProbeRun_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ActiveChannelHealthProbeRun_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ActiveChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AnalyticsDailyStat_date(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -18819,6 +19760,8 @@ func (ec *executionContext) fieldContext_ApplyChannelOverrideTemplatePayload_cha
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -19883,6 +20826,8 @@ func (ec *executionContext) fieldContext_BulkImportChannelsResult_channels(_ con
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -20036,6 +20981,8 @@ func (ec *executionContext) fieldContext_BulkUpdateChannelOrderingResult_channel
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -20529,6 +21476,8 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_retryableErrorPatterns(ctx, field)
 			case "providerQuota":
 				return ec.fieldContext_ChannelSettings_providerQuota(ctx, field)
+			case "healthProbe":
+				return ec.fieldContext_ChannelSettings_healthProbe(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelSettings", field.Name)
 		},
@@ -20861,6 +21810,55 @@ func (ec *executionContext) fieldContext_Channel_usageLogs(ctx context.Context, 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Channel_usageLogs_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Channel_healthProbeRuns(ctx context.Context, field graphql.CollectedField, obj *ent.Channel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Channel_healthProbeRuns,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return obj.HealthProbeRuns(ctx, fc.Args["after"].(*entgql.Cursor[int]), fc.Args["first"].(*int), fc.Args["before"].(*entgql.Cursor[int]), fc.Args["last"].(*int), fc.Args["orderBy"].(*ent.ChannelHealthProbeRunOrder), fc.Args["where"].(*ent.ChannelHealthProbeRunWhereInput))
+		},
+		nil,
+		ec.marshalNChannelHealthProbeRunConnection2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Channel_healthProbeRuns(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Channel",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_ChannelHealthProbeRunConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_ChannelHealthProbeRunConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_ChannelHealthProbeRunConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeRunConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Channel_healthProbeRuns_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -21524,6 +22522,8 @@ func (ec *executionContext) fieldContext_ChannelEdge_node(_ context.Context, fie
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -21687,6 +22687,1329 @@ func (ec *executionContext) fieldContext_ChannelEndpoint_transport(_ context.Con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeChannel_channelID(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeChannel_channelID,
+		func(ctx context.Context) (any, error) {
+			return obj.ChannelID, nil
+		},
+		nil,
+		ec.marshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_channelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeChannel_channelName(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeChannel_channelName,
+		func(ctx context.Context) (any, error) {
+			return obj.ChannelName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_channelName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeChannel_channelStatus(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeChannel_channelStatus,
+		func(ctx context.Context) (any, error) {
+			return obj.ChannelStatus, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_channelStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeChannel_enabled(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeChannel_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeChannel_intervalMinutes(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.IntervalMinutes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_intervalMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeChannel_models(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeChannel_models,
+		func(ctx context.Context) (any, error) {
+			return obj.Models, nil
+		},
+		nil,
+		ec.marshalNChannelHealthProbeModelOverview2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeModelOverviewᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_models(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "modelID":
+				return ec.fieldContext_ChannelHealthProbeModelOverview_modelID(ctx, field)
+			case "enabled":
+				return ec.fieldContext_ChannelHealthProbeModelOverview_enabled(ctx, field)
+			case "stream":
+				return ec.fieldContext_ChannelHealthProbeModelOverview_stream(ctx, field)
+			case "latestRun":
+				return ec.fieldContext_ChannelHealthProbeModelOverview_latestRun(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeModelOverview", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeHistoryPage_items(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeHistoryPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeHistoryPage_items,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.ChannelHealthProbeHistoryPage().Items(ctx, obj)
+		},
+		nil,
+		ec.marshalNActiveChannelHealthProbeRun2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRunᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeHistoryPage_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeHistoryPage",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_id(ctx, field)
+			case "channelID":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_channelID(ctx, field)
+			case "modelID":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_modelID(ctx, field)
+			case "source":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_source(ctx, field)
+			case "status":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_status(ctx, field)
+			case "stream":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_stream(ctx, field)
+			case "ttfbMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_ttfbMs(ctx, field)
+			case "ttftMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_ttftMs(ctx, field)
+			case "totalMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_totalMs(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_errorMessage(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_completedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ActiveChannelHealthProbeRun", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeHistoryPage_totalCount(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeHistoryPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeHistoryPage_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeHistoryPage_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeHistoryPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModel_modelID(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeModel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModel_modelID,
+		func(ctx context.Context) (any, error) {
+			return obj.ModelID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModel_modelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModel_enabled(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeModel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModel_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModel_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModel_stream(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeModel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModel_stream,
+		func(ctx context.Context) (any, error) {
+			return obj.Stream, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModel_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModelOverview_modelID(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeModelOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModelOverview_modelID,
+		func(ctx context.Context) (any, error) {
+			return obj.ModelID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModelOverview_modelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModelOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModelOverview_enabled(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeModelOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModelOverview_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModelOverview_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModelOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModelOverview_stream(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeModelOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModelOverview_stream,
+		func(ctx context.Context) (any, error) {
+			return obj.Stream, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModelOverview_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModelOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModelOverview_latestRun(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeModelOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModelOverview_latestRun,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.ChannelHealthProbeModelOverview().LatestRun(ctx, obj)
+		},
+		nil,
+		ec.marshalOActiveChannelHealthProbeRun2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRun,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModelOverview_latestRun(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModelOverview",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_id(ctx, field)
+			case "channelID":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_channelID(ctx, field)
+			case "modelID":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_modelID(ctx, field)
+			case "source":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_source(ctx, field)
+			case "status":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_status(ctx, field)
+			case "stream":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_stream(ctx, field)
+			case "ttfbMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_ttfbMs(ctx, field)
+			case "ttftMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_ttftMs(ctx, field)
+			case "totalMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_totalMs(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_errorMessage(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_completedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ActiveChannelHealthProbeRun", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_id(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_id,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.ChannelHealthProbeRun().ID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_createdAt(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_updatedAt(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_channelID(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_channelID,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.ChannelHealthProbeRun().ChannelID(ctx, obj)
+		},
+		nil,
+		ec.marshalNID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_channelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_modelID(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_modelID,
+		func(ctx context.Context) (any, error) {
+			return obj.ModelID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_modelID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_source(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_source,
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		ec.marshalNChannelHealthProbeRunSource2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ChannelHealthProbeRunSource does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_status(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNChannelHealthProbeRunStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ChannelHealthProbeRunStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_stream(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_stream,
+		func(ctx context.Context) (any, error) {
+			return obj.Stream, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_ttfbMs(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_ttfbMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtfbMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_ttfbMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_ttftMs(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_ttftMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtftMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_ttftMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_totalMs(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_totalMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalMs, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_totalMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_errorMessage(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_errorMessage,
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_scheduleKey(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_scheduleKey,
+		func(ctx context.Context) (any, error) {
+			return obj.ScheduleKey, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_scheduleKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_startedAt(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_startedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_completedAt(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_completedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CompletedAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_completedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRun_channel(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRun_channel,
+		func(ctx context.Context) (any, error) {
+			return obj.Channel(ctx)
+		},
+		nil,
+		ec.marshalNChannel2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannel,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRun_channel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRun",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Channel_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Channel_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Channel_updatedAt(ctx, field)
+			case "type":
+				return ec.fieldContext_Channel_type(ctx, field)
+			case "baseURL":
+				return ec.fieldContext_Channel_baseURL(ctx, field)
+			case "name":
+				return ec.fieldContext_Channel_name(ctx, field)
+			case "status":
+				return ec.fieldContext_Channel_status(ctx, field)
+			case "supportedModels":
+				return ec.fieldContext_Channel_supportedModels(ctx, field)
+			case "manualModels":
+				return ec.fieldContext_Channel_manualModels(ctx, field)
+			case "autoSyncSupportedModels":
+				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
+			case "autoSyncModelPattern":
+				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "tags":
+				return ec.fieldContext_Channel_tags(ctx, field)
+			case "defaultTestModel":
+				return ec.fieldContext_Channel_defaultTestModel(ctx, field)
+			case "policies":
+				return ec.fieldContext_Channel_policies(ctx, field)
+			case "settings":
+				return ec.fieldContext_Channel_settings(ctx, field)
+			case "orderingWeight":
+				return ec.fieldContext_Channel_orderingWeight(ctx, field)
+			case "priority":
+				return ec.fieldContext_Channel_priority(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_Channel_errorMessage(ctx, field)
+			case "autoDisabledAt":
+				return ec.fieldContext_Channel_autoDisabledAt(ctx, field)
+			case "remark":
+				return ec.fieldContext_Channel_remark(ctx, field)
+			case "endpoints":
+				return ec.fieldContext_Channel_endpoints(ctx, field)
+			case "requests":
+				return ec.fieldContext_Channel_requests(ctx, field)
+			case "executions":
+				return ec.fieldContext_Channel_executions(ctx, field)
+			case "usageLogs":
+				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
+			case "channelProbes":
+				return ec.fieldContext_Channel_channelProbes(ctx, field)
+			case "channelModelPrices":
+				return ec.fieldContext_Channel_channelModelPrices(ctx, field)
+			case "providerQuotaStatus":
+				return ec.fieldContext_Channel_providerQuotaStatus(ctx, field)
+			case "defaultEndpoints":
+				return ec.fieldContext_Channel_defaultEndpoints(ctx, field)
+			case "allModelEntries":
+				return ec.fieldContext_Channel_allModelEntries(ctx, field)
+			case "credentials":
+				return ec.fieldContext_Channel_credentials(ctx, field)
+			case "disabledAPIKeys":
+				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
+			case "liveLimiterStats":
+				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRunConnection_edges(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRunConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRunConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalOChannelHealthProbeRunEdge2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunEdge,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRunConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRunConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_ChannelHealthProbeRunEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_ChannelHealthProbeRunEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeRunEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRunConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRunConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRunConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2entgoᚗioᚋcontribᚋentgqlᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRunConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRunConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRunConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRunConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRunConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRunConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRunConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRunEdge_node(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRunEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRunEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalOChannelHealthProbeRun2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRun,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRunEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRunEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ChannelHealthProbeRun_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ChannelHealthProbeRun_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_ChannelHealthProbeRun_updatedAt(ctx, field)
+			case "channelID":
+				return ec.fieldContext_ChannelHealthProbeRun_channelID(ctx, field)
+			case "modelID":
+				return ec.fieldContext_ChannelHealthProbeRun_modelID(ctx, field)
+			case "source":
+				return ec.fieldContext_ChannelHealthProbeRun_source(ctx, field)
+			case "status":
+				return ec.fieldContext_ChannelHealthProbeRun_status(ctx, field)
+			case "stream":
+				return ec.fieldContext_ChannelHealthProbeRun_stream(ctx, field)
+			case "ttfbMs":
+				return ec.fieldContext_ChannelHealthProbeRun_ttfbMs(ctx, field)
+			case "ttftMs":
+				return ec.fieldContext_ChannelHealthProbeRun_ttftMs(ctx, field)
+			case "totalMs":
+				return ec.fieldContext_ChannelHealthProbeRun_totalMs(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_ChannelHealthProbeRun_errorMessage(ctx, field)
+			case "scheduleKey":
+				return ec.fieldContext_ChannelHealthProbeRun_scheduleKey(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_ChannelHealthProbeRun_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_ChannelHealthProbeRun_completedAt(ctx, field)
+			case "channel":
+				return ec.fieldContext_ChannelHealthProbeRun_channel(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeRun", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeRunEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *ent.ChannelHealthProbeRunEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeRunEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNCursor2entgoᚗioᚋcontribᚋentgqlᚐCursor,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeRunEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeRunEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Cursor does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeSettings_enabled(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeSettings_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeSettings_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeSettings_intervalMinutes(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeSettings_intervalMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.IntervalMinutes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeSettings_intervalMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeSettings_models(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeSettings_models,
+		func(ctx context.Context) (any, error) {
+			return obj.Models, nil
+		},
+		nil,
+		ec.marshalNChannelHealthProbeModel2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModelᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeSettings_models(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "modelID":
+				return ec.fieldContext_ChannelHealthProbeModel_modelID(ctx, field)
+			case "enabled":
+				return ec.fieldContext_ChannelHealthProbeModel_enabled(ctx, field)
+			case "stream":
+				return ec.fieldContext_ChannelHealthProbeModel_stream(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeModel", field.Name)
 		},
 	}
 	return fc, nil
@@ -22263,6 +24586,8 @@ func (ec *executionContext) fieldContext_ChannelModelPrice_channel(_ context.Con
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -24194,6 +26519,8 @@ func (ec *executionContext) fieldContext_ChannelProbe_channel(_ context.Context,
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -25461,6 +27788,43 @@ func (ec *executionContext) fieldContext_ChannelSettings_providerQuota(_ context
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelSettings_healthProbe(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_healthProbe,
+		func(ctx context.Context) (any, error) {
+			return obj.HealthProbe, nil
+		},
+		nil,
+		ec.marshalOChannelHealthProbeSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeSettings,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_healthProbe(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_ChannelHealthProbeSettings_enabled(ctx, field)
+			case "intervalMinutes":
+				return ec.fieldContext_ChannelHealthProbeSettings_intervalMinutes(ctx, field)
+			case "models":
+				return ec.fieldContext_ChannelHealthProbeSettings_models(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeSettings", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelSuccessRate_channelId(ctx context.Context, field graphql.CollectedField, obj *ChannelSuccessRate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -26171,6 +28535,8 @@ func (ec *executionContext) fieldContext_ClearChannelOverrideTemplatesPayload_ch
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -30772,6 +33138,8 @@ func (ec *executionContext) fieldContext_ModelChannelConnection_channel(_ contex
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -31939,6 +34307,8 @@ func (ec *executionContext) fieldContext_Mutation_createChannel(ctx context.Cont
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -32046,6 +34416,8 @@ func (ec *executionContext) fieldContext_Mutation_duplicateChannel(ctx context.C
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -32153,6 +34525,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateChannels(ctx context
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -32260,6 +34634,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannel(ctx context.Cont
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -32367,6 +34743,8 @@ func (ec *executionContext) fieldContext_Mutation_saveChannelEndpoints(ctx conte
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -32474,6 +34852,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelStatus(ctx contex
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -37483,6 +39863,130 @@ func (ec *executionContext) fieldContext_Mutation_triggerAutoBackup(_ context.Co
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TriggerBackupPayload", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateChannelHealthProbeSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateChannelHealthProbeSettings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateChannelHealthProbeSettings(ctx, fc.Args["input"].(biz.UpdateChannelHealthProbeSettingsInput))
+		},
+		nil,
+		ec.marshalNChannelHealthProbeChannel2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelHealthProbeChannel,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateChannelHealthProbeSettings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "channelID":
+				return ec.fieldContext_ChannelHealthProbeChannel_channelID(ctx, field)
+			case "channelName":
+				return ec.fieldContext_ChannelHealthProbeChannel_channelName(ctx, field)
+			case "channelStatus":
+				return ec.fieldContext_ChannelHealthProbeChannel_channelStatus(ctx, field)
+			case "enabled":
+				return ec.fieldContext_ChannelHealthProbeChannel_enabled(ctx, field)
+			case "intervalMinutes":
+				return ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes(ctx, field)
+			case "models":
+				return ec.fieldContext_ChannelHealthProbeChannel_models(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeChannel", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateChannelHealthProbeSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_runChannelHealthProbe(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_runChannelHealthProbe,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RunChannelHealthProbe(ctx, fc.Args["input"].(biz.RunChannelHealthProbeInput))
+		},
+		nil,
+		ec.marshalNActiveChannelHealthProbeRun2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRun,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_runChannelHealthProbe(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_id(ctx, field)
+			case "channelID":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_channelID(ctx, field)
+			case "modelID":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_modelID(ctx, field)
+			case "source":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_source(ctx, field)
+			case "status":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_status(ctx, field)
+			case "stream":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_stream(ctx, field)
+			case "ttfbMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_ttfbMs(ctx, field)
+			case "ttftMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_ttftMs(ctx, field)
+			case "totalMs":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_totalMs(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_errorMessage(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_completedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ActiveChannelHealthProbeRun_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ActiveChannelHealthProbeRun", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_runChannelHealthProbe_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -43243,6 +45747,8 @@ func (ec *executionContext) fieldContext_ProviderQuotaStatus_channel(_ context.C
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -44515,6 +47021,8 @@ func (ec *executionContext) fieldContext_Query_allChannelSummarys(ctx context.Co
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -47089,6 +49597,96 @@ func (ec *executionContext) fieldContext_Query_channelProbeData(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_channelHealthProbeOverview(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_channelHealthProbeOverview,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().ChannelHealthProbeOverview(ctx)
+		},
+		nil,
+		ec.marshalNChannelHealthProbeChannel2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelHealthProbeChannelᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_channelHealthProbeOverview(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "channelID":
+				return ec.fieldContext_ChannelHealthProbeChannel_channelID(ctx, field)
+			case "channelName":
+				return ec.fieldContext_ChannelHealthProbeChannel_channelName(ctx, field)
+			case "channelStatus":
+				return ec.fieldContext_ChannelHealthProbeChannel_channelStatus(ctx, field)
+			case "enabled":
+				return ec.fieldContext_ChannelHealthProbeChannel_enabled(ctx, field)
+			case "intervalMinutes":
+				return ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes(ctx, field)
+			case "models":
+				return ec.fieldContext_ChannelHealthProbeChannel_models(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeChannel", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_channelHealthProbeHistory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_channelHealthProbeHistory,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ChannelHealthProbeHistory(ctx, fc.Args["input"].(biz.ChannelHealthProbeHistoryInput))
+		},
+		nil,
+		ec.marshalNChannelHealthProbeHistoryPage2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeHistoryPage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_channelHealthProbeHistory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "items":
+				return ec.fieldContext_ChannelHealthProbeHistoryPage_items(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_ChannelHealthProbeHistoryPage_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeHistoryPage", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_channelHealthProbeHistory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_analyticsMetadata(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -48731,6 +51329,8 @@ func (ec *executionContext) fieldContext_Request_channel(_ context.Context, fiel
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -49901,6 +52501,8 @@ func (ec *executionContext) fieldContext_RequestExecution_channel(_ context.Cont
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -57744,6 +60346,8 @@ func (ec *executionContext) fieldContext_UnassociatedChannel_channel(_ context.C
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -58825,6 +61429,8 @@ func (ec *executionContext) fieldContext_UsageLog_channel(_ context.Context, fie
 				return ec.fieldContext_Channel_executions(ctx, field)
 			case "usageLogs":
 				return ec.fieldContext_Channel_usageLogs(ctx, field)
+			case "healthProbeRuns":
+				return ec.fieldContext_Channel_healthProbeRuns(ctx, field)
 			case "channelProbes":
 				return ec.fieldContext_Channel_channelProbes(ctx, field)
 			case "channelModelPrices":
@@ -65121,6 +67727,47 @@ func (ec *executionContext) unmarshalInputAPIKeyWhereInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputActiveChannelHealthProbeModelInput(ctx context.Context, obj any) (ActiveChannelHealthProbeModelInput, error) {
+	var it ActiveChannelHealthProbeModelInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"modelID", "enabled", "stream"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "modelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelID"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelID = data
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "stream":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stream"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Stream = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputAddUserToProjectInput(ctx context.Context, obj any) (AddUserToProjectInput, error) {
 	var it AddUserToProjectInput
 	asMap := map[string]any{}
@@ -65753,6 +68400,1180 @@ func (ec *executionContext) unmarshalInputChannelEndpointInput(ctx context.Conte
 				return it, err
 			}
 			it.Transport = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputChannelHealthProbeHistoryInput(ctx context.Context, obj any) (biz.ChannelHealthProbeHistoryInput, error) {
+	var it biz.ChannelHealthProbeHistoryInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"channelID", "modelID", "status", "source", "offset", "limit"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "channelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelID"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelID = data
+		case "modelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelID"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelID = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		case "source":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("source"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Source = data
+		case "offset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Offset = data
+		case "limit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Limit = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputChannelHealthProbeModelInput(ctx context.Context, obj any) (objects.ChannelHealthProbeModel, error) {
+	var it objects.ChannelHealthProbeModel
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"modelID", "enabled", "stream"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "modelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelID"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelID = data
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "stream":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stream"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Stream = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputChannelHealthProbeRunOrder(ctx context.Context, obj any) (ent.ChannelHealthProbeRunOrder, error) {
+	var it ent.ChannelHealthProbeRunOrder
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["direction"]; !present {
+		asMap["direction"] = "ASC"
+	}
+
+	fieldsInOrder := [...]string{"direction", "field"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "direction":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("direction"))
+			data, err := ec.unmarshalNOrderDirection2entgoᚗioᚋcontribᚋentgqlᚐOrderDirection(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Direction = data
+		case "field":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
+			data, err := ec.unmarshalNChannelHealthProbeRunOrderField2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunOrderField(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Field = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputChannelHealthProbeRunWhereInput(ctx context.Context, obj any) (ent.ChannelHealthProbeRunWhereInput, error) {
+	var it ent.ChannelHealthProbeRunWhereInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "channelID", "channelIDNEQ", "channelIDIn", "channelIDNotIn", "modelID", "modelIDNEQ", "modelIDIn", "modelIDNotIn", "modelIDGT", "modelIDGTE", "modelIDLT", "modelIDLTE", "modelIDContains", "modelIDHasPrefix", "modelIDHasSuffix", "modelIDEqualFold", "modelIDContainsFold", "source", "sourceNEQ", "sourceIn", "sourceNotIn", "status", "statusNEQ", "statusIn", "statusNotIn", "stream", "streamNEQ", "ttfbMs", "ttfbMsNEQ", "ttfbMsIn", "ttfbMsNotIn", "ttfbMsGT", "ttfbMsGTE", "ttfbMsLT", "ttfbMsLTE", "ttfbMsIsNil", "ttfbMsNotNil", "ttftMs", "ttftMsNEQ", "ttftMsIn", "ttftMsNotIn", "ttftMsGT", "ttftMsGTE", "ttftMsLT", "ttftMsLTE", "ttftMsIsNil", "ttftMsNotNil", "totalMs", "totalMsNEQ", "totalMsIn", "totalMsNotIn", "totalMsGT", "totalMsGTE", "totalMsLT", "totalMsLTE", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "scheduleKey", "scheduleKeyNEQ", "scheduleKeyIn", "scheduleKeyNotIn", "scheduleKeyGT", "scheduleKeyGTE", "scheduleKeyLT", "scheduleKeyLTE", "scheduleKeyContains", "scheduleKeyHasPrefix", "scheduleKeyHasSuffix", "scheduleKeyIsNil", "scheduleKeyNotNil", "scheduleKeyEqualFold", "scheduleKeyContainsFold", "startedAt", "startedAtNEQ", "startedAtIn", "startedAtNotIn", "startedAtGT", "startedAtGTE", "startedAtLT", "startedAtLTE", "completedAt", "completedAtNEQ", "completedAtIn", "completedAtNotIn", "completedAtGT", "completedAtGTE", "completedAtLT", "completedAtLTE", "completedAtIsNil", "completedAtNotNil", "hasChannel", "hasChannelWith"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "not":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
+			data, err := ec.unmarshalOChannelHealthProbeRunWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Not = data
+		case "and":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
+			data, err := ec.unmarshalOChannelHealthProbeRunWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.And = data
+		case "or":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
+			data, err := ec.unmarshalOChannelHealthProbeRunWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Or = data
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ID = converted
+		case "idNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNEQ"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.IDNEQ = converted
+		case "idIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idIn"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.IDIn = converted
+		case "idNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNotIn"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.IDNotIn = converted
+		case "idGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGT"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.IDGT = converted
+		case "idGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGTE"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.IDGTE = converted
+		case "idLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLT"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.IDLT = converted
+		case "idLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLTE"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.IDLTE = converted
+		case "createdAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAt = data
+		case "createdAtNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAtNEQ"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAtNEQ = data
+		case "createdAtIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAtIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAtIn = data
+		case "createdAtNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAtNotIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAtNotIn = data
+		case "createdAtGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAtGT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAtGT = data
+		case "createdAtGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAtGTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAtGTE = data
+		case "createdAtLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAtLT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAtLT = data
+		case "createdAtLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createdAtLTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreatedAtLTE = data
+		case "updatedAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAt = data
+		case "updatedAtNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAtNEQ"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAtNEQ = data
+		case "updatedAtIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAtIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAtIn = data
+		case "updatedAtNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAtNotIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAtNotIn = data
+		case "updatedAtGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAtGT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAtGT = data
+		case "updatedAtGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAtGTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAtGTE = data
+		case "updatedAtLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAtLT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAtLT = data
+		case "updatedAtLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updatedAtLTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdatedAtLTE = data
+		case "channelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelID"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ChannelID = converted
+		case "channelIDNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelIDNEQ"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ChannelIDNEQ = converted
+		case "channelIDIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelIDIn"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ChannelIDIn = converted
+		case "channelIDNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelIDNotIn"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.ChannelIDNotIn = converted
+		case "modelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelID"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelID = data
+		case "modelIDNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDNEQ = data
+		case "modelIDIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDIn = data
+		case "modelIDNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDNotIn = data
+		case "modelIDGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDGT = data
+		case "modelIDGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDGTE = data
+		case "modelIDLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDLT = data
+		case "modelIDLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDLTE = data
+		case "modelIDContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDContains = data
+		case "modelIDHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDHasPrefix = data
+		case "modelIDHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDHasSuffix = data
+		case "modelIDEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDEqualFold = data
+		case "modelIDContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDContainsFold = data
+		case "source":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("source"))
+			data, err := ec.unmarshalOChannelHealthProbeRunSource2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Source = data
+		case "sourceNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sourceNEQ"))
+			data, err := ec.unmarshalOChannelHealthProbeRunSource2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SourceNEQ = data
+		case "sourceIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sourceIn"))
+			data, err := ec.unmarshalOChannelHealthProbeRunSource2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSourceᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SourceIn = data
+		case "sourceNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sourceNotIn"))
+			data, err := ec.unmarshalOChannelHealthProbeRunSource2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSourceᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SourceNotIn = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalOChannelHealthProbeRunStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		case "statusNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNEQ"))
+			data, err := ec.unmarshalOChannelHealthProbeRunStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusNEQ = data
+		case "statusIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusIn"))
+			data, err := ec.unmarshalOChannelHealthProbeRunStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatusᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusIn = data
+		case "statusNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNotIn"))
+			data, err := ec.unmarshalOChannelHealthProbeRunStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatusᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StatusNotIn = data
+		case "stream":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stream"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Stream = data
+		case "streamNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("streamNEQ"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StreamNEQ = data
+		case "ttfbMs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMs"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMs = data
+		case "ttfbMsNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsNEQ"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsNEQ = data
+		case "ttfbMsIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsIn = data
+		case "ttfbMsNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsNotIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsNotIn = data
+		case "ttfbMsGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsGT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsGT = data
+		case "ttfbMsGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsGTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsGTE = data
+		case "ttfbMsLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsLT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsLT = data
+		case "ttfbMsLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsLTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsLTE = data
+		case "ttfbMsIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsIsNil = data
+		case "ttfbMsNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttfbMsNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtfbMsNotNil = data
+		case "ttftMs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMs"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMs = data
+		case "ttftMsNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsNEQ"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsNEQ = data
+		case "ttftMsIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsIn = data
+		case "ttftMsNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsNotIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsNotIn = data
+		case "ttftMsGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsGT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsGT = data
+		case "ttftMsGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsGTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsGTE = data
+		case "ttftMsLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsLT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsLT = data
+		case "ttftMsLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsLTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsLTE = data
+		case "ttftMsIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsIsNil = data
+		case "ttftMsNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttftMsNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TtftMsNotNil = data
+		case "totalMs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMs"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMs = data
+		case "totalMsNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMsNEQ"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMsNEQ = data
+		case "totalMsIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMsIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMsIn = data
+		case "totalMsNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMsNotIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMsNotIn = data
+		case "totalMsGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMsGT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMsGT = data
+		case "totalMsGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMsGTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMsGTE = data
+		case "totalMsLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMsLT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMsLT = data
+		case "totalMsLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalMsLTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TotalMsLTE = data
+		case "errorMessage":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessage"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessage = data
+		case "errorMessageNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageNEQ = data
+		case "errorMessageIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageIn = data
+		case "errorMessageNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageNotIn = data
+		case "errorMessageGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageGT = data
+		case "errorMessageGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageGTE = data
+		case "errorMessageLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageLT = data
+		case "errorMessageLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageLTE = data
+		case "errorMessageContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageContains = data
+		case "errorMessageHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageHasPrefix = data
+		case "errorMessageHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageHasSuffix = data
+		case "errorMessageIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageIsNil = data
+		case "errorMessageNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageNotNil = data
+		case "errorMessageEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageEqualFold = data
+		case "errorMessageContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessageContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ErrorMessageContainsFold = data
+		case "scheduleKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKey = data
+		case "scheduleKeyNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyNEQ = data
+		case "scheduleKeyIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyIn = data
+		case "scheduleKeyNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyNotIn = data
+		case "scheduleKeyGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyGT = data
+		case "scheduleKeyGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyGTE = data
+		case "scheduleKeyLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyLT = data
+		case "scheduleKeyLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyLTE = data
+		case "scheduleKeyContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyContains = data
+		case "scheduleKeyHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyHasPrefix = data
+		case "scheduleKeyHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyHasSuffix = data
+		case "scheduleKeyIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyIsNil = data
+		case "scheduleKeyNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyNotNil = data
+		case "scheduleKeyEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyEqualFold = data
+		case "scheduleKeyContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scheduleKeyContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ScheduleKeyContainsFold = data
+		case "startedAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAt = data
+		case "startedAtNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAtNEQ"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAtNEQ = data
+		case "startedAtIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAtIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAtIn = data
+		case "startedAtNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAtNotIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAtNotIn = data
+		case "startedAtGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAtGT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAtGT = data
+		case "startedAtGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAtGTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAtGTE = data
+		case "startedAtLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAtLT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAtLT = data
+		case "startedAtLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startedAtLTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartedAtLTE = data
+		case "completedAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAt = data
+		case "completedAtNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtNEQ"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtNEQ = data
+		case "completedAtIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtIn = data
+		case "completedAtNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtNotIn"))
+			data, err := ec.unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtNotIn = data
+		case "completedAtGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtGT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtGT = data
+		case "completedAtGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtGTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtGTE = data
+		case "completedAtLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtLT"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtLT = data
+		case "completedAtLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtLTE"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtLTE = data
+		case "completedAtIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtIsNil = data
+		case "completedAtNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completedAtNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CompletedAtNotNil = data
+		case "hasChannel":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasChannel"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasChannel = data
+		case "hasChannelWith":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasChannelWith"))
+			data, err := ec.unmarshalOChannelWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelWhereInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasChannelWith = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputChannelHealthProbeSettingsInput(ctx context.Context, obj any) (objects.ChannelHealthProbeSettings, error) {
+	var it objects.ChannelHealthProbeSettings
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"enabled", "intervalMinutes", "models"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "intervalMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("intervalMinutes"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IntervalMinutes = data
+		case "models":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("models"))
+			data, err := ec.unmarshalNChannelHealthProbeModelInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModelᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Models = data
 		}
 	}
 
@@ -68428,7 +72249,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "retryableStatusCodes", "retryableErrorPatterns", "providerQuota"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "retryableStatusCodes", "retryableErrorPatterns", "providerQuota", "healthProbe"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -68554,6 +72375,13 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.ProviderQuota = data
+		case "healthProbe":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("healthProbe"))
+			data, err := ec.unmarshalOChannelHealthProbeSettingsInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeSettings(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HealthProbe = data
 		}
 	}
 
@@ -68635,7 +72463,7 @@ func (ec *executionContext) unmarshalInputChannelWhereInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "type", "typeNEQ", "typeIn", "typeNotIn", "baseURL", "baseURLNEQ", "baseURLIn", "baseURLNotIn", "baseURLGT", "baseURLGTE", "baseURLLT", "baseURLLTE", "baseURLContains", "baseURLHasPrefix", "baseURLHasSuffix", "baseURLIsNil", "baseURLNotNil", "baseURLEqualFold", "baseURLContainsFold", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "autoSyncSupportedModels", "autoSyncSupportedModelsNEQ", "autoSyncModelPattern", "autoSyncModelPatternNEQ", "autoSyncModelPatternIn", "autoSyncModelPatternNotIn", "autoSyncModelPatternGT", "autoSyncModelPatternGTE", "autoSyncModelPatternLT", "autoSyncModelPatternLTE", "autoSyncModelPatternContains", "autoSyncModelPatternHasPrefix", "autoSyncModelPatternHasSuffix", "autoSyncModelPatternIsNil", "autoSyncModelPatternNotNil", "autoSyncModelPatternEqualFold", "autoSyncModelPatternContainsFold", "defaultTestModel", "defaultTestModelNEQ", "defaultTestModelIn", "defaultTestModelNotIn", "defaultTestModelGT", "defaultTestModelGTE", "defaultTestModelLT", "defaultTestModelLTE", "defaultTestModelContains", "defaultTestModelHasPrefix", "defaultTestModelHasSuffix", "defaultTestModelEqualFold", "defaultTestModelContainsFold", "orderingWeight", "orderingWeightNEQ", "orderingWeightIn", "orderingWeightNotIn", "orderingWeightGT", "orderingWeightGTE", "orderingWeightLT", "orderingWeightLTE", "priority", "priorityNEQ", "priorityIn", "priorityNotIn", "priorityGT", "priorityGTE", "priorityLT", "priorityLTE", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "autoDisabledAt", "autoDisabledAtNEQ", "autoDisabledAtIn", "autoDisabledAtNotIn", "autoDisabledAtGT", "autoDisabledAtGTE", "autoDisabledAtLT", "autoDisabledAtLTE", "autoDisabledAtIsNil", "autoDisabledAtNotNil", "remark", "remarkNEQ", "remarkIn", "remarkNotIn", "remarkGT", "remarkGTE", "remarkLT", "remarkLTE", "remarkContains", "remarkHasPrefix", "remarkHasSuffix", "remarkIsNil", "remarkNotNil", "remarkEqualFold", "remarkContainsFold", "hasRequests", "hasRequestsWith", "hasExecutions", "hasExecutionsWith", "hasUsageLogs", "hasUsageLogsWith", "hasChannelProbes", "hasChannelProbesWith", "hasChannelModelPrices", "hasChannelModelPricesWith", "hasProviderQuotaStatus", "hasProviderQuotaStatusWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "type", "typeNEQ", "typeIn", "typeNotIn", "baseURL", "baseURLNEQ", "baseURLIn", "baseURLNotIn", "baseURLGT", "baseURLGTE", "baseURLLT", "baseURLLTE", "baseURLContains", "baseURLHasPrefix", "baseURLHasSuffix", "baseURLIsNil", "baseURLNotNil", "baseURLEqualFold", "baseURLContainsFold", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "autoSyncSupportedModels", "autoSyncSupportedModelsNEQ", "autoSyncModelPattern", "autoSyncModelPatternNEQ", "autoSyncModelPatternIn", "autoSyncModelPatternNotIn", "autoSyncModelPatternGT", "autoSyncModelPatternGTE", "autoSyncModelPatternLT", "autoSyncModelPatternLTE", "autoSyncModelPatternContains", "autoSyncModelPatternHasPrefix", "autoSyncModelPatternHasSuffix", "autoSyncModelPatternIsNil", "autoSyncModelPatternNotNil", "autoSyncModelPatternEqualFold", "autoSyncModelPatternContainsFold", "defaultTestModel", "defaultTestModelNEQ", "defaultTestModelIn", "defaultTestModelNotIn", "defaultTestModelGT", "defaultTestModelGTE", "defaultTestModelLT", "defaultTestModelLTE", "defaultTestModelContains", "defaultTestModelHasPrefix", "defaultTestModelHasSuffix", "defaultTestModelEqualFold", "defaultTestModelContainsFold", "orderingWeight", "orderingWeightNEQ", "orderingWeightIn", "orderingWeightNotIn", "orderingWeightGT", "orderingWeightGTE", "orderingWeightLT", "orderingWeightLTE", "priority", "priorityNEQ", "priorityIn", "priorityNotIn", "priorityGT", "priorityGTE", "priorityLT", "priorityLTE", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "autoDisabledAt", "autoDisabledAtNEQ", "autoDisabledAtIn", "autoDisabledAtNotIn", "autoDisabledAtGT", "autoDisabledAtGTE", "autoDisabledAtLT", "autoDisabledAtLTE", "autoDisabledAtIsNil", "autoDisabledAtNotNil", "remark", "remarkNEQ", "remarkIn", "remarkNotIn", "remarkGT", "remarkGTE", "remarkLT", "remarkLTE", "remarkContains", "remarkHasPrefix", "remarkHasSuffix", "remarkIsNil", "remarkNotNil", "remarkEqualFold", "remarkContainsFold", "hasRequests", "hasRequestsWith", "hasExecutions", "hasExecutionsWith", "hasUsageLogs", "hasUsageLogsWith", "hasHealthProbeRuns", "hasHealthProbeRunsWith", "hasChannelProbes", "hasChannelProbesWith", "hasChannelModelPrices", "hasChannelModelPricesWith", "hasProviderQuotaStatus", "hasProviderQuotaStatusWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -69759,6 +73587,20 @@ func (ec *executionContext) unmarshalInputChannelWhereInput(ctx context.Context,
 				return it, err
 			}
 			it.HasUsageLogsWith = data
+		case "hasHealthProbeRuns":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasHealthProbeRuns"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasHealthProbeRuns = data
+		case "hasHealthProbeRunsWith":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasHealthProbeRunsWith"))
+			data, err := ec.unmarshalOChannelHealthProbeRunWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasHealthProbeRunsWith = data
 		case "hasChannelProbes":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasChannelProbes"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -82167,6 +86009,47 @@ func (ec *executionContext) unmarshalInputRoleWhereInput(ctx context.Context, ob
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputRunChannelHealthProbeInput(ctx context.Context, obj any) (biz.RunChannelHealthProbeInput, error) {
+	var it biz.RunChannelHealthProbeInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"channelID", "modelID", "stream"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "channelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelID"))
+			data, err := ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelID = data
+		case "modelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelID"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelID = data
+		case "stream":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stream"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Stream = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputS3Input(ctx context.Context, obj any) (objects.S3, error) {
 	var it objects.S3
 	asMap := map[string]any{}
@@ -84016,7 +87899,7 @@ func (ec *executionContext) unmarshalInputTriggerGcCleanupInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"requestsCleanupDays", "usageLogsCleanupDays"}
+	fieldsInOrder := [...]string{"requestsCleanupDays", "usageLogsCleanupDays", "channelHealthProbeRunsCleanupDays"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -84037,6 +87920,13 @@ func (ec *executionContext) unmarshalInputTriggerGcCleanupInput(ctx context.Cont
 				return it, err
 			}
 			it.UsageLogsCleanupDays = data
+		case "channelHealthProbeRunsCleanupDays":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelHealthProbeRunsCleanupDays"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelHealthProbeRunsCleanupDays = data
 		}
 	}
 
@@ -84339,6 +88229,56 @@ func (ec *executionContext) unmarshalInputUpdateBrandSettingsInput(ctx context.C
 				return it, err
 			}
 			it.Title = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateChannelHealthProbeSettingsInput(ctx context.Context, obj any) (biz.UpdateChannelHealthProbeSettingsInput, error) {
+	var it biz.UpdateChannelHealthProbeSettingsInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"channelID", "enabled", "intervalMinutes", "models"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "channelID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelID"))
+			data, err := ec.unmarshalNID2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelID = data
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "intervalMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("intervalMinutes"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IntervalMinutes = data
+		case "models":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("models"))
+			data, err := ec.unmarshalNActiveChannelHealthProbeModelInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeModelInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			if err = ec.resolvers.UpdateChannelHealthProbeSettingsInput().Models(ctx, &it, data); err != nil {
+				return it, err
+			}
 		}
 	}
 
@@ -90181,6 +94121,11 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 			return graphql.Null
 		}
 		return ec._ChannelModelPrice(ctx, sel, obj)
+	case *ent.ChannelHealthProbeRun:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._ChannelHealthProbeRun(ctx, sel, obj)
 	case *ent.Channel:
 		if obj == nil {
 			return graphql.Null
@@ -91391,6 +95336,93 @@ func (ec *executionContext) _APIKeyTokenUsageStats(ctx context.Context, sel ast.
 	return out
 }
 
+var activeChannelHealthProbeRunImplementors = []string{"ActiveChannelHealthProbeRun"}
+
+func (ec *executionContext) _ActiveChannelHealthProbeRun(ctx context.Context, sel ast.SelectionSet, obj *ActiveChannelHealthProbeRun) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, activeChannelHealthProbeRunImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ActiveChannelHealthProbeRun")
+		case "id":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "channelID":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_channelID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "modelID":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_modelID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "source":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_source(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stream":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_stream(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ttfbMs":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_ttfbMs(ctx, field, obj)
+		case "ttftMs":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_ttftMs(ctx, field, obj)
+		case "totalMs":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_totalMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "errorMessage":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_errorMessage(ctx, field, obj)
+		case "startedAt":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_startedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "completedAt":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_completedAt(ctx, field, obj)
+		case "createdAt":
+			out.Values[i] = ec._ActiveChannelHealthProbeRun_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var analyticsDailyStatImplementors = []string{"AnalyticsDailyStat"}
 
 func (ec *executionContext) _AnalyticsDailyStat(ctx context.Context, sel ast.SelectionSet, obj *AnalyticsDailyStat) graphql.Marshaler {
@@ -92447,6 +96479,42 @@ func (ec *executionContext) _Channel(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "healthProbeRuns":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Channel_healthProbeRuns(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "channelProbes":
 			field := field
 
@@ -92891,6 +96959,604 @@ func (ec *executionContext) _ChannelEndpoint(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelEndpoint_baseURL(ctx, field, obj)
 		case "transport":
 			out.Values[i] = ec._ChannelEndpoint_transport(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeChannelImplementors = []string{"ChannelHealthProbeChannel"}
+
+func (ec *executionContext) _ChannelHealthProbeChannel(ctx context.Context, sel ast.SelectionSet, obj *ChannelHealthProbeChannel) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeChannelImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeChannel")
+		case "channelID":
+			out.Values[i] = ec._ChannelHealthProbeChannel_channelID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "channelName":
+			out.Values[i] = ec._ChannelHealthProbeChannel_channelName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "channelStatus":
+			out.Values[i] = ec._ChannelHealthProbeChannel_channelStatus(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "enabled":
+			out.Values[i] = ec._ChannelHealthProbeChannel_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "intervalMinutes":
+			out.Values[i] = ec._ChannelHealthProbeChannel_intervalMinutes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "models":
+			out.Values[i] = ec._ChannelHealthProbeChannel_models(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeHistoryPageImplementors = []string{"ChannelHealthProbeHistoryPage"}
+
+func (ec *executionContext) _ChannelHealthProbeHistoryPage(ctx context.Context, sel ast.SelectionSet, obj *biz.ChannelHealthProbeHistoryPage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeHistoryPageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeHistoryPage")
+		case "items":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ChannelHealthProbeHistoryPage_items(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "totalCount":
+			out.Values[i] = ec._ChannelHealthProbeHistoryPage_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeModelImplementors = []string{"ChannelHealthProbeModel"}
+
+func (ec *executionContext) _ChannelHealthProbeModel(ctx context.Context, sel ast.SelectionSet, obj *objects.ChannelHealthProbeModel) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeModelImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeModel")
+		case "modelID":
+			out.Values[i] = ec._ChannelHealthProbeModel_modelID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "enabled":
+			out.Values[i] = ec._ChannelHealthProbeModel_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stream":
+			out.Values[i] = ec._ChannelHealthProbeModel_stream(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeModelOverviewImplementors = []string{"ChannelHealthProbeModelOverview"}
+
+func (ec *executionContext) _ChannelHealthProbeModelOverview(ctx context.Context, sel ast.SelectionSet, obj *biz.ChannelHealthProbeModelOverview) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeModelOverviewImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeModelOverview")
+		case "modelID":
+			out.Values[i] = ec._ChannelHealthProbeModelOverview_modelID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "enabled":
+			out.Values[i] = ec._ChannelHealthProbeModelOverview_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "stream":
+			out.Values[i] = ec._ChannelHealthProbeModelOverview_stream(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "latestRun":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ChannelHealthProbeModelOverview_latestRun(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeRunImplementors = []string{"ChannelHealthProbeRun", "Node"}
+
+func (ec *executionContext) _ChannelHealthProbeRun(ctx context.Context, sel ast.SelectionSet, obj *ent.ChannelHealthProbeRun) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeRunImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeRun")
+		case "id":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ChannelHealthProbeRun_id(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			out.Values[i] = ec._ChannelHealthProbeRun_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "updatedAt":
+			out.Values[i] = ec._ChannelHealthProbeRun_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "channelID":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ChannelHealthProbeRun_channelID(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "modelID":
+			out.Values[i] = ec._ChannelHealthProbeRun_modelID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "source":
+			out.Values[i] = ec._ChannelHealthProbeRun_source(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "status":
+			out.Values[i] = ec._ChannelHealthProbeRun_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "stream":
+			out.Values[i] = ec._ChannelHealthProbeRun_stream(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "ttfbMs":
+			out.Values[i] = ec._ChannelHealthProbeRun_ttfbMs(ctx, field, obj)
+		case "ttftMs":
+			out.Values[i] = ec._ChannelHealthProbeRun_ttftMs(ctx, field, obj)
+		case "totalMs":
+			out.Values[i] = ec._ChannelHealthProbeRun_totalMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "errorMessage":
+			out.Values[i] = ec._ChannelHealthProbeRun_errorMessage(ctx, field, obj)
+		case "scheduleKey":
+			out.Values[i] = ec._ChannelHealthProbeRun_scheduleKey(ctx, field, obj)
+		case "startedAt":
+			out.Values[i] = ec._ChannelHealthProbeRun_startedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "completedAt":
+			out.Values[i] = ec._ChannelHealthProbeRun_completedAt(ctx, field, obj)
+		case "channel":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ChannelHealthProbeRun_channel(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeRunConnectionImplementors = []string{"ChannelHealthProbeRunConnection"}
+
+func (ec *executionContext) _ChannelHealthProbeRunConnection(ctx context.Context, sel ast.SelectionSet, obj *ent.ChannelHealthProbeRunConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeRunConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeRunConnection")
+		case "edges":
+			out.Values[i] = ec._ChannelHealthProbeRunConnection_edges(ctx, field, obj)
+		case "pageInfo":
+			out.Values[i] = ec._ChannelHealthProbeRunConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._ChannelHealthProbeRunConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeRunEdgeImplementors = []string{"ChannelHealthProbeRunEdge"}
+
+func (ec *executionContext) _ChannelHealthProbeRunEdge(ctx context.Context, sel ast.SelectionSet, obj *ent.ChannelHealthProbeRunEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeRunEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeRunEdge")
+		case "node":
+			out.Values[i] = ec._ChannelHealthProbeRunEdge_node(ctx, field, obj)
+		case "cursor":
+			out.Values[i] = ec._ChannelHealthProbeRunEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelHealthProbeSettingsImplementors = []string{"ChannelHealthProbeSettings"}
+
+func (ec *executionContext) _ChannelHealthProbeSettings(ctx context.Context, sel ast.SelectionSet, obj *objects.ChannelHealthProbeSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelHealthProbeSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelHealthProbeSettings")
+		case "enabled":
+			out.Values[i] = ec._ChannelHealthProbeSettings_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "intervalMinutes":
+			out.Values[i] = ec._ChannelHealthProbeSettings_intervalMinutes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "models":
+			out.Values[i] = ec._ChannelHealthProbeSettings_models(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -94694,6 +99360,8 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_retryableErrorPatterns(ctx, field, obj)
 		case "providerQuota":
 			out.Values[i] = ec._ChannelSettings_providerQuota(ctx, field, obj)
+		case "healthProbe":
+			out.Values[i] = ec._ChannelSettings_healthProbe(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -98334,6 +103002,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "triggerAutoBackup":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_triggerAutoBackup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateChannelHealthProbeSettings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateChannelHealthProbeSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runChannelHealthProbe":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_runChannelHealthProbe(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -102771,6 +107453,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_channelProbeData(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "channelHealthProbeOverview":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_channelHealthProbeOverview(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "channelHealthProbeHistory":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_channelHealthProbeHistory(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -110735,6 +115461,84 @@ func (ec *executionContext) unmarshalNAPIKeyWhereInput2ᚖgithubᚗcomᚋlooplj�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNActiveChannelHealthProbeModelInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeModelInputᚄ(ctx context.Context, v any) ([]*ActiveChannelHealthProbeModelInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*ActiveChannelHealthProbeModelInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNActiveChannelHealthProbeModelInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeModelInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNActiveChannelHealthProbeModelInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeModelInput(ctx context.Context, v any) (*ActiveChannelHealthProbeModelInput, error) {
+	res, err := ec.unmarshalInputActiveChannelHealthProbeModelInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNActiveChannelHealthProbeRun2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRun(ctx context.Context, sel ast.SelectionSet, v ActiveChannelHealthProbeRun) graphql.Marshaler {
+	return ec._ActiveChannelHealthProbeRun(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNActiveChannelHealthProbeRun2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRunᚄ(ctx context.Context, sel ast.SelectionSet, v []*ActiveChannelHealthProbeRun) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNActiveChannelHealthProbeRun2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRun(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNActiveChannelHealthProbeRun2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRun(ctx context.Context, sel ast.SelectionSet, v *ActiveChannelHealthProbeRun) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ActiveChannelHealthProbeRun(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNAddUserToProjectInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAddUserToProjectInput(ctx context.Context, v any) (AddUserToProjectInput, error) {
 	res, err := ec.unmarshalInputAddUserToProjectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -111329,6 +116133,256 @@ func (ec *executionContext) unmarshalNChannelEndpointInput2ᚕgithubᚗcomᚋloo
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeChannel2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelHealthProbeChannel(ctx context.Context, sel ast.SelectionSet, v ChannelHealthProbeChannel) graphql.Marshaler {
+	return ec._ChannelHealthProbeChannel(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeChannel2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelHealthProbeChannelᚄ(ctx context.Context, sel ast.SelectionSet, v []*ChannelHealthProbeChannel) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNChannelHealthProbeChannel2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelHealthProbeChannel(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeChannel2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelHealthProbeChannel(ctx context.Context, sel ast.SelectionSet, v *ChannelHealthProbeChannel) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ChannelHealthProbeChannel(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNChannelHealthProbeHistoryInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeHistoryInput(ctx context.Context, v any) (biz.ChannelHealthProbeHistoryInput, error) {
+	res, err := ec.unmarshalInputChannelHealthProbeHistoryInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeHistoryPage2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeHistoryPage(ctx context.Context, sel ast.SelectionSet, v biz.ChannelHealthProbeHistoryPage) graphql.Marshaler {
+	return ec._ChannelHealthProbeHistoryPage(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeHistoryPage2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeHistoryPage(ctx context.Context, sel ast.SelectionSet, v *biz.ChannelHealthProbeHistoryPage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ChannelHealthProbeHistoryPage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeModel2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModel(ctx context.Context, sel ast.SelectionSet, v objects.ChannelHealthProbeModel) graphql.Marshaler {
+	return ec._ChannelHealthProbeModel(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeModel2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModelᚄ(ctx context.Context, sel ast.SelectionSet, v []objects.ChannelHealthProbeModel) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNChannelHealthProbeModel2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModel(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNChannelHealthProbeModelInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModel(ctx context.Context, v any) (objects.ChannelHealthProbeModel, error) {
+	res, err := ec.unmarshalInputChannelHealthProbeModelInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNChannelHealthProbeModelInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModelᚄ(ctx context.Context, v any) ([]objects.ChannelHealthProbeModel, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]objects.ChannelHealthProbeModel, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNChannelHealthProbeModelInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeModel(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeModelOverview2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeModelOverviewᚄ(ctx context.Context, sel ast.SelectionSet, v []*biz.ChannelHealthProbeModelOverview) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNChannelHealthProbeModelOverview2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeModelOverview(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeModelOverview2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelHealthProbeModelOverview(ctx context.Context, sel ast.SelectionSet, v *biz.ChannelHealthProbeModelOverview) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ChannelHealthProbeModelOverview(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeRunConnection2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunConnection(ctx context.Context, sel ast.SelectionSet, v *ent.ChannelHealthProbeRunConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ChannelHealthProbeRunConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNChannelHealthProbeRunOrderField2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunOrderField(ctx context.Context, v any) (*ent.ChannelHealthProbeRunOrderField, error) {
+	var res = new(ent.ChannelHealthProbeRunOrderField)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeRunOrderField2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunOrderField(ctx context.Context, sel ast.SelectionSet, v *ent.ChannelHealthProbeRunOrderField) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalNChannelHealthProbeRunSource2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx context.Context, v any) (channelhealthproberun.Source, error) {
+	var res channelhealthproberun.Source
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeRunSource2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx context.Context, sel ast.SelectionSet, v channelhealthproberun.Source) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNChannelHealthProbeRunStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx context.Context, v any) (channelhealthproberun.Status, error) {
+	var res channelhealthproberun.Status
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNChannelHealthProbeRunStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx context.Context, sel ast.SelectionSet, v channelhealthproberun.Status) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNChannelHealthProbeRunWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInput(ctx context.Context, v any) (*ent.ChannelHealthProbeRunWhereInput, error) {
+	res, err := ec.unmarshalInputChannelHealthProbeRunWhereInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNChannelModelAutoSyncSetting2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelModelAutoSyncSetting(ctx context.Context, sel ast.SelectionSet, v biz.ChannelModelAutoSyncSetting) graphql.Marshaler {
@@ -115225,6 +120279,11 @@ func (ec *executionContext) unmarshalNRoleWhereInput2ᚖgithubᚗcomᚋloopljᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNRunChannelHealthProbeInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐRunChannelHealthProbeInput(ctx context.Context, v any) (biz.RunChannelHealthProbeInput, error) {
+	res, err := ec.unmarshalInputRunChannelHealthProbeInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNSaveChannelEndpointsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐSaveChannelEndpointsInput(ctx context.Context, v any) (biz.SaveChannelEndpointsInput, error) {
 	res, err := ec.unmarshalInputSaveChannelEndpointsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -116057,6 +121116,11 @@ func (ec *executionContext) unmarshalNUpdateAutoBackupSettingsInput2githubᚗcom
 
 func (ec *executionContext) unmarshalNUpdateBrandSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐUpdateBrandSettingsInput(ctx context.Context, v any) (UpdateBrandSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateBrandSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateChannelHealthProbeSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐUpdateChannelHealthProbeSettingsInput(ctx context.Context, v any) (biz.UpdateChannelHealthProbeSettingsInput, error) {
+	res, err := ec.unmarshalInputUpdateChannelHealthProbeSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -117456,6 +122520,13 @@ func (ec *executionContext) unmarshalOAPIKeyWhereInput2ᚖgithubᚗcomᚋlooplj�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalOActiveChannelHealthProbeRun2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveChannelHealthProbeRun(ctx context.Context, sel ast.SelectionSet, v *ActiveChannelHealthProbeRun) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ActiveChannelHealthProbeRun(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalOAnalyticsFilter2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilter(ctx context.Context, v any) (*AnalyticsFilter, error) {
 	if v == nil {
 		return nil, nil
@@ -117707,6 +122778,272 @@ func (ec *executionContext) unmarshalOChannelEndpointInput2ᚕgithubᚗcomᚋloo
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeRun2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRun(ctx context.Context, sel ast.SelectionSet, v *ent.ChannelHealthProbeRun) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ChannelHealthProbeRun(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeRunEdge2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunEdge(ctx context.Context, sel ast.SelectionSet, v []*ent.ChannelHealthProbeRunEdge) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalOChannelHealthProbeRunEdge2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunEdge(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	return ret
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeRunEdge2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunEdge(ctx context.Context, sel ast.SelectionSet, v *ent.ChannelHealthProbeRunEdge) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ChannelHealthProbeRunEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeRunOrder2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunOrder(ctx context.Context, v any) (*ent.ChannelHealthProbeRunOrder, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputChannelHealthProbeRunOrder(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeRunSource2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSourceᚄ(ctx context.Context, v any) ([]channelhealthproberun.Source, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]channelhealthproberun.Source, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNChannelHealthProbeRunSource2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeRunSource2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSourceᚄ(ctx context.Context, sel ast.SelectionSet, v []channelhealthproberun.Source) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNChannelHealthProbeRunSource2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeRunSource2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx context.Context, v any) (*channelhealthproberun.Source, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(channelhealthproberun.Source)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeRunSource2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐSource(ctx context.Context, sel ast.SelectionSet, v *channelhealthproberun.Source) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeRunStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatusᚄ(ctx context.Context, v any) ([]channelhealthproberun.Status, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]channelhealthproberun.Status, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNChannelHealthProbeRunStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeRunStatus2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []channelhealthproberun.Status) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNChannelHealthProbeRunStatus2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeRunStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx context.Context, v any) (*channelhealthproberun.Status, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(channelhealthproberun.Status)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeRunStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚋchannelhealthproberunᚐStatus(ctx context.Context, sel ast.SelectionSet, v *channelhealthproberun.Status) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeRunWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInputᚄ(ctx context.Context, v any) ([]*ent.ChannelHealthProbeRunWhereInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*ent.ChannelHealthProbeRunWhereInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNChannelHealthProbeRunWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeRunWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelHealthProbeRunWhereInput(ctx context.Context, v any) (*ent.ChannelHealthProbeRunWhereInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputChannelHealthProbeRunWhereInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOChannelHealthProbeSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeSettings(ctx context.Context, sel ast.SelectionSet, v *objects.ChannelHealthProbeSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ChannelHealthProbeSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOChannelHealthProbeSettingsInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐChannelHealthProbeSettings(ctx context.Context, v any) (*objects.ChannelHealthProbeSettings, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputChannelHealthProbeSettingsInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalOChannelLimiterStats2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐChannelLimiterStats(ctx context.Context, sel ast.SelectionSet, v *ChannelLimiterStats) graphql.Marshaler {

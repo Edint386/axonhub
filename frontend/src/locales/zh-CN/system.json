@@ -71,6 +71,7 @@
   "system.storage.policy.days": "天",
   "system.storage.policy.resourceTypes.requests": "请求日志",
   "system.storage.policy.resourceTypes.usage_logs": "用量日志",
+  "system.storage.policy.resourceTypes.channelHealthProbeRuns": "渠道探测历史",
   "system.storage.policy.cleanupDescription": "在指定天数后自动移除旧数据，以管理存储增长并符合数据保留策略。不会移除设置保留的线程和追踪相关数据。关闭开关可永久保留数据。",
   "system.storage.policy.runCleanupNow": "立即清理",
   "system.storage.policy.runCleanupSuccess": "后台清理任务已启动",

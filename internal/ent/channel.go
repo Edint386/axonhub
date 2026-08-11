@@ -80,6 +80,8 @@ type ChannelEdges struct {
 	Executions []*RequestExecution `json:"executions,omitempty"`
 	// UsageLogs holds the value of the usage_logs edge.
 	UsageLogs []*UsageLog `json:"usage_logs,omitempty"`
+	// HealthProbeRuns holds the value of the health_probe_runs edge.
+	HealthProbeRuns []*ChannelHealthProbeRun `json:"health_probe_runs,omitempty"`
 	// ChannelProbes holds the value of the channel_probes edge.
 	ChannelProbes []*ChannelProbe `json:"channel_probes,omitempty"`
 	// ChannelModelPrices holds the value of the channel_model_prices edge.
@@ -88,13 +90,14 @@ type ChannelEdges struct {
 	ProviderQuotaStatus *ProviderQuotaStatus `json:"provider_quota_status,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [6]bool
+	loadedTypes [7]bool
 	// totalCount holds the count of the edges above.
-	totalCount [6]map[string]int
+	totalCount [7]map[string]int
 
 	namedRequests           map[string][]*Request
 	namedExecutions         map[string][]*RequestExecution
 	namedUsageLogs          map[string][]*UsageLog
+	namedHealthProbeRuns    map[string][]*ChannelHealthProbeRun
 	namedChannelProbes      map[string][]*ChannelProbe
 	namedChannelModelPrices map[string][]*ChannelModelPrice
 }
@@ -126,10 +129,19 @@ func (e ChannelEdges) UsageLogsOrErr() ([]*UsageLog, error) {
 	return nil, &NotLoadedError{edge: "usage_logs"}
 }
 
+// HealthProbeRunsOrErr returns the HealthProbeRuns value or an error if the edge
+// was not loaded in eager-loading.
+func (e ChannelEdges) HealthProbeRunsOrErr() ([]*ChannelHealthProbeRun, error) {
+	if e.loadedTypes[3] {
+		return e.HealthProbeRuns, nil
+	}
+	return nil, &NotLoadedError{edge: "health_probe_runs"}
+}
+
 // ChannelProbesOrErr returns the ChannelProbes value or an error if the edge
 // was not loaded in eager-loading.
 func (e ChannelEdges) ChannelProbesOrErr() ([]*ChannelProbe, error) {
-	if e.loadedTypes[3] {
+	if e.loadedTypes[4] {
 		return e.ChannelProbes, nil
 	}
 	return nil, &NotLoadedError{edge: "channel_probes"}
@@ -138,7 +150,7 @@ func (e ChannelEdges) ChannelProbesOrErr() ([]*ChannelProbe, error) {
 // ChannelModelPricesOrErr returns the ChannelModelPrices value or an error if the edge
 // was not loaded in eager-loading.
 func (e ChannelEdges) ChannelModelPricesOrErr() ([]*ChannelModelPrice, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[5] {
 		return e.ChannelModelPrices, nil
 	}
 	return nil, &NotLoadedError{edge: "channel_model_prices"}
@@ -149,7 +161,7 @@ func (e ChannelEdges) ChannelModelPricesOrErr() ([]*ChannelModelPrice, error) {
 func (e ChannelEdges) ProviderQuotaStatusOrErr() (*ProviderQuotaStatus, error) {
 	if e.ProviderQuotaStatus != nil {
 		return e.ProviderQuotaStatus, nil
-	} else if e.loadedTypes[5] {
+	} else if e.loadedTypes[6] {
 		return nil, &NotFoundError{label: providerquotastatus.Label}
 	}
 	return nil, &NotLoadedError{edge: "provider_quota_status"}
@@ -376,6 +388,11 @@ func (_m *Channel) QueryUsageLogs() *UsageLogQuery {
 	return NewChannelClient(_m.config).QueryUsageLogs(_m)
 }
 
+// QueryHealthProbeRuns queries the "health_probe_runs" edge of the Channel entity.
+func (_m *Channel) QueryHealthProbeRuns() *ChannelHealthProbeRunQuery {
+	return NewChannelClient(_m.config).QueryHealthProbeRuns(_m)
+}
+
 // QueryChannelProbes queries the "channel_probes" edge of the Channel entity.
 func (_m *Channel) QueryChannelProbes() *ChannelProbeQuery {
 	return NewChannelClient(_m.config).QueryChannelProbes(_m)
@@ -559,6 +576,30 @@ func (_m *Channel) appendNamedUsageLogs(name string, edges ...*UsageLog) {
 		_m.Edges.namedUsageLogs[name] = []*UsageLog{}
 	} else {
 		_m.Edges.namedUsageLogs[name] = append(_m.Edges.namedUsageLogs[name], edges...)
+	}
+}
+
+// NamedHealthProbeRuns returns the HealthProbeRuns named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (_m *Channel) NamedHealthProbeRuns(name string) ([]*ChannelHealthProbeRun, error) {
+	if _m.Edges.namedHealthProbeRuns == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := _m.Edges.namedHealthProbeRuns[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (_m *Channel) appendNamedHealthProbeRuns(name string, edges ...*ChannelHealthProbeRun) {
+	if _m.Edges.namedHealthProbeRuns == nil {
+		_m.Edges.namedHealthProbeRuns = make(map[string][]*ChannelHealthProbeRun)
+	}
+	if len(edges) == 0 {
+		_m.Edges.namedHealthProbeRuns[name] = []*ChannelHealthProbeRun{}
+	} else {
+		_m.Edges.namedHealthProbeRuns[name] = append(_m.Edges.namedHealthProbeRuns[name], edges...)
 	}
 }
 

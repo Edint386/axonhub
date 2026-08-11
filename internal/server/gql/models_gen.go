@@ -50,6 +50,29 @@ type APIKeyTokenUsageStatsInput struct {
 	CreatedAtLTE *time.Time      `json:"createdAtLTE,omitempty"`
 }
 
+type ActiveChannelHealthProbeModelInput struct {
+	ModelID string `json:"modelID"`
+	Enabled bool   `json:"enabled"`
+	Stream  bool   `json:"stream"`
+}
+
+// A persisted result from an active synthetic channel generation probe.
+type ActiveChannelHealthProbeRun struct {
+	ID           objects.GUID `json:"id"`
+	ChannelID    objects.GUID `json:"channelID"`
+	ModelID      string       `json:"modelID"`
+	Source       string       `json:"source"`
+	Status       string       `json:"status"`
+	Stream       bool         `json:"stream"`
+	TtfbMs       *float64     `json:"ttfbMs,omitempty"`
+	TtftMs       *float64     `json:"ttftMs,omitempty"`
+	TotalMs      float64      `json:"totalMs"`
+	ErrorMessage *string      `json:"errorMessage,omitempty"`
+	StartedAt    time.Time    `json:"startedAt"`
+	CompletedAt  *time.Time   `json:"completedAt,omitempty"`
+	CreatedAt    time.Time    `json:"createdAt"`
+}
+
 type AddUserToProjectInput struct {
 	ProjectID objects.GUID    `json:"projectId"`
 	UserID    objects.GUID    `json:"userId"`
@@ -169,6 +192,15 @@ type BulkUpdateChannelOrderingResult struct {
 	Success  bool           `json:"success"`
 	Updated  int            `json:"updated"`
 	Channels []*ent.Channel `json:"channels"`
+}
+
+type ChannelHealthProbeChannel struct {
+	ChannelID       objects.GUID                           `json:"channelID"`
+	ChannelName     string                                 `json:"channelName"`
+	ChannelStatus   string                                 `json:"channelStatus"`
+	Enabled         bool                                   `json:"enabled"`
+	IntervalMinutes int                                    `json:"intervalMinutes"`
+	Models          []*biz.ChannelHealthProbeModelOverview `json:"models"`
 }
 
 // ChannelLimiterStats is a point-in-time snapshot of the per-channel concurrency limiter.

@@ -18,6 +18,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/channeloverridetemplate"
@@ -53,6 +54,8 @@ type Client struct {
 	APIKeyProfileTemplate *APIKeyProfileTemplateClient
 	// Channel is the client for interacting with the Channel builders.
 	Channel *ChannelClient
+	// ChannelHealthProbeRun is the client for interacting with the ChannelHealthProbeRun builders.
+	ChannelHealthProbeRun *ChannelHealthProbeRunClient
 	// ChannelModelPrice is the client for interacting with the ChannelModelPrice builders.
 	ChannelModelPrice *ChannelModelPriceClient
 	// ChannelModelPriceVersion is the client for interacting with the ChannelModelPriceVersion builders.
@@ -113,6 +116,7 @@ func (c *Client) init() {
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.APIKeyProfileTemplate = NewAPIKeyProfileTemplateClient(c.config)
 	c.Channel = NewChannelClient(c.config)
+	c.ChannelHealthProbeRun = NewChannelHealthProbeRunClient(c.config)
 	c.ChannelModelPrice = NewChannelModelPriceClient(c.config)
 	c.ChannelModelPriceVersion = NewChannelModelPriceVersionClient(c.config)
 	c.ChannelOverrideTemplate = NewChannelOverrideTemplateClient(c.config)
@@ -230,6 +234,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		APIKey:                   NewAPIKeyClient(cfg),
 		APIKeyProfileTemplate:    NewAPIKeyProfileTemplateClient(cfg),
 		Channel:                  NewChannelClient(cfg),
+		ChannelHealthProbeRun:    NewChannelHealthProbeRunClient(cfg),
 		ChannelModelPrice:        NewChannelModelPriceClient(cfg),
 		ChannelModelPriceVersion: NewChannelModelPriceVersionClient(cfg),
 		ChannelOverrideTemplate:  NewChannelOverrideTemplateClient(cfg),
@@ -274,6 +279,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		APIKey:                   NewAPIKeyClient(cfg),
 		APIKeyProfileTemplate:    NewAPIKeyProfileTemplateClient(cfg),
 		Channel:                  NewChannelClient(cfg),
+		ChannelHealthProbeRun:    NewChannelHealthProbeRunClient(cfg),
 		ChannelModelPrice:        NewChannelModelPriceClient(cfg),
 		ChannelModelPriceVersion: NewChannelModelPriceVersionClient(cfg),
 		ChannelOverrideTemplate:  NewChannelOverrideTemplateClient(cfg),
@@ -325,12 +331,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelModelPrice,
-		c.ChannelModelPriceVersion, c.ChannelOverrideTemplate, c.ChannelProbe,
-		c.DataStorage, c.Invitation, c.Model, c.OIDCIdentity, c.Project, c.Prompt,
-		c.PromptProtectionRule, c.ProviderQuotaStatus, c.Request, c.RequestExecution,
-		c.Role, c.System, c.Thread, c.Trace, c.UsageLog, c.User, c.UserProject,
-		c.UserRole,
+		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelHealthProbeRun,
+		c.ChannelModelPrice, c.ChannelModelPriceVersion, c.ChannelOverrideTemplate,
+		c.ChannelProbe, c.DataStorage, c.Invitation, c.Model, c.OIDCIdentity,
+		c.Project, c.Prompt, c.PromptProtectionRule, c.ProviderQuotaStatus, c.Request,
+		c.RequestExecution, c.Role, c.System, c.Thread, c.Trace, c.UsageLog, c.User,
+		c.UserProject, c.UserRole,
 	} {
 		n.Use(hooks...)
 	}
@@ -340,12 +346,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelModelPrice,
-		c.ChannelModelPriceVersion, c.ChannelOverrideTemplate, c.ChannelProbe,
-		c.DataStorage, c.Invitation, c.Model, c.OIDCIdentity, c.Project, c.Prompt,
-		c.PromptProtectionRule, c.ProviderQuotaStatus, c.Request, c.RequestExecution,
-		c.Role, c.System, c.Thread, c.Trace, c.UsageLog, c.User, c.UserProject,
-		c.UserRole,
+		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelHealthProbeRun,
+		c.ChannelModelPrice, c.ChannelModelPriceVersion, c.ChannelOverrideTemplate,
+		c.ChannelProbe, c.DataStorage, c.Invitation, c.Model, c.OIDCIdentity,
+		c.Project, c.Prompt, c.PromptProtectionRule, c.ProviderQuotaStatus, c.Request,
+		c.RequestExecution, c.Role, c.System, c.Thread, c.Trace, c.UsageLog, c.User,
+		c.UserProject, c.UserRole,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -360,6 +366,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.APIKeyProfileTemplate.mutate(ctx, m)
 	case *ChannelMutation:
 		return c.Channel.mutate(ctx, m)
+	case *ChannelHealthProbeRunMutation:
+		return c.ChannelHealthProbeRun.mutate(ctx, m)
 	case *ChannelModelPriceMutation:
 		return c.ChannelModelPrice.mutate(ctx, m)
 	case *ChannelModelPriceVersionMutation:
@@ -899,6 +907,22 @@ func (c *ChannelClient) QueryUsageLogs(_m *Channel) *UsageLogQuery {
 	return query
 }
 
+// QueryHealthProbeRuns queries the health_probe_runs edge of a Channel.
+func (c *ChannelClient) QueryHealthProbeRuns(_m *Channel) *ChannelHealthProbeRunQuery {
+	query := (&ChannelHealthProbeRunClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(channel.Table, channel.FieldID, id),
+			sqlgraph.To(channelhealthproberun.Table, channelhealthproberun.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, channel.HealthProbeRunsTable, channel.HealthProbeRunsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryChannelProbes queries the channel_probes edge of a Channel.
 func (c *ChannelClient) QueryChannelProbes(_m *Channel) *ChannelProbeQuery {
 	query := (&ChannelProbeClient{config: c.config}).Query()
@@ -971,6 +995,156 @@ func (c *ChannelClient) mutate(ctx context.Context, m *ChannelMutation) (Value, 
 		return (&ChannelDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Channel mutation op: %q", m.Op())
+	}
+}
+
+// ChannelHealthProbeRunClient is a client for the ChannelHealthProbeRun schema.
+type ChannelHealthProbeRunClient struct {
+	config
+}
+
+// NewChannelHealthProbeRunClient returns a client for the ChannelHealthProbeRun from the given config.
+func NewChannelHealthProbeRunClient(c config) *ChannelHealthProbeRunClient {
+	return &ChannelHealthProbeRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `channelhealthproberun.Hooks(f(g(h())))`.
+func (c *ChannelHealthProbeRunClient) Use(hooks ...Hook) {
+	c.hooks.ChannelHealthProbeRun = append(c.hooks.ChannelHealthProbeRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `channelhealthproberun.Intercept(f(g(h())))`.
+func (c *ChannelHealthProbeRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ChannelHealthProbeRun = append(c.inters.ChannelHealthProbeRun, interceptors...)
+}
+
+// Create returns a builder for creating a ChannelHealthProbeRun entity.
+func (c *ChannelHealthProbeRunClient) Create() *ChannelHealthProbeRunCreate {
+	mutation := newChannelHealthProbeRunMutation(c.config, OpCreate)
+	return &ChannelHealthProbeRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ChannelHealthProbeRun entities.
+func (c *ChannelHealthProbeRunClient) CreateBulk(builders ...*ChannelHealthProbeRunCreate) *ChannelHealthProbeRunCreateBulk {
+	return &ChannelHealthProbeRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ChannelHealthProbeRunClient) MapCreateBulk(slice any, setFunc func(*ChannelHealthProbeRunCreate, int)) *ChannelHealthProbeRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ChannelHealthProbeRunCreateBulk{err: fmt.Errorf("calling to ChannelHealthProbeRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ChannelHealthProbeRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ChannelHealthProbeRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ChannelHealthProbeRun.
+func (c *ChannelHealthProbeRunClient) Update() *ChannelHealthProbeRunUpdate {
+	mutation := newChannelHealthProbeRunMutation(c.config, OpUpdate)
+	return &ChannelHealthProbeRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ChannelHealthProbeRunClient) UpdateOne(_m *ChannelHealthProbeRun) *ChannelHealthProbeRunUpdateOne {
+	mutation := newChannelHealthProbeRunMutation(c.config, OpUpdateOne, withChannelHealthProbeRun(_m))
+	return &ChannelHealthProbeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ChannelHealthProbeRunClient) UpdateOneID(id int) *ChannelHealthProbeRunUpdateOne {
+	mutation := newChannelHealthProbeRunMutation(c.config, OpUpdateOne, withChannelHealthProbeRunID(id))
+	return &ChannelHealthProbeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ChannelHealthProbeRun.
+func (c *ChannelHealthProbeRunClient) Delete() *ChannelHealthProbeRunDelete {
+	mutation := newChannelHealthProbeRunMutation(c.config, OpDelete)
+	return &ChannelHealthProbeRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ChannelHealthProbeRunClient) DeleteOne(_m *ChannelHealthProbeRun) *ChannelHealthProbeRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ChannelHealthProbeRunClient) DeleteOneID(id int) *ChannelHealthProbeRunDeleteOne {
+	builder := c.Delete().Where(channelhealthproberun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ChannelHealthProbeRunDeleteOne{builder}
+}
+
+// Query returns a query builder for ChannelHealthProbeRun.
+func (c *ChannelHealthProbeRunClient) Query() *ChannelHealthProbeRunQuery {
+	return &ChannelHealthProbeRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeChannelHealthProbeRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ChannelHealthProbeRun entity by its id.
+func (c *ChannelHealthProbeRunClient) Get(ctx context.Context, id int) (*ChannelHealthProbeRun, error) {
+	return c.Query().Where(channelhealthproberun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ChannelHealthProbeRunClient) GetX(ctx context.Context, id int) *ChannelHealthProbeRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryChannel queries the channel edge of a ChannelHealthProbeRun.
+func (c *ChannelHealthProbeRunClient) QueryChannel(_m *ChannelHealthProbeRun) *ChannelQuery {
+	query := (&ChannelClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(channelhealthproberun.Table, channelhealthproberun.FieldID, id),
+			sqlgraph.To(channel.Table, channel.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, channelhealthproberun.ChannelTable, channelhealthproberun.ChannelColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ChannelHealthProbeRunClient) Hooks() []Hook {
+	hooks := c.hooks.ChannelHealthProbeRun
+	return append(hooks[:len(hooks):len(hooks)], channelhealthproberun.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *ChannelHealthProbeRunClient) Interceptors() []Interceptor {
+	return c.inters.ChannelHealthProbeRun
+}
+
+func (c *ChannelHealthProbeRunClient) mutate(ctx context.Context, m *ChannelHealthProbeRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ChannelHealthProbeRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ChannelHealthProbeRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ChannelHealthProbeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ChannelHealthProbeRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ChannelHealthProbeRun mutation op: %q", m.Op())
 	}
 }
 
@@ -4799,17 +4973,17 @@ func (c *UserRoleClient) mutate(ctx context.Context, m *UserRoleMutation) (Value
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, APIKeyProfileTemplate, Channel, ChannelModelPrice,
-		ChannelModelPriceVersion, ChannelOverrideTemplate, ChannelProbe, DataStorage,
-		Invitation, Model, OIDCIdentity, Project, Prompt, PromptProtectionRule,
-		ProviderQuotaStatus, Request, RequestExecution, Role, System, Thread, Trace,
-		UsageLog, User, UserProject, UserRole []ent.Hook
+		APIKey, APIKeyProfileTemplate, Channel, ChannelHealthProbeRun,
+		ChannelModelPrice, ChannelModelPriceVersion, ChannelOverrideTemplate,
+		ChannelProbe, DataStorage, Invitation, Model, OIDCIdentity, Project, Prompt,
+		PromptProtectionRule, ProviderQuotaStatus, Request, RequestExecution, Role,
+		System, Thread, Trace, UsageLog, User, UserProject, UserRole []ent.Hook
 	}
 	inters struct {
-		APIKey, APIKeyProfileTemplate, Channel, ChannelModelPrice,
-		ChannelModelPriceVersion, ChannelOverrideTemplate, ChannelProbe, DataStorage,
-		Invitation, Model, OIDCIdentity, Project, Prompt, PromptProtectionRule,
-		ProviderQuotaStatus, Request, RequestExecution, Role, System, Thread, Trace,
-		UsageLog, User, UserProject, UserRole []ent.Interceptor
+		APIKey, APIKeyProfileTemplate, Channel, ChannelHealthProbeRun,
+		ChannelModelPrice, ChannelModelPriceVersion, ChannelOverrideTemplate,
+		ChannelProbe, DataStorage, Invitation, Model, OIDCIdentity, Project, Prompt,
+		PromptProtectionRule, ProviderQuotaStatus, Request, RequestExecution, Role,
+		System, Thread, Trace, UsageLog, User, UserProject, UserRole []ent.Interceptor
 	}
 )

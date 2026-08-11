@@ -15,6 +15,9 @@ type APIKeyProfileTemplate func(*sql.Selector)
 // Channel is the predicate function for channel builders.
 type Channel func(*sql.Selector)
 
+// ChannelHealthProbeRun is the predicate function for channelhealthproberun builders.
+type ChannelHealthProbeRun func(*sql.Selector)
+
 // ChannelModelPrice is the predicate function for channelmodelprice builders.
 type ChannelModelPrice func(*sql.Selector)
 

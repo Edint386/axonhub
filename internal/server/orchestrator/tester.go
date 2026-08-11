@@ -70,6 +70,12 @@ type TestChannelRequest struct {
 	ModelID   *string
 }
 
+// TestChannelOptions controls request behavior that callers may need to force.
+// A nil Stream preserves the channel policy used by the existing test API.
+type TestChannelOptions struct {
+	Stream *bool
+}
+
 func buildChannelTestRequest(model string, useStream bool, systemPrompt string, userPrompt string) *llm.Request {
 	return &llm.Request{
 		Model: model,
@@ -170,6 +176,18 @@ func (processor *TestChannelOrchestrator) TestChannel(
 	modelID *string,
 	proxy *httpclient.ProxyConfig,
 ) (*TestChannelResult, error) {
+	return processor.TestChannelWithOptions(ctx, channelID, modelID, proxy, TestChannelOptions{})
+}
+
+// TestChannelWithOptions tests a channel while allowing active health probes
+// to choose streaming independently for each configured model.
+func (processor *TestChannelOrchestrator) TestChannelWithOptions(
+	ctx context.Context,
+	channelID objects.GUID,
+	modelID *string,
+	proxy *httpclient.ProxyConfig,
+	options TestChannelOptions,
+) (*TestChannelResult, error) {
 	inbound := openai.NewInboundTransformer()
 	// Create ChatCompletionOrchestrator for this test request
 	chatProcessor := &ChatCompletionOrchestrator{
@@ -210,6 +228,9 @@ func (processor *TestChannelOrchestrator) TestChannel(
 
 	// Check if the channel requires streaming
 	useStream := channel != nil && channel.Policies.Stream == objects.CapabilityPolicyRequire
+	if options.Stream != nil {
+		useStream = *options.Stream
+	}
 
 	llmRequest := buildChannelTestRequest(testModel, useStream, systemPrompt, userPrompt)
 

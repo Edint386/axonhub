@@ -376,8 +376,9 @@ input SaveProxyPresetInput {
 }
 
 input TriggerGcCleanupInput {
-    requestsCleanupDays: Int!
-    usageLogsCleanupDays: Int!
+  requestsCleanupDays: Int!
+  usageLogsCleanupDays: Int!
+  channelHealthProbeRunsCleanupDays: Int
 }
 
 type GcCleanupPreviewItem {

@@ -71,6 +71,8 @@ const (
 	EdgeExecutions = "executions"
 	// EdgeUsageLogs holds the string denoting the usage_logs edge name in mutations.
 	EdgeUsageLogs = "usage_logs"
+	// EdgeHealthProbeRuns holds the string denoting the health_probe_runs edge name in mutations.
+	EdgeHealthProbeRuns = "health_probe_runs"
 	// EdgeChannelProbes holds the string denoting the channel_probes edge name in mutations.
 	EdgeChannelProbes = "channel_probes"
 	// EdgeChannelModelPrices holds the string denoting the channel_model_prices edge name in mutations.
@@ -100,6 +102,13 @@ const (
 	UsageLogsInverseTable = "usage_logs"
 	// UsageLogsColumn is the table column denoting the usage_logs relation/edge.
 	UsageLogsColumn = "channel_id"
+	// HealthProbeRunsTable is the table that holds the health_probe_runs relation/edge.
+	HealthProbeRunsTable = "channel_health_probe_runs"
+	// HealthProbeRunsInverseTable is the table name for the ChannelHealthProbeRun entity.
+	// It exists in this package in order to avoid circular dependency with the "channelhealthproberun" package.
+	HealthProbeRunsInverseTable = "channel_health_probe_runs"
+	// HealthProbeRunsColumn is the table column denoting the health_probe_runs relation/edge.
+	HealthProbeRunsColumn = "channel_id"
 	// ChannelProbesTable is the table that holds the channel_probes relation/edge.
 	ChannelProbesTable = "channel_probes"
 	// ChannelProbesInverseTable is the table name for the ChannelProbe entity.
@@ -436,6 +445,20 @@ func ByUsageLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByHealthProbeRunsCount orders the results by health_probe_runs count.
+func ByHealthProbeRunsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newHealthProbeRunsStep(), opts...)
+	}
+}
+
+// ByHealthProbeRuns orders the results by health_probe_runs terms.
+func ByHealthProbeRuns(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newHealthProbeRunsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByChannelProbesCount orders the results by channel_probes count.
 func ByChannelProbesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -489,6 +512,13 @@ func newUsageLogsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageLogsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageLogsTable, UsageLogsColumn),
+	)
+}
+func newHealthProbeRunsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(HealthProbeRunsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, HealthProbeRunsTable, HealthProbeRunsColumn),
 	)
 }
 func newChannelProbesStep() *sqlgraph.Step {

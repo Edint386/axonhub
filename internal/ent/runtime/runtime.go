@@ -9,6 +9,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/channeloverridetemplate"
@@ -210,6 +211,34 @@ func init() {
 	channelDescEndpoints := channelFields[19].Descriptor()
 	// channel.DefaultEndpoints holds the default value on creation for the endpoints field.
 	channel.DefaultEndpoints = channelDescEndpoints.Default.([]objects.ChannelEndpoint)
+	channelhealthproberunMixin := schema.ChannelHealthProbeRun{}.Mixin()
+	channelhealthproberun.Policy = privacy.NewPolicies(schema.ChannelHealthProbeRun{})
+	channelhealthproberun.Hooks[0] = func(next ent.Mutator) ent.Mutator {
+		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+			if err := channelhealthproberun.Policy.EvalMutation(ctx, m); err != nil {
+				return nil, err
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
+	channelhealthproberunMixinFields0 := channelhealthproberunMixin[0].Fields()
+	_ = channelhealthproberunMixinFields0
+	channelhealthproberunFields := schema.ChannelHealthProbeRun{}.Fields()
+	_ = channelhealthproberunFields
+	// channelhealthproberunDescCreatedAt is the schema descriptor for created_at field.
+	channelhealthproberunDescCreatedAt := channelhealthproberunMixinFields0[0].Descriptor()
+	// channelhealthproberun.DefaultCreatedAt holds the default value on creation for the created_at field.
+	channelhealthproberun.DefaultCreatedAt = channelhealthproberunDescCreatedAt.Default.(func() time.Time)
+	// channelhealthproberunDescUpdatedAt is the schema descriptor for updated_at field.
+	channelhealthproberunDescUpdatedAt := channelhealthproberunMixinFields0[1].Descriptor()
+	// channelhealthproberun.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	channelhealthproberun.DefaultUpdatedAt = channelhealthproberunDescUpdatedAt.Default.(func() time.Time)
+	// channelhealthproberun.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	channelhealthproberun.UpdateDefaultUpdatedAt = channelhealthproberunDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// channelhealthproberunDescTotalMs is the schema descriptor for total_ms field.
+	channelhealthproberunDescTotalMs := channelhealthproberunFields[7].Descriptor()
+	// channelhealthproberun.DefaultTotalMs holds the default value on creation for the total_ms field.
+	channelhealthproberun.DefaultTotalMs = channelhealthproberunDescTotalMs.Default.(float64)
 	channelmodelpriceMixin := schema.ChannelModelPrice{}.Mixin()
 	channelmodelprice.Policy = privacy.NewPolicies(schema.ChannelModelPrice{})
 	channelmodelprice.Hooks[0] = func(next ent.Mutator) ent.Mutator {

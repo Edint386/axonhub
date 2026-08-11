@@ -300,6 +300,7 @@ export interface CleanupOptionInput {
 export interface TriggerGcCleanupInput {
   requestsCleanupDays: number;
   usageLogsCleanupDays: number;
+  channelHealthProbeRunsCleanupDays?: number;
 }
 
 export interface GcCleanupPreviewItem {

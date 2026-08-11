@@ -48,6 +48,7 @@ export function StoragePolicySettings() {
 
   const [manualRequestsDays, setManualRequestsDays] = useState(30);
   const [manualUsageLogsDays, setManualUsageLogsDays] = useState(7);
+  const [manualChannelHealthProbeRunsDays, setManualChannelHealthProbeRunsDays] = useState(30);
   const [previewItems, setPreviewItems] = useState<GcCleanupPreviewItem[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,8 +67,8 @@ export function StoragePolicySettings() {
     }
   }, [storagePolicy]);
 
-  const fetchPreview = React.useCallback(async (reqDays: number, usageDays: number) => {
-    if (reqDays <= 0 && usageDays <= 0) {
+  const fetchPreview = React.useCallback(async (reqDays: number, usageDays: number, probeDays: number) => {
+    if (reqDays <= 0 && usageDays <= 0 && probeDays <= 0) {
       setPreviewItems([]);
       return;
     }
@@ -76,6 +77,7 @@ export function StoragePolicySettings() {
       const items = await previewGcCleanup.mutateAsync({
         requestsCleanupDays: reqDays,
         usageLogsCleanupDays: usageDays,
+        channelHealthProbeRunsCleanupDays: probeDays,
       });
       setPreviewItems(items);
     } catch {
@@ -85,12 +87,12 @@ export function StoragePolicySettings() {
     }
   }, [previewGcCleanup]);
 
-  const schedulePreview = (reqDays: number, usageDays: number) => {
+  const schedulePreview = (reqDays: number, usageDays: number, probeDays: number) => {
     if (previewTimerRef.current) {
       clearTimeout(previewTimerRef.current);
     }
     previewTimerRef.current = setTimeout(() => {
-      fetchPreview(reqDays, usageDays);
+      fetchPreview(reqDays, usageDays, probeDays);
     }, 500);
   };
 
@@ -99,31 +101,41 @@ export function StoragePolicySettings() {
     if (open) {
       const requestsOption = storagePolicyState.cleanupOptions.find(o => o.resourceType === 'requests');
       const usageLogsOption = storagePolicyState.cleanupOptions.find(o => o.resourceType === 'usage_logs');
+      const probeRunsOption = storagePolicyState.cleanupOptions.find(o => o.resourceType === 'channel_health_probe_runs');
       const reqDays = requestsOption?.cleanupDays || 30;
       const usageDays = usageLogsOption?.cleanupDays || 7;
+      const probeDays = probeRunsOption?.cleanupDays || 30;
       setManualRequestsDays(reqDays);
       setManualUsageLogsDays(usageDays);
+      setManualChannelHealthProbeRunsDays(probeDays);
       setPreviewItems([]);
-      schedulePreview(reqDays, usageDays);
+      schedulePreview(reqDays, usageDays, probeDays);
     }
   };
 
   const handleManualRequestsDaysChange = (value: number) => {
     const days = Math.max(1, Math.min(365, value || 1));
     setManualRequestsDays(days);
-    schedulePreview(days, manualUsageLogsDays);
+    schedulePreview(days, manualUsageLogsDays, manualChannelHealthProbeRunsDays);
   };
 
   const handleManualUsageLogsDaysChange = (value: number) => {
     const days = Math.max(1, Math.min(365, value || 1));
     setManualUsageLogsDays(days);
-    schedulePreview(manualRequestsDays, days);
+    schedulePreview(manualRequestsDays, days, manualChannelHealthProbeRunsDays);
+  };
+
+  const handleManualChannelHealthProbeRunsDaysChange = (value: number) => {
+    const days = Math.max(1, Math.min(365, value || 1));
+    setManualChannelHealthProbeRunsDays(days);
+    schedulePreview(manualRequestsDays, manualUsageLogsDays, days);
   };
 
   const handleManualCleanup = () => {
     triggerGcCleanup.mutate({
       requestsCleanupDays: manualRequestsDays,
       usageLogsCleanupDays: manualUsageLogsDays,
+      channelHealthProbeRunsCleanupDays: manualChannelHealthProbeRunsDays,
     });
   };
 
@@ -178,6 +190,7 @@ export function StoragePolicySettings() {
   const resourceTypeLabel = (rt: string) => {
     if (rt === 'requests') return t('system.storage.policy.resourceTypes.requests');
     if (rt === 'usage_logs') return t('system.storage.policy.resourceTypes.usage_logs');
+    if (rt === 'channel_health_probe_runs') return t('system.storage.policy.resourceTypes.channelHealthProbeRuns');
     return rt;
   };
 
@@ -235,6 +248,20 @@ export function StoragePolicySettings() {
                       max='365'
                       value={manualUsageLogsDays}
                       onChange={(e) => handleManualUsageLogsDaysChange(parseInt(e.target.value) || 1)}
+                      className='w-20'
+                    />
+                    <span className='text-muted-foreground text-sm'>{t('system.storage.policy.days')}</span>
+                  </div>
+                </div>
+                <div className='flex items-center gap-4'>
+                  <Label className='w-32 shrink-0'>{t('system.storage.policy.resourceTypes.channelHealthProbeRuns')}</Label>
+                  <div className='flex items-center gap-2'>
+                    <Input
+                      type='number'
+                      min='1'
+                      max='365'
+                      value={manualChannelHealthProbeRunsDays}
+                      onChange={(e) => handleManualChannelHealthProbeRunsDaysChange(parseInt(e.target.value) || 1)}
                       className='w-20'
                     />
                     <span className='text-muted-foreground text-sm'>{t('system.storage.policy.days')}</span>

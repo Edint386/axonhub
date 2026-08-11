@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/channeloverridetemplate"
@@ -52,6 +53,7 @@ const (
 	TypeAPIKey                   = "APIKey"
 	TypeAPIKeyProfileTemplate    = "APIKeyProfileTemplate"
 	TypeChannel                  = "Channel"
+	TypeChannelHealthProbeRun    = "ChannelHealthProbeRun"
 	TypeChannelModelPrice        = "ChannelModelPrice"
 	TypeChannelModelPriceVersion = "ChannelModelPriceVersion"
 	TypeChannelOverrideTemplate  = "ChannelOverrideTemplate"
@@ -2139,6 +2141,9 @@ type ChannelMutation struct {
 	usage_logs                   map[int]struct{}
 	removedusage_logs            map[int]struct{}
 	clearedusage_logs            bool
+	health_probe_runs            map[int]struct{}
+	removedhealth_probe_runs     map[int]struct{}
+	clearedhealth_probe_runs     bool
 	channel_probes               map[int]struct{}
 	removedchannel_probes        map[int]struct{}
 	clearedchannel_probes        bool
@@ -3522,6 +3527,60 @@ func (m *ChannelMutation) ResetUsageLogs() {
 	m.removedusage_logs = nil
 }
 
+// AddHealthProbeRunIDs adds the "health_probe_runs" edge to the ChannelHealthProbeRun entity by ids.
+func (m *ChannelMutation) AddHealthProbeRunIDs(ids ...int) {
+	if m.health_probe_runs == nil {
+		m.health_probe_runs = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.health_probe_runs[ids[i]] = struct{}{}
+	}
+}
+
+// ClearHealthProbeRuns clears the "health_probe_runs" edge to the ChannelHealthProbeRun entity.
+func (m *ChannelMutation) ClearHealthProbeRuns() {
+	m.clearedhealth_probe_runs = true
+}
+
+// HealthProbeRunsCleared reports if the "health_probe_runs" edge to the ChannelHealthProbeRun entity was cleared.
+func (m *ChannelMutation) HealthProbeRunsCleared() bool {
+	return m.clearedhealth_probe_runs
+}
+
+// RemoveHealthProbeRunIDs removes the "health_probe_runs" edge to the ChannelHealthProbeRun entity by IDs.
+func (m *ChannelMutation) RemoveHealthProbeRunIDs(ids ...int) {
+	if m.removedhealth_probe_runs == nil {
+		m.removedhealth_probe_runs = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.health_probe_runs, ids[i])
+		m.removedhealth_probe_runs[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedHealthProbeRuns returns the removed IDs of the "health_probe_runs" edge to the ChannelHealthProbeRun entity.
+func (m *ChannelMutation) RemovedHealthProbeRunsIDs() (ids []int) {
+	for id := range m.removedhealth_probe_runs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// HealthProbeRunsIDs returns the "health_probe_runs" edge IDs in the mutation.
+func (m *ChannelMutation) HealthProbeRunsIDs() (ids []int) {
+	for id := range m.health_probe_runs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetHealthProbeRuns resets all changes to the "health_probe_runs" edge.
+func (m *ChannelMutation) ResetHealthProbeRuns() {
+	m.health_probe_runs = nil
+	m.clearedhealth_probe_runs = false
+	m.removedhealth_probe_runs = nil
+}
+
 // AddChannelProbeIDs adds the "channel_probes" edge to the ChannelProbe entity by ids.
 func (m *ChannelMutation) AddChannelProbeIDs(ids ...int) {
 	if m.channel_probes == nil {
@@ -4284,7 +4343,7 @@ func (m *ChannelMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ChannelMutation) AddedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 7)
 	if m.requests != nil {
 		edges = append(edges, channel.EdgeRequests)
 	}
@@ -4293,6 +4352,9 @@ func (m *ChannelMutation) AddedEdges() []string {
 	}
 	if m.usage_logs != nil {
 		edges = append(edges, channel.EdgeUsageLogs)
+	}
+	if m.health_probe_runs != nil {
+		edges = append(edges, channel.EdgeHealthProbeRuns)
 	}
 	if m.channel_probes != nil {
 		edges = append(edges, channel.EdgeChannelProbes)
@@ -4328,6 +4390,12 @@ func (m *ChannelMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case channel.EdgeHealthProbeRuns:
+		ids := make([]ent.Value, 0, len(m.health_probe_runs))
+		for id := range m.health_probe_runs {
+			ids = append(ids, id)
+		}
+		return ids
 	case channel.EdgeChannelProbes:
 		ids := make([]ent.Value, 0, len(m.channel_probes))
 		for id := range m.channel_probes {
@@ -4350,7 +4418,7 @@ func (m *ChannelMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ChannelMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 7)
 	if m.removedrequests != nil {
 		edges = append(edges, channel.EdgeRequests)
 	}
@@ -4359,6 +4427,9 @@ func (m *ChannelMutation) RemovedEdges() []string {
 	}
 	if m.removedusage_logs != nil {
 		edges = append(edges, channel.EdgeUsageLogs)
+	}
+	if m.removedhealth_probe_runs != nil {
+		edges = append(edges, channel.EdgeHealthProbeRuns)
 	}
 	if m.removedchannel_probes != nil {
 		edges = append(edges, channel.EdgeChannelProbes)
@@ -4391,6 +4462,12 @@ func (m *ChannelMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case channel.EdgeHealthProbeRuns:
+		ids := make([]ent.Value, 0, len(m.removedhealth_probe_runs))
+		for id := range m.removedhealth_probe_runs {
+			ids = append(ids, id)
+		}
+		return ids
 	case channel.EdgeChannelProbes:
 		ids := make([]ent.Value, 0, len(m.removedchannel_probes))
 		for id := range m.removedchannel_probes {
@@ -4409,7 +4486,7 @@ func (m *ChannelMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ChannelMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 7)
 	if m.clearedrequests {
 		edges = append(edges, channel.EdgeRequests)
 	}
@@ -4418,6 +4495,9 @@ func (m *ChannelMutation) ClearedEdges() []string {
 	}
 	if m.clearedusage_logs {
 		edges = append(edges, channel.EdgeUsageLogs)
+	}
+	if m.clearedhealth_probe_runs {
+		edges = append(edges, channel.EdgeHealthProbeRuns)
 	}
 	if m.clearedchannel_probes {
 		edges = append(edges, channel.EdgeChannelProbes)
@@ -4441,6 +4521,8 @@ func (m *ChannelMutation) EdgeCleared(name string) bool {
 		return m.clearedexecutions
 	case channel.EdgeUsageLogs:
 		return m.clearedusage_logs
+	case channel.EdgeHealthProbeRuns:
+		return m.clearedhealth_probe_runs
 	case channel.EdgeChannelProbes:
 		return m.clearedchannel_probes
 	case channel.EdgeChannelModelPrices:
@@ -4475,6 +4557,9 @@ func (m *ChannelMutation) ResetEdge(name string) error {
 	case channel.EdgeUsageLogs:
 		m.ResetUsageLogs()
 		return nil
+	case channel.EdgeHealthProbeRuns:
+		m.ResetHealthProbeRuns()
+		return nil
 	case channel.EdgeChannelProbes:
 		m.ResetChannelProbes()
 		return nil
@@ -4486,6 +4571,1290 @@ func (m *ChannelMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Channel edge %s", name)
+}
+
+// ChannelHealthProbeRunMutation represents an operation that mutates the ChannelHealthProbeRun nodes in the graph.
+type ChannelHealthProbeRunMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int
+	created_at     *time.Time
+	updated_at     *time.Time
+	model_id       *string
+	source         *channelhealthproberun.Source
+	status         *channelhealthproberun.Status
+	stream         *bool
+	ttfb_ms        *float64
+	addttfb_ms     *float64
+	ttft_ms        *float64
+	addttft_ms     *float64
+	total_ms       *float64
+	addtotal_ms    *float64
+	error_message  *string
+	schedule_key   *string
+	started_at     *time.Time
+	completed_at   *time.Time
+	clearedFields  map[string]struct{}
+	channel        *int
+	clearedchannel bool
+	done           bool
+	oldValue       func(context.Context) (*ChannelHealthProbeRun, error)
+	predicates     []predicate.ChannelHealthProbeRun
+}
+
+var _ ent.Mutation = (*ChannelHealthProbeRunMutation)(nil)
+
+// channelhealthproberunOption allows management of the mutation configuration using functional options.
+type channelhealthproberunOption func(*ChannelHealthProbeRunMutation)
+
+// newChannelHealthProbeRunMutation creates new mutation for the ChannelHealthProbeRun entity.
+func newChannelHealthProbeRunMutation(c config, op Op, opts ...channelhealthproberunOption) *ChannelHealthProbeRunMutation {
+	m := &ChannelHealthProbeRunMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeChannelHealthProbeRun,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withChannelHealthProbeRunID sets the ID field of the mutation.
+func withChannelHealthProbeRunID(id int) channelhealthproberunOption {
+	return func(m *ChannelHealthProbeRunMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ChannelHealthProbeRun
+		)
+		m.oldValue = func(ctx context.Context) (*ChannelHealthProbeRun, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ChannelHealthProbeRun.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withChannelHealthProbeRun sets the old ChannelHealthProbeRun of the mutation.
+func withChannelHealthProbeRun(node *ChannelHealthProbeRun) channelhealthproberunOption {
+	return func(m *ChannelHealthProbeRunMutation) {
+		m.oldValue = func(context.Context) (*ChannelHealthProbeRun, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ChannelHealthProbeRunMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ChannelHealthProbeRunMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ChannelHealthProbeRunMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ChannelHealthProbeRunMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ChannelHealthProbeRun.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ChannelHealthProbeRunMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ChannelHealthProbeRunMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ChannelHealthProbeRunMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ChannelHealthProbeRunMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetChannelID sets the "channel_id" field.
+func (m *ChannelHealthProbeRunMutation) SetChannelID(i int) {
+	m.channel = &i
+}
+
+// ChannelID returns the value of the "channel_id" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) ChannelID() (r int, exists bool) {
+	v := m.channel
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChannelID returns the old "channel_id" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldChannelID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChannelID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChannelID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChannelID: %w", err)
+	}
+	return oldValue.ChannelID, nil
+}
+
+// ResetChannelID resets all changes to the "channel_id" field.
+func (m *ChannelHealthProbeRunMutation) ResetChannelID() {
+	m.channel = nil
+}
+
+// SetModelID sets the "model_id" field.
+func (m *ChannelHealthProbeRunMutation) SetModelID(s string) {
+	m.model_id = &s
+}
+
+// ModelID returns the value of the "model_id" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) ModelID() (r string, exists bool) {
+	v := m.model_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModelID returns the old "model_id" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldModelID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModelID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModelID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModelID: %w", err)
+	}
+	return oldValue.ModelID, nil
+}
+
+// ResetModelID resets all changes to the "model_id" field.
+func (m *ChannelHealthProbeRunMutation) ResetModelID() {
+	m.model_id = nil
+}
+
+// SetSource sets the "source" field.
+func (m *ChannelHealthProbeRunMutation) SetSource(c channelhealthproberun.Source) {
+	m.source = &c
+}
+
+// Source returns the value of the "source" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) Source() (r channelhealthproberun.Source, exists bool) {
+	v := m.source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSource returns the old "source" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldSource(ctx context.Context) (v channelhealthproberun.Source, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+	}
+	return oldValue.Source, nil
+}
+
+// ResetSource resets all changes to the "source" field.
+func (m *ChannelHealthProbeRunMutation) ResetSource() {
+	m.source = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *ChannelHealthProbeRunMutation) SetStatus(c channelhealthproberun.Status) {
+	m.status = &c
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) Status() (r channelhealthproberun.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldStatus(ctx context.Context) (v channelhealthproberun.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ChannelHealthProbeRunMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetStream sets the "stream" field.
+func (m *ChannelHealthProbeRunMutation) SetStream(b bool) {
+	m.stream = &b
+}
+
+// Stream returns the value of the "stream" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) Stream() (r bool, exists bool) {
+	v := m.stream
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStream returns the old "stream" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldStream(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStream is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStream requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStream: %w", err)
+	}
+	return oldValue.Stream, nil
+}
+
+// ResetStream resets all changes to the "stream" field.
+func (m *ChannelHealthProbeRunMutation) ResetStream() {
+	m.stream = nil
+}
+
+// SetTtfbMs sets the "ttfb_ms" field.
+func (m *ChannelHealthProbeRunMutation) SetTtfbMs(f float64) {
+	m.ttfb_ms = &f
+	m.addttfb_ms = nil
+}
+
+// TtfbMs returns the value of the "ttfb_ms" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) TtfbMs() (r float64, exists bool) {
+	v := m.ttfb_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTtfbMs returns the old "ttfb_ms" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldTtfbMs(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTtfbMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTtfbMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTtfbMs: %w", err)
+	}
+	return oldValue.TtfbMs, nil
+}
+
+// AddTtfbMs adds f to the "ttfb_ms" field.
+func (m *ChannelHealthProbeRunMutation) AddTtfbMs(f float64) {
+	if m.addttfb_ms != nil {
+		*m.addttfb_ms += f
+	} else {
+		m.addttfb_ms = &f
+	}
+}
+
+// AddedTtfbMs returns the value that was added to the "ttfb_ms" field in this mutation.
+func (m *ChannelHealthProbeRunMutation) AddedTtfbMs() (r float64, exists bool) {
+	v := m.addttfb_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTtfbMs clears the value of the "ttfb_ms" field.
+func (m *ChannelHealthProbeRunMutation) ClearTtfbMs() {
+	m.ttfb_ms = nil
+	m.addttfb_ms = nil
+	m.clearedFields[channelhealthproberun.FieldTtfbMs] = struct{}{}
+}
+
+// TtfbMsCleared returns if the "ttfb_ms" field was cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) TtfbMsCleared() bool {
+	_, ok := m.clearedFields[channelhealthproberun.FieldTtfbMs]
+	return ok
+}
+
+// ResetTtfbMs resets all changes to the "ttfb_ms" field.
+func (m *ChannelHealthProbeRunMutation) ResetTtfbMs() {
+	m.ttfb_ms = nil
+	m.addttfb_ms = nil
+	delete(m.clearedFields, channelhealthproberun.FieldTtfbMs)
+}
+
+// SetTtftMs sets the "ttft_ms" field.
+func (m *ChannelHealthProbeRunMutation) SetTtftMs(f float64) {
+	m.ttft_ms = &f
+	m.addttft_ms = nil
+}
+
+// TtftMs returns the value of the "ttft_ms" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) TtftMs() (r float64, exists bool) {
+	v := m.ttft_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTtftMs returns the old "ttft_ms" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldTtftMs(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTtftMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTtftMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTtftMs: %w", err)
+	}
+	return oldValue.TtftMs, nil
+}
+
+// AddTtftMs adds f to the "ttft_ms" field.
+func (m *ChannelHealthProbeRunMutation) AddTtftMs(f float64) {
+	if m.addttft_ms != nil {
+		*m.addttft_ms += f
+	} else {
+		m.addttft_ms = &f
+	}
+}
+
+// AddedTtftMs returns the value that was added to the "ttft_ms" field in this mutation.
+func (m *ChannelHealthProbeRunMutation) AddedTtftMs() (r float64, exists bool) {
+	v := m.addttft_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTtftMs clears the value of the "ttft_ms" field.
+func (m *ChannelHealthProbeRunMutation) ClearTtftMs() {
+	m.ttft_ms = nil
+	m.addttft_ms = nil
+	m.clearedFields[channelhealthproberun.FieldTtftMs] = struct{}{}
+}
+
+// TtftMsCleared returns if the "ttft_ms" field was cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) TtftMsCleared() bool {
+	_, ok := m.clearedFields[channelhealthproberun.FieldTtftMs]
+	return ok
+}
+
+// ResetTtftMs resets all changes to the "ttft_ms" field.
+func (m *ChannelHealthProbeRunMutation) ResetTtftMs() {
+	m.ttft_ms = nil
+	m.addttft_ms = nil
+	delete(m.clearedFields, channelhealthproberun.FieldTtftMs)
+}
+
+// SetTotalMs sets the "total_ms" field.
+func (m *ChannelHealthProbeRunMutation) SetTotalMs(f float64) {
+	m.total_ms = &f
+	m.addtotal_ms = nil
+}
+
+// TotalMs returns the value of the "total_ms" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) TotalMs() (r float64, exists bool) {
+	v := m.total_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalMs returns the old "total_ms" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldTotalMs(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalMs: %w", err)
+	}
+	return oldValue.TotalMs, nil
+}
+
+// AddTotalMs adds f to the "total_ms" field.
+func (m *ChannelHealthProbeRunMutation) AddTotalMs(f float64) {
+	if m.addtotal_ms != nil {
+		*m.addtotal_ms += f
+	} else {
+		m.addtotal_ms = &f
+	}
+}
+
+// AddedTotalMs returns the value that was added to the "total_ms" field in this mutation.
+func (m *ChannelHealthProbeRunMutation) AddedTotalMs() (r float64, exists bool) {
+	v := m.addtotal_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotalMs resets all changes to the "total_ms" field.
+func (m *ChannelHealthProbeRunMutation) ResetTotalMs() {
+	m.total_ms = nil
+	m.addtotal_ms = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *ChannelHealthProbeRunMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ClearErrorMessage clears the value of the "error_message" field.
+func (m *ChannelHealthProbeRunMutation) ClearErrorMessage() {
+	m.error_message = nil
+	m.clearedFields[channelhealthproberun.FieldErrorMessage] = struct{}{}
+}
+
+// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) ErrorMessageCleared() bool {
+	_, ok := m.clearedFields[channelhealthproberun.FieldErrorMessage]
+	return ok
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *ChannelHealthProbeRunMutation) ResetErrorMessage() {
+	m.error_message = nil
+	delete(m.clearedFields, channelhealthproberun.FieldErrorMessage)
+}
+
+// SetScheduleKey sets the "schedule_key" field.
+func (m *ChannelHealthProbeRunMutation) SetScheduleKey(s string) {
+	m.schedule_key = &s
+}
+
+// ScheduleKey returns the value of the "schedule_key" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) ScheduleKey() (r string, exists bool) {
+	v := m.schedule_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScheduleKey returns the old "schedule_key" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldScheduleKey(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScheduleKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScheduleKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScheduleKey: %w", err)
+	}
+	return oldValue.ScheduleKey, nil
+}
+
+// ClearScheduleKey clears the value of the "schedule_key" field.
+func (m *ChannelHealthProbeRunMutation) ClearScheduleKey() {
+	m.schedule_key = nil
+	m.clearedFields[channelhealthproberun.FieldScheduleKey] = struct{}{}
+}
+
+// ScheduleKeyCleared returns if the "schedule_key" field was cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) ScheduleKeyCleared() bool {
+	_, ok := m.clearedFields[channelhealthproberun.FieldScheduleKey]
+	return ok
+}
+
+// ResetScheduleKey resets all changes to the "schedule_key" field.
+func (m *ChannelHealthProbeRunMutation) ResetScheduleKey() {
+	m.schedule_key = nil
+	delete(m.clearedFields, channelhealthproberun.FieldScheduleKey)
+}
+
+// SetStartedAt sets the "started_at" field.
+func (m *ChannelHealthProbeRunMutation) SetStartedAt(t time.Time) {
+	m.started_at = &t
+}
+
+// StartedAt returns the value of the "started_at" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) StartedAt() (r time.Time, exists bool) {
+	v := m.started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStartedAt returns the old "started_at" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldStartedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStartedAt: %w", err)
+	}
+	return oldValue.StartedAt, nil
+}
+
+// ResetStartedAt resets all changes to the "started_at" field.
+func (m *ChannelHealthProbeRunMutation) ResetStartedAt() {
+	m.started_at = nil
+}
+
+// SetCompletedAt sets the "completed_at" field.
+func (m *ChannelHealthProbeRunMutation) SetCompletedAt(t time.Time) {
+	m.completed_at = &t
+}
+
+// CompletedAt returns the value of the "completed_at" field in the mutation.
+func (m *ChannelHealthProbeRunMutation) CompletedAt() (r time.Time, exists bool) {
+	v := m.completed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedAt returns the old "completed_at" field's value of the ChannelHealthProbeRun entity.
+// If the ChannelHealthProbeRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthProbeRunMutation) OldCompletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedAt: %w", err)
+	}
+	return oldValue.CompletedAt, nil
+}
+
+// ClearCompletedAt clears the value of the "completed_at" field.
+func (m *ChannelHealthProbeRunMutation) ClearCompletedAt() {
+	m.completed_at = nil
+	m.clearedFields[channelhealthproberun.FieldCompletedAt] = struct{}{}
+}
+
+// CompletedAtCleared returns if the "completed_at" field was cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) CompletedAtCleared() bool {
+	_, ok := m.clearedFields[channelhealthproberun.FieldCompletedAt]
+	return ok
+}
+
+// ResetCompletedAt resets all changes to the "completed_at" field.
+func (m *ChannelHealthProbeRunMutation) ResetCompletedAt() {
+	m.completed_at = nil
+	delete(m.clearedFields, channelhealthproberun.FieldCompletedAt)
+}
+
+// ClearChannel clears the "channel" edge to the Channel entity.
+func (m *ChannelHealthProbeRunMutation) ClearChannel() {
+	m.clearedchannel = true
+	m.clearedFields[channelhealthproberun.FieldChannelID] = struct{}{}
+}
+
+// ChannelCleared reports if the "channel" edge to the Channel entity was cleared.
+func (m *ChannelHealthProbeRunMutation) ChannelCleared() bool {
+	return m.clearedchannel
+}
+
+// ChannelIDs returns the "channel" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ChannelID instead. It exists only for internal usage by the builders.
+func (m *ChannelHealthProbeRunMutation) ChannelIDs() (ids []int) {
+	if id := m.channel; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetChannel resets all changes to the "channel" edge.
+func (m *ChannelHealthProbeRunMutation) ResetChannel() {
+	m.channel = nil
+	m.clearedchannel = false
+}
+
+// Where appends a list predicates to the ChannelHealthProbeRunMutation builder.
+func (m *ChannelHealthProbeRunMutation) Where(ps ...predicate.ChannelHealthProbeRun) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ChannelHealthProbeRunMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ChannelHealthProbeRunMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ChannelHealthProbeRun, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ChannelHealthProbeRunMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ChannelHealthProbeRunMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ChannelHealthProbeRun).
+func (m *ChannelHealthProbeRunMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ChannelHealthProbeRunMutation) Fields() []string {
+	fields := make([]string, 0, 14)
+	if m.created_at != nil {
+		fields = append(fields, channelhealthproberun.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, channelhealthproberun.FieldUpdatedAt)
+	}
+	if m.channel != nil {
+		fields = append(fields, channelhealthproberun.FieldChannelID)
+	}
+	if m.model_id != nil {
+		fields = append(fields, channelhealthproberun.FieldModelID)
+	}
+	if m.source != nil {
+		fields = append(fields, channelhealthproberun.FieldSource)
+	}
+	if m.status != nil {
+		fields = append(fields, channelhealthproberun.FieldStatus)
+	}
+	if m.stream != nil {
+		fields = append(fields, channelhealthproberun.FieldStream)
+	}
+	if m.ttfb_ms != nil {
+		fields = append(fields, channelhealthproberun.FieldTtfbMs)
+	}
+	if m.ttft_ms != nil {
+		fields = append(fields, channelhealthproberun.FieldTtftMs)
+	}
+	if m.total_ms != nil {
+		fields = append(fields, channelhealthproberun.FieldTotalMs)
+	}
+	if m.error_message != nil {
+		fields = append(fields, channelhealthproberun.FieldErrorMessage)
+	}
+	if m.schedule_key != nil {
+		fields = append(fields, channelhealthproberun.FieldScheduleKey)
+	}
+	if m.started_at != nil {
+		fields = append(fields, channelhealthproberun.FieldStartedAt)
+	}
+	if m.completed_at != nil {
+		fields = append(fields, channelhealthproberun.FieldCompletedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ChannelHealthProbeRunMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case channelhealthproberun.FieldCreatedAt:
+		return m.CreatedAt()
+	case channelhealthproberun.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case channelhealthproberun.FieldChannelID:
+		return m.ChannelID()
+	case channelhealthproberun.FieldModelID:
+		return m.ModelID()
+	case channelhealthproberun.FieldSource:
+		return m.Source()
+	case channelhealthproberun.FieldStatus:
+		return m.Status()
+	case channelhealthproberun.FieldStream:
+		return m.Stream()
+	case channelhealthproberun.FieldTtfbMs:
+		return m.TtfbMs()
+	case channelhealthproberun.FieldTtftMs:
+		return m.TtftMs()
+	case channelhealthproberun.FieldTotalMs:
+		return m.TotalMs()
+	case channelhealthproberun.FieldErrorMessage:
+		return m.ErrorMessage()
+	case channelhealthproberun.FieldScheduleKey:
+		return m.ScheduleKey()
+	case channelhealthproberun.FieldStartedAt:
+		return m.StartedAt()
+	case channelhealthproberun.FieldCompletedAt:
+		return m.CompletedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ChannelHealthProbeRunMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case channelhealthproberun.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case channelhealthproberun.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case channelhealthproberun.FieldChannelID:
+		return m.OldChannelID(ctx)
+	case channelhealthproberun.FieldModelID:
+		return m.OldModelID(ctx)
+	case channelhealthproberun.FieldSource:
+		return m.OldSource(ctx)
+	case channelhealthproberun.FieldStatus:
+		return m.OldStatus(ctx)
+	case channelhealthproberun.FieldStream:
+		return m.OldStream(ctx)
+	case channelhealthproberun.FieldTtfbMs:
+		return m.OldTtfbMs(ctx)
+	case channelhealthproberun.FieldTtftMs:
+		return m.OldTtftMs(ctx)
+	case channelhealthproberun.FieldTotalMs:
+		return m.OldTotalMs(ctx)
+	case channelhealthproberun.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	case channelhealthproberun.FieldScheduleKey:
+		return m.OldScheduleKey(ctx)
+	case channelhealthproberun.FieldStartedAt:
+		return m.OldStartedAt(ctx)
+	case channelhealthproberun.FieldCompletedAt:
+		return m.OldCompletedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ChannelHealthProbeRun field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ChannelHealthProbeRunMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case channelhealthproberun.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case channelhealthproberun.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case channelhealthproberun.FieldChannelID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChannelID(v)
+		return nil
+	case channelhealthproberun.FieldModelID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModelID(v)
+		return nil
+	case channelhealthproberun.FieldSource:
+		v, ok := value.(channelhealthproberun.Source)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSource(v)
+		return nil
+	case channelhealthproberun.FieldStatus:
+		v, ok := value.(channelhealthproberun.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case channelhealthproberun.FieldStream:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStream(v)
+		return nil
+	case channelhealthproberun.FieldTtfbMs:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTtfbMs(v)
+		return nil
+	case channelhealthproberun.FieldTtftMs:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTtftMs(v)
+		return nil
+	case channelhealthproberun.FieldTotalMs:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalMs(v)
+		return nil
+	case channelhealthproberun.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	case channelhealthproberun.FieldScheduleKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScheduleKey(v)
+		return nil
+	case channelhealthproberun.FieldStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStartedAt(v)
+		return nil
+	case channelhealthproberun.FieldCompletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthProbeRun field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ChannelHealthProbeRunMutation) AddedFields() []string {
+	var fields []string
+	if m.addttfb_ms != nil {
+		fields = append(fields, channelhealthproberun.FieldTtfbMs)
+	}
+	if m.addttft_ms != nil {
+		fields = append(fields, channelhealthproberun.FieldTtftMs)
+	}
+	if m.addtotal_ms != nil {
+		fields = append(fields, channelhealthproberun.FieldTotalMs)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ChannelHealthProbeRunMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case channelhealthproberun.FieldTtfbMs:
+		return m.AddedTtfbMs()
+	case channelhealthproberun.FieldTtftMs:
+		return m.AddedTtftMs()
+	case channelhealthproberun.FieldTotalMs:
+		return m.AddedTotalMs()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ChannelHealthProbeRunMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case channelhealthproberun.FieldTtfbMs:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTtfbMs(v)
+		return nil
+	case channelhealthproberun.FieldTtftMs:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTtftMs(v)
+		return nil
+	case channelhealthproberun.FieldTotalMs:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthProbeRun numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ChannelHealthProbeRunMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(channelhealthproberun.FieldTtfbMs) {
+		fields = append(fields, channelhealthproberun.FieldTtfbMs)
+	}
+	if m.FieldCleared(channelhealthproberun.FieldTtftMs) {
+		fields = append(fields, channelhealthproberun.FieldTtftMs)
+	}
+	if m.FieldCleared(channelhealthproberun.FieldErrorMessage) {
+		fields = append(fields, channelhealthproberun.FieldErrorMessage)
+	}
+	if m.FieldCleared(channelhealthproberun.FieldScheduleKey) {
+		fields = append(fields, channelhealthproberun.FieldScheduleKey)
+	}
+	if m.FieldCleared(channelhealthproberun.FieldCompletedAt) {
+		fields = append(fields, channelhealthproberun.FieldCompletedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ChannelHealthProbeRunMutation) ClearField(name string) error {
+	switch name {
+	case channelhealthproberun.FieldTtfbMs:
+		m.ClearTtfbMs()
+		return nil
+	case channelhealthproberun.FieldTtftMs:
+		m.ClearTtftMs()
+		return nil
+	case channelhealthproberun.FieldErrorMessage:
+		m.ClearErrorMessage()
+		return nil
+	case channelhealthproberun.FieldScheduleKey:
+		m.ClearScheduleKey()
+		return nil
+	case channelhealthproberun.FieldCompletedAt:
+		m.ClearCompletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthProbeRun nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ChannelHealthProbeRunMutation) ResetField(name string) error {
+	switch name {
+	case channelhealthproberun.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case channelhealthproberun.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case channelhealthproberun.FieldChannelID:
+		m.ResetChannelID()
+		return nil
+	case channelhealthproberun.FieldModelID:
+		m.ResetModelID()
+		return nil
+	case channelhealthproberun.FieldSource:
+		m.ResetSource()
+		return nil
+	case channelhealthproberun.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case channelhealthproberun.FieldStream:
+		m.ResetStream()
+		return nil
+	case channelhealthproberun.FieldTtfbMs:
+		m.ResetTtfbMs()
+		return nil
+	case channelhealthproberun.FieldTtftMs:
+		m.ResetTtftMs()
+		return nil
+	case channelhealthproberun.FieldTotalMs:
+		m.ResetTotalMs()
+		return nil
+	case channelhealthproberun.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	case channelhealthproberun.FieldScheduleKey:
+		m.ResetScheduleKey()
+		return nil
+	case channelhealthproberun.FieldStartedAt:
+		m.ResetStartedAt()
+		return nil
+	case channelhealthproberun.FieldCompletedAt:
+		m.ResetCompletedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthProbeRun field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ChannelHealthProbeRunMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.channel != nil {
+		edges = append(edges, channelhealthproberun.EdgeChannel)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ChannelHealthProbeRunMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case channelhealthproberun.EdgeChannel:
+		if id := m.channel; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ChannelHealthProbeRunMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ChannelHealthProbeRunMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedchannel {
+		edges = append(edges, channelhealthproberun.EdgeChannel)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ChannelHealthProbeRunMutation) EdgeCleared(name string) bool {
+	switch name {
+	case channelhealthproberun.EdgeChannel:
+		return m.clearedchannel
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ChannelHealthProbeRunMutation) ClearEdge(name string) error {
+	switch name {
+	case channelhealthproberun.EdgeChannel:
+		m.ClearChannel()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthProbeRun unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ChannelHealthProbeRunMutation) ResetEdge(name string) error {
+	switch name {
+	case channelhealthproberun.EdgeChannel:
+		m.ResetChannel()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthProbeRun edge %s", name)
 }
 
 // ChannelModelPriceMutation represents an operation that mutates the ChannelModelPrice nodes in the graph.
