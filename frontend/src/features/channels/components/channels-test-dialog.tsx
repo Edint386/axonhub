@@ -21,6 +21,10 @@ interface ModelTestResult {
   modelName: string;
   status: TestStatus;
   latency?: number;
+  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  totalMs?: number;
+  stream?: boolean;
   error?: string;
 }
 
@@ -100,6 +104,10 @@ export function ChannelsTestDialog({ open, onOpenChange, channel }: Props) {
           ...prev[modelName],
           status: result.success ? 'success' : 'failed',
           latency: result.success ? result.latency || latency : undefined,
+          ttfbMs: result.ttfbMs,
+          ttftMs: result.ttftMs,
+          totalMs: result.totalMs ?? result.latency * 1000,
+          stream: result.stream,
           error: result.success ? undefined : result.error || 'Test failed',
         },
       }));
@@ -237,7 +245,23 @@ export function ChannelsTestDialog({ open, onOpenChange, channel }: Props) {
                         </TableCell>
                         <TableCell className='min-w-[120px] sm:min-w-[140px] align-top'>
                           <div className='pt-0.5'>{getStatusBadge(result?.status || 'not_started')}</div>
-                          {result?.latency && <div className='text-muted-foreground mt-2 text-xs'>{result.latency.toFixed(2)}s</div>}
+                          {result?.status === 'success' && (
+                            <div className='text-muted-foreground mt-2 space-y-0.5 text-xs'>
+                              <div>
+                                {t('channels.dialogs.test.totalLatency')}: {((result.totalMs ?? (result.latency || 0) * 1000) / 1000).toFixed(2)}s
+                              </div>
+                              {result.ttfbMs != null && (
+                                <div>
+                                  {t('channels.dialogs.test.firstByteLatency')}: {result.ttfbMs.toFixed(0)}ms
+                                </div>
+                              )}
+                              {result.ttftMs != null && (
+                                <div>
+                                  {t('channels.dialogs.test.firstTokenLatency')}: {result.ttftMs.toFixed(0)}ms
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className='align-top'>
                           <div className='pt-0.5'>

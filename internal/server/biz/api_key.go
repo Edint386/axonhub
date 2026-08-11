@@ -613,6 +613,9 @@ func (s *APIKeyService) UpdateAPIKeyProfiles(ctx context.Context, id int, profil
 	if err := validateProfileRoutingPolicies(profiles.Profiles); err != nil {
 		return nil, err
 	}
+	if err := validateProfileLatencyThresholds(profiles.Profiles); err != nil {
+		return nil, err
+	}
 
 	// Validate quota configuration (if present)
 	if err := validateProfileQuota(profiles.Profiles); err != nil {
@@ -761,6 +764,28 @@ func validateProfileRoutingPolicies(profiles []objects.APIKeyProfile) error {
 		if err := normalizeAndValidateProfileRoutingPolicy(&profiles[i]); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func validateProfileLatencyThresholds(profiles []objects.APIKeyProfile) error {
+	for i := range profiles {
+		if err := validateProfileLatencyThreshold(&profiles[i]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateProfileLatencyThreshold(profile *objects.APIKeyProfile) error {
+	if profile == nil || profile.MaxFirstTokenLatencyMs == nil {
+		return nil
+	}
+
+	if *profile.MaxFirstTokenLatencyMs <= 0 {
+		return fmt.Errorf("profile '%s' maxFirstTokenLatencyMs must be greater than zero", profile.Name)
 	}
 
 	return nil

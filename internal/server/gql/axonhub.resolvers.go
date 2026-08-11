@@ -269,6 +269,10 @@ func (r *mutationResolver) TestChannel(ctx context.Context, input TestChannelInp
 
 	return &TestChannelPayload{
 		Latency: result.Latency,
+		TtfbMs:  result.TTFBMs,
+		TtftMs:  result.TTFTMs,
+		TotalMs: result.TotalMs,
+		Stream:  result.Stream,
 		Success: result.Success,
 		Message: result.Message,
 		Error:   result.Error,
@@ -290,6 +294,10 @@ func (r *mutationResolver) TestChannelAPIKeys(ctx context.Context, channelID obj
 			KeyPrefix: r.KeyPrefix,
 			Success:   r.Success,
 			Latency:   r.Latency,
+			TtfbMs:    r.TTFBMs,
+			TtftMs:    r.TTFTMs,
+			TotalMs:   r.TotalMs,
+			Stream:    r.Stream,
 			Error:     r.Error,
 			Disabled:  r.Disabled,
 		}
@@ -317,6 +325,10 @@ func (r *mutationResolver) TestChannelAPIKey(ctx context.Context, channelID obje
 		KeyPrefix: result.KeyPrefix,
 		Success:   result.Success,
 		Latency:   result.Latency,
+		TtfbMs:    result.TTFBMs,
+		TtftMs:    result.TTFTMs,
+		TotalMs:   result.TotalMs,
+		Stream:    result.Stream,
 		Error:     result.Error,
 		Disabled:  result.Disabled,
 	}, nil

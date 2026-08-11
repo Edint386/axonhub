@@ -143,17 +143,18 @@ type ComplexityRoot struct {
 	}
 
 	APIKeyProfile struct {
-		ChannelIDs           func(childComplexity int) int
-		ChannelTags          func(childComplexity int) int
-		ChannelTagsMatchMode func(childComplexity int) int
-		LoadBalanceStrategy  func(childComplexity int) int
-		ModelIDs             func(childComplexity int) int
-		ModelMappings        func(childComplexity int) int
-		Name                 func(childComplexity int) int
-		Quota                func(childComplexity int) int
-		TemplateID           func(childComplexity int) int
-		TemplateName         func(childComplexity int) int
-		TraceStickyMode      func(childComplexity int) int
+		ChannelIDs             func(childComplexity int) int
+		ChannelTags            func(childComplexity int) int
+		ChannelTagsMatchMode   func(childComplexity int) int
+		LoadBalanceStrategy    func(childComplexity int) int
+		MaxFirstTokenLatencyMs func(childComplexity int) int
+		ModelIDs               func(childComplexity int) int
+		ModelMappings          func(childComplexity int) int
+		Name                   func(childComplexity int) int
+		Quota                  func(childComplexity int) int
+		TemplateID             func(childComplexity int) int
+		TemplateName           func(childComplexity int) int
+		TraceStickyMode        func(childComplexity int) int
 	}
 
 	APIKeyProfileQuotaUsage struct {
@@ -1786,7 +1787,11 @@ type ComplexityRoot struct {
 		Error     func(childComplexity int) int
 		KeyPrefix func(childComplexity int) int
 		Latency   func(childComplexity int) int
+		Stream    func(childComplexity int) int
 		Success   func(childComplexity int) int
+		TotalMs   func(childComplexity int) int
+		TtfbMs    func(childComplexity int) int
+		TtftMs    func(childComplexity int) int
 	}
 
 	TestChannelAPIKeysPayload struct {
@@ -1801,7 +1806,11 @@ type ComplexityRoot struct {
 		Error   func(childComplexity int) int
 		Latency func(childComplexity int) int
 		Message func(childComplexity int) int
+		Stream  func(childComplexity int) int
 		Success func(childComplexity int) int
+		TotalMs func(childComplexity int) int
+		TtfbMs  func(childComplexity int) int
+		TtftMs  func(childComplexity int) int
 	}
 
 	Thread struct {
@@ -2730,6 +2739,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.APIKeyProfile.LoadBalanceStrategy(childComplexity), true
+	case "APIKeyProfile.maxFirstTokenLatencyMs":
+		if e.complexity.APIKeyProfile.MaxFirstTokenLatencyMs == nil {
+			break
+		}
+
+		return e.complexity.APIKeyProfile.MaxFirstTokenLatencyMs(childComplexity), true
 	case "APIKeyProfile.modelIDs":
 		if e.complexity.APIKeyProfile.ModelIDs == nil {
 			break
@@ -10106,12 +10121,36 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.TestAPIKeyResult.Latency(childComplexity), true
+	case "TestAPIKeyResult.stream":
+		if e.complexity.TestAPIKeyResult.Stream == nil {
+			break
+		}
+
+		return e.complexity.TestAPIKeyResult.Stream(childComplexity), true
 	case "TestAPIKeyResult.success":
 		if e.complexity.TestAPIKeyResult.Success == nil {
 			break
 		}
 
 		return e.complexity.TestAPIKeyResult.Success(childComplexity), true
+	case "TestAPIKeyResult.totalMs":
+		if e.complexity.TestAPIKeyResult.TotalMs == nil {
+			break
+		}
+
+		return e.complexity.TestAPIKeyResult.TotalMs(childComplexity), true
+	case "TestAPIKeyResult.ttfbMs":
+		if e.complexity.TestAPIKeyResult.TtfbMs == nil {
+			break
+		}
+
+		return e.complexity.TestAPIKeyResult.TtfbMs(childComplexity), true
+	case "TestAPIKeyResult.ttftMs":
+		if e.complexity.TestAPIKeyResult.TtftMs == nil {
+			break
+		}
+
+		return e.complexity.TestAPIKeyResult.TtftMs(childComplexity), true
 
 	case "TestChannelAPIKeysPayload.channelID":
 		if e.complexity.TestChannelAPIKeysPayload.ChannelID == nil {
@@ -10162,12 +10201,36 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.TestChannelPayload.Message(childComplexity), true
+	case "TestChannelPayload.stream":
+		if e.complexity.TestChannelPayload.Stream == nil {
+			break
+		}
+
+		return e.complexity.TestChannelPayload.Stream(childComplexity), true
 	case "TestChannelPayload.success":
 		if e.complexity.TestChannelPayload.Success == nil {
 			break
 		}
 
 		return e.complexity.TestChannelPayload.Success(childComplexity), true
+	case "TestChannelPayload.totalMs":
+		if e.complexity.TestChannelPayload.TotalMs == nil {
+			break
+		}
+
+		return e.complexity.TestChannelPayload.TotalMs(childComplexity), true
+	case "TestChannelPayload.ttfbMs":
+		if e.complexity.TestChannelPayload.TtfbMs == nil {
+			break
+		}
+
+		return e.complexity.TestChannelPayload.TtfbMs(childComplexity), true
+	case "TestChannelPayload.ttftMs":
+		if e.complexity.TestChannelPayload.TtftMs == nil {
+			break
+		}
+
+		return e.complexity.TestChannelPayload.TtftMs(childComplexity), true
 
 	case "Thread.archivedTracesCount":
 		if e.complexity.Thread.ArchivedTracesCount == nil {
@@ -16534,6 +16597,35 @@ func (ec *executionContext) fieldContext_APIKeyProfile_traceStickyMode(_ context
 	return fc, nil
 }
 
+func (ec *executionContext) _APIKeyProfile_maxFirstTokenLatencyMs(ctx context.Context, field graphql.CollectedField, obj *objects.APIKeyProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APIKeyProfile_maxFirstTokenLatencyMs,
+		func(ctx context.Context) (any, error) {
+			return obj.MaxFirstTokenLatencyMs, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_APIKeyProfile_maxFirstTokenLatencyMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APIKeyProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _APIKeyProfileQuotaUsage_profileName(ctx context.Context, field graphql.CollectedField, obj *APIKeyProfileQuotaUsage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16894,6 +16986,8 @@ func (ec *executionContext) fieldContext_APIKeyProfileTemplate_profile(_ context
 				return ec.fieldContext_APIKeyProfile_loadBalanceStrategy(ctx, field)
 			case "traceStickyMode":
 				return ec.fieldContext_APIKeyProfile_traceStickyMode(ctx, field)
+			case "maxFirstTokenLatencyMs":
+				return ec.fieldContext_APIKeyProfile_maxFirstTokenLatencyMs(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type APIKeyProfile", field.Name)
 		},
@@ -17251,6 +17345,8 @@ func (ec *executionContext) fieldContext_APIKeyProfiles_profiles(_ context.Conte
 				return ec.fieldContext_APIKeyProfile_loadBalanceStrategy(ctx, field)
 			case "traceStickyMode":
 				return ec.fieldContext_APIKeyProfile_traceStickyMode(ctx, field)
+			case "maxFirstTokenLatencyMs":
+				return ec.fieldContext_APIKeyProfile_maxFirstTokenLatencyMs(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type APIKeyProfile", field.Name)
 		},
@@ -32685,6 +32781,14 @@ func (ec *executionContext) fieldContext_Mutation_testChannel(ctx context.Contex
 			switch field.Name {
 			case "latency":
 				return ec.fieldContext_TestChannelPayload_latency(ctx, field)
+			case "ttfbMs":
+				return ec.fieldContext_TestChannelPayload_ttfbMs(ctx, field)
+			case "ttftMs":
+				return ec.fieldContext_TestChannelPayload_ttftMs(ctx, field)
+			case "totalMs":
+				return ec.fieldContext_TestChannelPayload_totalMs(ctx, field)
+			case "stream":
+				return ec.fieldContext_TestChannelPayload_stream(ctx, field)
 			case "success":
 				return ec.fieldContext_TestChannelPayload_success(ctx, field)
 			case "message":
@@ -32793,6 +32897,14 @@ func (ec *executionContext) fieldContext_Mutation_testChannelAPIKey(ctx context.
 				return ec.fieldContext_TestAPIKeyResult_success(ctx, field)
 			case "latency":
 				return ec.fieldContext_TestAPIKeyResult_latency(ctx, field)
+			case "ttfbMs":
+				return ec.fieldContext_TestAPIKeyResult_ttfbMs(ctx, field)
+			case "ttftMs":
+				return ec.fieldContext_TestAPIKeyResult_ttftMs(ctx, field)
+			case "totalMs":
+				return ec.fieldContext_TestAPIKeyResult_totalMs(ctx, field)
+			case "stream":
+				return ec.fieldContext_TestAPIKeyResult_stream(ctx, field)
 			case "error":
 				return ec.fieldContext_TestAPIKeyResult_error(ctx, field)
 			case "disabled":
@@ -54296,6 +54408,122 @@ func (ec *executionContext) fieldContext_TestAPIKeyResult_latency(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _TestAPIKeyResult_ttfbMs(ctx context.Context, field graphql.CollectedField, obj *TestAPIKeyResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestAPIKeyResult_ttfbMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtfbMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestAPIKeyResult_ttfbMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestAPIKeyResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestAPIKeyResult_ttftMs(ctx context.Context, field graphql.CollectedField, obj *TestAPIKeyResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestAPIKeyResult_ttftMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtftMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestAPIKeyResult_ttftMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestAPIKeyResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestAPIKeyResult_totalMs(ctx context.Context, field graphql.CollectedField, obj *TestAPIKeyResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestAPIKeyResult_totalMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalMs, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestAPIKeyResult_totalMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestAPIKeyResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestAPIKeyResult_stream(ctx context.Context, field graphql.CollectedField, obj *TestAPIKeyResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestAPIKeyResult_stream,
+		func(ctx context.Context) (any, error) {
+			return obj.Stream, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestAPIKeyResult_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestAPIKeyResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TestAPIKeyResult_error(ctx context.Context, field graphql.CollectedField, obj *TestAPIKeyResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -54500,6 +54728,14 @@ func (ec *executionContext) fieldContext_TestChannelAPIKeysPayload_results(_ con
 				return ec.fieldContext_TestAPIKeyResult_success(ctx, field)
 			case "latency":
 				return ec.fieldContext_TestAPIKeyResult_latency(ctx, field)
+			case "ttfbMs":
+				return ec.fieldContext_TestAPIKeyResult_ttfbMs(ctx, field)
+			case "ttftMs":
+				return ec.fieldContext_TestAPIKeyResult_ttftMs(ctx, field)
+			case "totalMs":
+				return ec.fieldContext_TestAPIKeyResult_totalMs(ctx, field)
+			case "stream":
+				return ec.fieldContext_TestAPIKeyResult_stream(ctx, field)
 			case "error":
 				return ec.fieldContext_TestAPIKeyResult_error(ctx, field)
 			case "disabled":
@@ -54535,6 +54771,122 @@ func (ec *executionContext) fieldContext_TestChannelPayload_latency(_ context.Co
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestChannelPayload_ttfbMs(ctx context.Context, field graphql.CollectedField, obj *TestChannelPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestChannelPayload_ttfbMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtfbMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestChannelPayload_ttfbMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestChannelPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestChannelPayload_ttftMs(ctx context.Context, field graphql.CollectedField, obj *TestChannelPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestChannelPayload_ttftMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TtftMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestChannelPayload_ttftMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestChannelPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestChannelPayload_totalMs(ctx context.Context, field graphql.CollectedField, obj *TestChannelPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestChannelPayload_totalMs,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalMs, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestChannelPayload_totalMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestChannelPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestChannelPayload_stream(ctx context.Context, field graphql.CollectedField, obj *TestChannelPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TestChannelPayload_stream,
+		func(ctx context.Context) (any, error) {
+			return obj.Stream, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TestChannelPayload_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestChannelPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -63339,7 +63691,7 @@ func (ec *executionContext) unmarshalInputAPIKeyProfileInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "templateID", "templateName", "modelMappings", "channelIDs", "channelTags", "channelTagsMatchMode", "modelIDs", "quota", "loadBalanceStrategy", "traceStickyMode"}
+	fieldsInOrder := [...]string{"name", "templateID", "templateName", "modelMappings", "channelIDs", "channelTags", "channelTagsMatchMode", "modelIDs", "quota", "loadBalanceStrategy", "traceStickyMode", "maxFirstTokenLatencyMs"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -63423,6 +63775,13 @@ func (ec *executionContext) unmarshalInputAPIKeyProfileInput(ctx context.Context
 				return it, err
 			}
 			it.TraceStickyMode = data
+		case "maxFirstTokenLatencyMs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxFirstTokenLatencyMs"))
+			data, err := ec.unmarshalOInt2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaxFirstTokenLatencyMs = data
 		}
 	}
 
@@ -90303,6 +90662,8 @@ func (ec *executionContext) _APIKeyProfile(ctx context.Context, sel ast.Selectio
 			out.Values[i] = ec._APIKeyProfile_loadBalanceStrategy(ctx, field, obj)
 		case "traceStickyMode":
 			out.Values[i] = ec._APIKeyProfile_traceStickyMode(ctx, field, obj)
+		case "maxFirstTokenLatencyMs":
+			out.Values[i] = ec._APIKeyProfile_maxFirstTokenLatencyMs(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -106022,6 +106383,20 @@ func (ec *executionContext) _TestAPIKeyResult(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "ttfbMs":
+			out.Values[i] = ec._TestAPIKeyResult_ttfbMs(ctx, field, obj)
+		case "ttftMs":
+			out.Values[i] = ec._TestAPIKeyResult_ttftMs(ctx, field, obj)
+		case "totalMs":
+			out.Values[i] = ec._TestAPIKeyResult_totalMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stream":
+			out.Values[i] = ec._TestAPIKeyResult_stream(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "error":
 			out.Values[i] = ec._TestAPIKeyResult_error(ctx, field, obj)
 		case "disabled":
@@ -106124,6 +106499,20 @@ func (ec *executionContext) _TestChannelPayload(ctx context.Context, sel ast.Sel
 			out.Values[i] = graphql.MarshalString("TestChannelPayload")
 		case "latency":
 			out.Values[i] = ec._TestChannelPayload_latency(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ttfbMs":
+			out.Values[i] = ec._TestChannelPayload_ttfbMs(ctx, field, obj)
+		case "ttftMs":
+			out.Values[i] = ec._TestChannelPayload_ttftMs(ctx, field, obj)
+		case "totalMs":
+			out.Values[i] = ec._TestChannelPayload_totalMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stream":
+			out.Values[i] = ec._TestChannelPayload_stream(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

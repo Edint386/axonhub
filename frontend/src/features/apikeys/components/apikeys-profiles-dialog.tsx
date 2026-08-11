@@ -267,6 +267,7 @@ export function ApiKeyProfilesDialog({ open, onOpenChange, onSubmit, loading = f
       modelIDs: [],
       loadBalanceStrategy: 'default',
       traceStickyMode: 'default',
+      maxFirstTokenLatencyMs: null,
     });
   }, [appendProfile, profileFields]);
 
@@ -981,6 +982,33 @@ function ProfileCard({
                       </Select>
                     </FormControl>
                   </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='border-t pt-6'>
+            <FormField
+              control={form.control}
+              name={`profiles.${profileIndex}.maxFirstTokenLatencyMs`}
+              render={({ field }) => (
+                <FormItem className='max-w-sm'>
+                  <FormLabel>{t('apikeys.profiles.maxFirstTokenLatency')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      step={1}
+                      value={(field.value as number | null | undefined) ?? ''}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        field.onChange(value === '' ? null : Number(value));
+                      }}
+                      placeholder={t('apikeys.profiles.maxFirstTokenLatencyPlaceholder')}
+                    />
+                  </FormControl>
+                  <p className='text-muted-foreground text-xs'>{t('apikeys.profiles.maxFirstTokenLatencyDescription')}</p>
                   <FormMessage />
                 </FormItem>
               )}

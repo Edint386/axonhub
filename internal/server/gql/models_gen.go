@@ -475,11 +475,15 @@ type SystemStatus struct {
 }
 
 type TestAPIKeyResult struct {
-	KeyPrefix string  `json:"keyPrefix"`
-	Success   bool    `json:"success"`
-	Latency   float64 `json:"latency"`
-	Error     *string `json:"error,omitempty"`
-	Disabled  bool    `json:"disabled"`
+	KeyPrefix string   `json:"keyPrefix"`
+	Success   bool     `json:"success"`
+	Latency   float64  `json:"latency"`
+	TtfbMs    *float64 `json:"ttfbMs,omitempty"`
+	TtftMs    *float64 `json:"ttftMs,omitempty"`
+	TotalMs   float64  `json:"totalMs"`
+	Stream    bool     `json:"stream"`
+	Error     *string  `json:"error,omitempty"`
+	Disabled  bool     `json:"disabled"`
 }
 
 type TestChannelAPIKeysPayload struct {
@@ -498,6 +502,14 @@ type TestChannelInput struct {
 
 type TestChannelPayload struct {
 	Latency float64 `json:"latency"`
+	// Time to the first decoded upstream stream event, in milliseconds.
+	TtfbMs *float64 `json:"ttfbMs,omitempty"`
+	// Time to the first non-empty, deliverable output chunk, in milliseconds.
+	TtftMs *float64 `json:"ttftMs,omitempty"`
+	// Time until the response has been fully consumed, in milliseconds.
+	TotalMs float64 `json:"totalMs"`
+	// Whether the probe used a streaming request.
+	Stream  bool    `json:"stream"`
 	Success bool    `json:"success"`
 	Message *string `json:"message,omitempty"`
 	Error   *string `json:"error,omitempty"`

@@ -460,6 +460,10 @@ export const testAPIKeyResultSchema = z.object({
   keyPrefix: z.string(),
   success: z.boolean(),
   latency: z.number(),
+  ttfbMs: z.number().optional().nullable(),
+  ttftMs: z.number().optional().nullable(),
+  totalMs: z.number().optional().default(0),
+  stream: z.boolean().optional().default(false),
   error: z.string().optional().nullable(),
   disabled: z.boolean(),
 });

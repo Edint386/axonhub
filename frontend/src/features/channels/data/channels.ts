@@ -479,6 +479,10 @@ const TEST_CHANNEL_MUTATION = `
   mutation TestChannel($input: TestChannelInput!) {
     testChannel(input: $input) {
       latency
+      ttfbMs
+      ttftMs
+      totalMs
+      stream
       success
       error
       message
@@ -497,6 +501,10 @@ const TEST_CHANNEL_API_KEYS_MUTATION = `
         keyPrefix
         success
         latency
+        ttfbMs
+        ttftMs
+        totalMs
+        stream
         error
         disabled
       }
@@ -510,6 +518,10 @@ const TEST_CHANNEL_API_KEY_MUTATION = `
       keyPrefix
       success
       latency
+      ttfbMs
+      ttftMs
+      totalMs
+      stream
       error
       disabled
     }
@@ -1557,6 +1569,10 @@ export function useTestChannel(options?: { silent?: boolean }) {
         const data = await graphqlRequest<{
           testChannel: {
             latency: number;
+            ttfbMs?: number | null;
+            ttftMs?: number | null;
+            totalMs?: number;
+            stream?: boolean;
             success: boolean;
             message?: string | null;
             error?: string | null;

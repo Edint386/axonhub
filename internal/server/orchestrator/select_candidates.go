@@ -65,6 +65,17 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 
 		selector = WithStreamPolicySelector(selector)
 
+		// Profile latency ceilings are opt-in and best-effort. Apply them after
+		// request capability filters so unknown telemetry cannot hide otherwise
+		// valid candidates, and before quota/load-balancer ordering.
+		if profile := inbound.state.APIKey.GetActiveProfile(); profile != nil && profile.MaxFirstTokenLatencyMs != nil {
+			selector = WithFirstTokenLatencySelector(
+				selector,
+				inbound.state.ChannelService,
+				*profile.MaxFirstTokenLatencyMs,
+			)
+		}
+
 		quotaSelector := WithProviderQuotaSelector(selector, quotaProvider, systemService)
 		selector = quotaSelector
 		channelQuotaSelector := WithChannelQuotaSelector(selector, inbound.state.QuotaService)
