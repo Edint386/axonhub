@@ -3,6 +3,8 @@ package responses
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -981,4 +983,131 @@ func TestOutboundTransformer_TransformStream_PreservesPreviousResponseID(t *test
 	require.NotNil(t, actual[2].PreviousResponseID)
 	require.Equal(t, "resp_prev_123", *actual[2].PreviousResponseID)
 	require.Equal(t, llm.DoneResponse, actual[3])
+}
+
+// The Responses API signals truncation/failure through response.completed with
+// status "incomplete"/"failed" rather than a dedicated event; the Chat
+// Completions finish_reason must reflect that instead of defaulting to stop.
+func TestOutboundTransformer_TransformStream_MapsCompletedStatusToFinishReason(t *testing.T) {
+	tests := []struct {
+		name            string
+		status          string
+		incompleteReason string
+		expectedReason  string
+		withToolCalls   bool
+	}{
+		{name: "incomplete maps to length", status: "incomplete", expectedReason: "length"},
+		{name: "incomplete with content_filter reason maps to content_filter", status: "incomplete", incompleteReason: "content_filter", expectedReason: "content_filter"},
+		{name: "failed maps to error", status: "failed", expectedReason: "error"},
+		{name: "cancelled maps to cancelled", status: "cancelled", expectedReason: "cancelled"},
+		{name: "canceled (US spelling) maps to cancelled", status: "canceled", expectedReason: "cancelled"},
+		{name: "nil status falls back to stop", status: "", expectedReason: "stop"},
+		{name: "completed falls back to stop", status: "completed", expectedReason: "stop"},
+		{name: "completed with tool calls maps to tool_calls", status: "completed", expectedReason: "tool_calls", withToolCalls: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+			require.NoError(t, err)
+
+			events := []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+			}
+			if tt.withToolCalls {
+				events = append(events,
+					&httpclient.StreamEvent{Type: "response.output_item.added", Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_status_map","type":"function_call","call_id":"call_status_map","name":"get_weather","arguments":""}}`)},
+					&httpclient.StreamEvent{Type: "response.function_call_arguments.done", Data: []byte(`{"type":"response.function_call_arguments.done","item_id":"fc_status_map","output_index":0,"name":"get_weather","arguments":"{}"}`)},
+				)
+			}
+
+			// Build the response.completed payload. A nil status is expressed by
+			// omitting the field entirely.
+			completePayload := fmt.Sprintf(`{"type":"response.completed","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","status":%q,"output":[]}}`, tt.status)
+			if tt.status == "" {
+				completePayload = `{"type":"response.completed","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","output":[]}}`
+			}
+			if tt.incompleteReason != "" {
+				completePayload = fmt.Sprintf(`{"type":"response.completed","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","status":"incomplete","incomplete_details":{"reason":%q},"output":[]}}`, tt.incompleteReason)
+			}
+			events = append(events, &httpclient.StreamEvent{
+				Type: "response.completed",
+				Data: []byte(completePayload),
+			})
+
+			stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+			require.NoError(t, err)
+
+			responses, err := streams.All(stream)
+			require.NoError(t, err)
+
+			var finishReasons []string
+			for _, resp := range responses {
+				if resp == llm.DoneResponse || len(resp.Choices) == 0 || resp.Choices[0].FinishReason == nil {
+					continue
+				}
+				finishReasons = append(finishReasons, *resp.Choices[0].FinishReason)
+			}
+
+			require.Equal(t, []string{tt.expectedReason}, finishReasons)
+		})
+	}
+}
+
+func TestOutboundTransformer_TransformStream_CreatedAtCompatibility(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	cases := []struct {
+		name      string
+		createdAt string
+	}{
+		{name: "integer created_at", createdAt: "1786360449"},
+		{name: "float-encoded integral created_at", createdAt: "1786360449.0"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			events := []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(fmt.Sprintf(`{"type":"response.created","response":{"id":"resp_parallel","object":"response","created_at":%s,"model":"parallel","status":"in_progress","output":[]}}`, tc.createdAt))},
+				{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"今日长鑫科技"}`)},
+				{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"的收盘价是多少。"}`)},
+				{Type: "response.completed", Data: []byte(fmt.Sprintf(`{"type":"response.completed","response":{"id":"resp_parallel","object":"response","created_at":%s,"model":"parallel","status":"completed","output":[]}}`, tc.createdAt))},
+			}
+
+			stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+			require.NoError(t, err)
+
+			responses, err := streams.All(stream)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(responses), 4)
+
+			// The response.created chunk carries the parsed unix timestamp.
+			require.Equal(t, int64(1786360449), responses[0].Created)
+			require.Equal(t, "resp_parallel", responses[0].ID)
+			require.Equal(t, "parallel", responses[0].Model)
+
+			// output_text.delta events must keep streaming past the float-encoded created_at.
+			var streamedText strings.Builder
+			for _, resp := range responses {
+				if len(resp.Choices) > 0 && resp.Choices[0].Delta != nil && resp.Choices[0].Delta.Content.Content != nil {
+					streamedText.WriteString(*resp.Choices[0].Delta.Content.Content)
+				}
+			}
+			require.Equal(t, "今日长鑫科技的收盘价是多少。", streamedText.String())
+
+			// response.completed emits finish_reason stop and preserves the timestamp.
+			var last *llm.Response
+			for i := len(responses) - 1; i >= 0; i-- {
+				if responses[i] != llm.DoneResponse {
+					last = responses[i]
+					break
+				}
+			}
+			require.NotNil(t, last)
+			require.Len(t, last.Choices, 1)
+			require.Equal(t, "stop", lo.FromPtr(last.Choices[0].FinishReason))
+			require.Equal(t, int64(1786360449), last.Created)
+		})
+	}
 }

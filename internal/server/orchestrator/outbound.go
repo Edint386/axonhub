@@ -16,6 +16,7 @@ import (
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/pipeline"
+	"github.com/looplj/axonhub/llm/pipeline/cc"
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer"
 	"github.com/looplj/axonhub/llm/transformer/shared"
@@ -85,7 +86,7 @@ func (ts *OutboundPersistentStream) Current() *httpclient.StreamEvent {
 		// Check if this is a terminal event, which indicates the stream completed successfully.
 		// For Chat Completions API this is the raw [DONE] event; for Responses API this is
 		// response.completed; for Anthropic Messages API this is message_stop.
-		if isTerminalStreamEvent(event) {
+		if IsTerminalStreamEvent(event) {
 			ts.state.StreamCompleted = true
 		}
 	}
@@ -167,7 +168,7 @@ func (ts *OutboundPersistentStream) Close() error {
 			errToReport = ctxErr
 		}
 		if errToReport == nil {
-			errToReport = errors.New("stream ended without terminal event or completed response")
+			errToReport = ErrStreamIncomplete
 		}
 
 		if ts.requestExec != nil {
@@ -184,7 +185,7 @@ func (ts *OutboundPersistentStream) Close() error {
 		persistCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		errToReport := errors.New("stream ended without terminal event or completed response")
+		errToReport := ErrStreamIncomplete
 		if ts.requestExec != nil {
 			if err := ts.RequestService.UpdateRequestExecutionStatusFromError(persistCtx, ts.requestExec.ID, errToReport); err != nil {
 				log.Warn(persistCtx, "Failed to update request execution status from error", log.Cause(err))
@@ -313,8 +314,9 @@ var errSkipCandidateByCircuitBreaker = errors.New("skip candidate by circuit bre
 
 // PersistentOutboundTransformer wraps an outbound transformer with shared persistence state.
 type PersistentOutboundTransformer struct {
-	wrapped transformer.Outbound
-	state   *PersistenceState
+	wrapped                       transformer.Outbound
+	state                         *PersistenceState
+	outboundLlmRequestMiddlewares []pipeline.OutboundLlmRequestMiddleware
 }
 
 func shouldForceStreamingForCandidate(candidate *ChannelModelsCandidate, req *llm.Request) bool {
@@ -372,6 +374,7 @@ func (p *PersistentOutboundTransformer) TransformRequest(ctx context.Context, ll
 
 	p.state.CurrentCandidate = candidate
 	p.state.StreamCompleted = false
+	p.state.PassThroughBodyBlocked = false
 
 	p.wrapped = selectOutboundForCandidate(candidate)
 
@@ -384,11 +387,36 @@ func (p *PersistentOutboundTransformer) TransformRequest(ctx context.Context, ll
 
 	llmRequest.Model = entry.ActualModel
 
+	outboundFormat := p.wrapped.APIFormat()
+	if candidate.APIFormat != "" {
+		outboundFormat = llm.APIFormat(candidate.APIFormat)
+	}
+
 	// Apply channel transform options to create a new request
+	originalRequest := llmRequest
 	llmRequest = applyTransformOptions(llmRequest, candidate.Channel.Settings)
-	llmRequest = filterResponseCustomToolMessagesForNonResponsesOutbound(llmRequest, p.wrapped.APIFormat())
+	if llmRequest != originalRequest {
+		p.state.PassThroughBodyBlocked = true
+	}
+	for _, middleware := range p.outboundLlmRequestMiddlewares {
+		beforeMiddleware := llmRequest
+		transformedRequest, err := middleware.OnOutboundLlmRequest(ctx, llmRequest, outboundFormat)
+		if err != nil {
+			return nil, fmt.Errorf("failed to apply %s middleware: %w", middleware.Name(), err)
+		}
+		llmRequest = transformedRequest
+		if llmRequest != beforeMiddleware {
+			p.state.PassThroughBodyBlocked = true
+		}
+	}
+	beforeToolFilter := llmRequest
+	llmRequest = filterResponseCustomToolMessagesForNonResponsesOutbound(llmRequest, outboundFormat)
+	if llmRequest != beforeToolFilter {
+		p.state.PassThroughBodyBlocked = true
+	}
 
 	if shouldForceStreamingForCandidate(candidate, llmRequest) {
+		p.state.PassThroughBodyBlocked = true
 		streamPtr := lo.ToPtr(true)
 		llmRequest.Stream = streamPtr
 		if llmRequest.StreamOptions == nil {
@@ -404,7 +432,32 @@ func (p *PersistentOutboundTransformer) TransformRequest(ctx context.Context, ll
 		}
 	}
 
-	return p.wrapped.TransformRequest(ctx, llmRequest)
+	isClaudeCodeClient := cc.IsClaudeCodeRequest(llmRequest)
+	originalReasoningEffort := llmRequest.ReasoningEffort
+	httpRequest, err := p.wrapped.TransformRequest(ctx, llmRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	if httpRequest.APIFormat != "" {
+		outboundFormat = llm.APIFormat(httpRequest.APIFormat)
+	}
+
+	mappedRequest, err := applyClaudeCodeOpenAIReasoningEffortMapping(
+		httpRequest,
+		candidate.Channel.Settings,
+		outboundFormat,
+		isClaudeCodeClient,
+		originalReasoningEffort,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if mappedRequest != httpRequest {
+		p.state.PassThroughBodyBlocked = true
+	}
+
+	return mappedRequest, nil
 }
 
 func filterResponseCustomToolMessagesForNonResponsesOutbound(
@@ -538,6 +591,7 @@ func (p *PersistentOutboundTransformer) NextChannel(ctx context.Context) error {
 	// Reset request execution for the new candidate
 	p.state.RequestExec = nil
 	p.state.PassThroughApplied = false
+	p.state.PassThroughBodyBlocked = false
 
 	candidate := p.state.ChannelModelsCandidates[p.state.CurrentCandidateIndex]
 	p.state.CurrentCandidate = candidate
@@ -626,6 +680,7 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 	// Reset request execution for the same channel.
 	p.state.RequestExec = nil
 	p.state.PassThroughApplied = false
+	p.state.PassThroughBodyBlocked = false
 
 	// Cancel any in-flight pass-through stream goroutine from the previous attempt
 	// so it exits promptly and releases its upstream HTTP connection.
