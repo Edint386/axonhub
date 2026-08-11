@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/ent/predicate"
@@ -452,6 +453,21 @@ func (_u *ChannelUpdate) AddUsageLogs(v ...*UsageLog) *ChannelUpdate {
 	return _u.AddUsageLogIDs(ids...)
 }
 
+// AddHealthProbeRunIDs adds the "health_probe_runs" edge to the ChannelHealthProbeRun entity by IDs.
+func (_u *ChannelUpdate) AddHealthProbeRunIDs(ids ...int) *ChannelUpdate {
+	_u.mutation.AddHealthProbeRunIDs(ids...)
+	return _u
+}
+
+// AddHealthProbeRuns adds the "health_probe_runs" edges to the ChannelHealthProbeRun entity.
+func (_u *ChannelUpdate) AddHealthProbeRuns(v ...*ChannelHealthProbeRun) *ChannelUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddHealthProbeRunIDs(ids...)
+}
+
 // AddChannelProbeIDs adds the "channel_probes" edge to the ChannelProbe entity by IDs.
 func (_u *ChannelUpdate) AddChannelProbeIDs(ids ...int) *ChannelUpdate {
 	_u.mutation.AddChannelProbeIDs(ids...)
@@ -567,6 +583,27 @@ func (_u *ChannelUpdate) RemoveUsageLogs(v ...*UsageLog) *ChannelUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageLogIDs(ids...)
+}
+
+// ClearHealthProbeRuns clears all "health_probe_runs" edges to the ChannelHealthProbeRun entity.
+func (_u *ChannelUpdate) ClearHealthProbeRuns() *ChannelUpdate {
+	_u.mutation.ClearHealthProbeRuns()
+	return _u
+}
+
+// RemoveHealthProbeRunIDs removes the "health_probe_runs" edge to ChannelHealthProbeRun entities by IDs.
+func (_u *ChannelUpdate) RemoveHealthProbeRunIDs(ids ...int) *ChannelUpdate {
+	_u.mutation.RemoveHealthProbeRunIDs(ids...)
+	return _u
+}
+
+// RemoveHealthProbeRuns removes "health_probe_runs" edges to ChannelHealthProbeRun entities.
+func (_u *ChannelUpdate) RemoveHealthProbeRuns(v ...*ChannelHealthProbeRun) *ChannelUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveHealthProbeRunIDs(ids...)
 }
 
 // ClearChannelProbes clears all "channel_probes" edges to the ChannelProbe entity.
@@ -958,6 +995,51 @@ func (_u *ChannelUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.HealthProbeRunsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.HealthProbeRunsTable,
+			Columns: []string{channel.HealthProbeRunsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelhealthproberun.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedHealthProbeRunsIDs(); len(nodes) > 0 && !_u.mutation.HealthProbeRunsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.HealthProbeRunsTable,
+			Columns: []string{channel.HealthProbeRunsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelhealthproberun.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.HealthProbeRunsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.HealthProbeRunsTable,
+			Columns: []string{channel.HealthProbeRunsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelhealthproberun.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1521,6 +1603,21 @@ func (_u *ChannelUpdateOne) AddUsageLogs(v ...*UsageLog) *ChannelUpdateOne {
 	return _u.AddUsageLogIDs(ids...)
 }
 
+// AddHealthProbeRunIDs adds the "health_probe_runs" edge to the ChannelHealthProbeRun entity by IDs.
+func (_u *ChannelUpdateOne) AddHealthProbeRunIDs(ids ...int) *ChannelUpdateOne {
+	_u.mutation.AddHealthProbeRunIDs(ids...)
+	return _u
+}
+
+// AddHealthProbeRuns adds the "health_probe_runs" edges to the ChannelHealthProbeRun entity.
+func (_u *ChannelUpdateOne) AddHealthProbeRuns(v ...*ChannelHealthProbeRun) *ChannelUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddHealthProbeRunIDs(ids...)
+}
+
 // AddChannelProbeIDs adds the "channel_probes" edge to the ChannelProbe entity by IDs.
 func (_u *ChannelUpdateOne) AddChannelProbeIDs(ids ...int) *ChannelUpdateOne {
 	_u.mutation.AddChannelProbeIDs(ids...)
@@ -1636,6 +1733,27 @@ func (_u *ChannelUpdateOne) RemoveUsageLogs(v ...*UsageLog) *ChannelUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageLogIDs(ids...)
+}
+
+// ClearHealthProbeRuns clears all "health_probe_runs" edges to the ChannelHealthProbeRun entity.
+func (_u *ChannelUpdateOne) ClearHealthProbeRuns() *ChannelUpdateOne {
+	_u.mutation.ClearHealthProbeRuns()
+	return _u
+}
+
+// RemoveHealthProbeRunIDs removes the "health_probe_runs" edge to ChannelHealthProbeRun entities by IDs.
+func (_u *ChannelUpdateOne) RemoveHealthProbeRunIDs(ids ...int) *ChannelUpdateOne {
+	_u.mutation.RemoveHealthProbeRunIDs(ids...)
+	return _u
+}
+
+// RemoveHealthProbeRuns removes "health_probe_runs" edges to ChannelHealthProbeRun entities.
+func (_u *ChannelUpdateOne) RemoveHealthProbeRuns(v ...*ChannelHealthProbeRun) *ChannelUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveHealthProbeRunIDs(ids...)
 }
 
 // ClearChannelProbes clears all "channel_probes" edges to the ChannelProbe entity.
@@ -2057,6 +2175,51 @@ func (_u *ChannelUpdateOne) sqlSave(ctx context.Context) (_node *Channel, err er
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.HealthProbeRunsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.HealthProbeRunsTable,
+			Columns: []string{channel.HealthProbeRunsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelhealthproberun.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedHealthProbeRunsIDs(); len(nodes) > 0 && !_u.mutation.HealthProbeRunsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.HealthProbeRunsTable,
+			Columns: []string{channel.HealthProbeRunsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelhealthproberun.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.HealthProbeRunsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.HealthProbeRunsTable,
+			Columns: []string{channel.HealthProbeRunsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelhealthproberun.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

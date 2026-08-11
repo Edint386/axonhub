@@ -9,6 +9,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/channeloverridetemplate"
@@ -257,7 +258,7 @@ func (_m *Channel) Node(ctx context.Context) (node *Node, err error) {
 		ID:     _m.ID,
 		Type:   "Channel",
 		Fields: make([]*Field, 22),
-		Edges:  make([]*Edge, 6),
+		Edges:  make([]*Edge, 7),
 	}
 	var buf []byte
 	if buf, err = json.Marshal(_m.CreatedAt); err != nil {
@@ -467,32 +468,176 @@ func (_m *Channel) Node(ctx context.Context) (node *Node, err error) {
 		return nil, err
 	}
 	node.Edges[3] = &Edge{
-		Type: "ChannelProbe",
-		Name: "channel_probes",
+		Type: "ChannelHealthProbeRun",
+		Name: "health_probe_runs",
 	}
-	err = _m.QueryChannelProbes().
-		Select(channelprobe.FieldID).
+	err = _m.QueryHealthProbeRuns().
+		Select(channelhealthproberun.FieldID).
 		Scan(ctx, &node.Edges[3].IDs)
 	if err != nil {
 		return nil, err
 	}
 	node.Edges[4] = &Edge{
-		Type: "ChannelModelPrice",
-		Name: "channel_model_prices",
+		Type: "ChannelProbe",
+		Name: "channel_probes",
 	}
-	err = _m.QueryChannelModelPrices().
-		Select(channelmodelprice.FieldID).
+	err = _m.QueryChannelProbes().
+		Select(channelprobe.FieldID).
 		Scan(ctx, &node.Edges[4].IDs)
 	if err != nil {
 		return nil, err
 	}
 	node.Edges[5] = &Edge{
+		Type: "ChannelModelPrice",
+		Name: "channel_model_prices",
+	}
+	err = _m.QueryChannelModelPrices().
+		Select(channelmodelprice.FieldID).
+		Scan(ctx, &node.Edges[5].IDs)
+	if err != nil {
+		return nil, err
+	}
+	node.Edges[6] = &Edge{
 		Type: "ProviderQuotaStatus",
 		Name: "provider_quota_status",
 	}
 	err = _m.QueryProviderQuotaStatus().
 		Select(providerquotastatus.FieldID).
-		Scan(ctx, &node.Edges[5].IDs)
+		Scan(ctx, &node.Edges[6].IDs)
+	if err != nil {
+		return nil, err
+	}
+	return node, nil
+}
+
+// Node implements Noder interface
+func (_m *ChannelHealthProbeRun) Node(ctx context.Context) (node *Node, err error) {
+	node = &Node{
+		ID:     _m.ID,
+		Type:   "ChannelHealthProbeRun",
+		Fields: make([]*Field, 14),
+		Edges:  make([]*Edge, 1),
+	}
+	var buf []byte
+	if buf, err = json.Marshal(_m.CreatedAt); err != nil {
+		return nil, err
+	}
+	node.Fields[0] = &Field{
+		Type:  "time.Time",
+		Name:  "created_at",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.UpdatedAt); err != nil {
+		return nil, err
+	}
+	node.Fields[1] = &Field{
+		Type:  "time.Time",
+		Name:  "updated_at",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.ChannelID); err != nil {
+		return nil, err
+	}
+	node.Fields[2] = &Field{
+		Type:  "int",
+		Name:  "channel_id",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.ModelID); err != nil {
+		return nil, err
+	}
+	node.Fields[3] = &Field{
+		Type:  "string",
+		Name:  "model_id",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.Source); err != nil {
+		return nil, err
+	}
+	node.Fields[4] = &Field{
+		Type:  "channelhealthproberun.Source",
+		Name:  "source",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.Status); err != nil {
+		return nil, err
+	}
+	node.Fields[5] = &Field{
+		Type:  "channelhealthproberun.Status",
+		Name:  "status",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.Stream); err != nil {
+		return nil, err
+	}
+	node.Fields[6] = &Field{
+		Type:  "bool",
+		Name:  "stream",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.TtfbMs); err != nil {
+		return nil, err
+	}
+	node.Fields[7] = &Field{
+		Type:  "float64",
+		Name:  "ttfb_ms",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.TtftMs); err != nil {
+		return nil, err
+	}
+	node.Fields[8] = &Field{
+		Type:  "float64",
+		Name:  "ttft_ms",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.TotalMs); err != nil {
+		return nil, err
+	}
+	node.Fields[9] = &Field{
+		Type:  "float64",
+		Name:  "total_ms",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.ErrorMessage); err != nil {
+		return nil, err
+	}
+	node.Fields[10] = &Field{
+		Type:  "string",
+		Name:  "error_message",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.ScheduleKey); err != nil {
+		return nil, err
+	}
+	node.Fields[11] = &Field{
+		Type:  "string",
+		Name:  "schedule_key",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.StartedAt); err != nil {
+		return nil, err
+	}
+	node.Fields[12] = &Field{
+		Type:  "time.Time",
+		Name:  "started_at",
+		Value: string(buf),
+	}
+	if buf, err = json.Marshal(_m.CompletedAt); err != nil {
+		return nil, err
+	}
+	node.Fields[13] = &Field{
+		Type:  "time.Time",
+		Name:  "completed_at",
+		Value: string(buf),
+	}
+	node.Edges[0] = &Edge{
+		Type: "Channel",
+		Name: "channel",
+	}
+	err = _m.QueryChannel().
+		Select(channel.FieldID).
+		Scan(ctx, &node.Edges[0].IDs)
 	if err != nil {
 		return nil, err
 	}

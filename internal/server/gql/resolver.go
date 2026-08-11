@@ -42,6 +42,8 @@ type Resolver struct {
 	modelService                   *biz.ModelService
 	backupService                  *backup.BackupService
 	channelProbeService            *biz.ChannelProbeService
+	channelHealthProbeService      *biz.ChannelHealthProbeService
+	channelHealthProbeRunner       *orchestrator.ChannelHealthProbeRunner
 	promptService                  *biz.PromptService
 	promptProtectionRuleService    *biz.PromptProtectionRuleService
 	providerQuotaService           *biz.ProviderQuotaService
@@ -76,6 +78,7 @@ func NewSchema(
 	modelService *biz.ModelService,
 	backupService *backup.BackupService,
 	channelProbeService *biz.ChannelProbeService,
+	channelHealthProbeService *biz.ChannelHealthProbeService,
 	promptService *biz.PromptService,
 	promptProtectionRuleService *biz.PromptProtectionRuleService,
 	providerQuotaService *biz.ProviderQuotaService,
@@ -83,6 +86,8 @@ func NewSchema(
 	defaultSelector *orchestrator.DefaultSelector,
 	candidateSelectorDiagnostics *orchestrator.CandidateSelectorDiagnostics,
 	channelLimiterManager *orchestrator.ChannelLimiterManager,
+	testChannelOrchestrator *orchestrator.TestChannelOrchestrator,
+	channelHealthProbeRunner *orchestrator.ChannelHealthProbeRunner,
 	httpClient *httpclient.HttpClient,
 	gcWorker *gc.Worker,
 	videoWorker *video_storage.Worker,
@@ -109,6 +114,8 @@ func NewSchema(
 			modelService:                   modelService,
 			backupService:                  backupService,
 			channelProbeService:            channelProbeService,
+			channelHealthProbeService:      channelHealthProbeService,
+			channelHealthProbeRunner:       channelHealthProbeRunner,
 			promptService:                  promptService,
 			promptProtectionRuleService:    promptProtectionRuleService,
 			providerQuotaService:           providerQuotaService,
@@ -117,7 +124,7 @@ func NewSchema(
 			defaultSelector:                defaultSelector,
 			candidateSelectorDiagnostics:   candidateSelectorDiagnostics,
 			channelLimiterManager:          channelLimiterManager,
-			TestChannelOrchestrator:        orchestrator.NewTestChannelOrchestrator(channelService, requestService, systemService, usageLogService, promptProtectionRuleService, httpClient),
+			TestChannelOrchestrator:        testChannelOrchestrator,
 			gcWorker:                       gcWorker,
 			videoWorker:                    videoWorker,
 		},

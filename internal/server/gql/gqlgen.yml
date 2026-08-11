@@ -12,6 +12,7 @@ schema:
   - model.graphql
   - backup.graphql
   - channel_probe.graphql
+  - channel_health_probe.graphql
   - prompt.graphql
   - prompt_protection_rule.graphql
   - price.graphql
@@ -166,6 +167,18 @@ models:
   ChannelProviderQuotaSettingsInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelProviderQuotaSettings
+  ChannelHealthProbeSettings:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeSettings
+  ChannelHealthProbeSettingsInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeSettings
+  ChannelHealthProbeModel:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeModel
+  ChannelHealthProbeModelInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeModel
   ChannelRateLimit:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelRateLimit

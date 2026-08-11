@@ -216,7 +216,10 @@ func TestSystemService_StoragePolicy(t *testing.T) {
 	require.False(t, policy.LivePreview)
 	require.True(t, policy.StoreRequestBody)
 	require.True(t, policy.StoreResponseBody)
-	require.Len(t, policy.CleanupOptions, 2)
+	require.Len(t, policy.CleanupOptions, 3)
+	require.Equal(t, CleanupResourceChannelHealthProbeRuns, policy.CleanupOptions[2].ResourceType)
+	require.True(t, policy.CleanupOptions[2].Enabled)
+	require.Equal(t, 30, policy.CleanupOptions[2].CleanupDays)
 
 	// Test setting custom storage policy
 	customPolicy := &StoragePolicy{
@@ -242,8 +245,9 @@ func TestSystemService_StoragePolicy(t *testing.T) {
 	require.Equal(t, customPolicy.LivePreview, retrievedPolicy.LivePreview)
 	require.Equal(t, customPolicy.StoreRequestBody, retrievedPolicy.StoreRequestBody)
 	require.Equal(t, customPolicy.StoreResponseBody, retrievedPolicy.StoreResponseBody)
-	require.Len(t, retrievedPolicy.CleanupOptions, 1)
+	require.Len(t, retrievedPolicy.CleanupOptions, 4)
 	require.Equal(t, "custom_resource", retrievedPolicy.CleanupOptions[0].ResourceType)
+	require.Equal(t, CleanupResourceChannelHealthProbeRuns, retrievedPolicy.CleanupOptions[3].ResourceType)
 
 	// Test StoreChunks convenience method
 	storeChunks, err := service.StoreChunks(ctx)
@@ -784,7 +788,8 @@ func TestSystemService_BackwardCompatibility(t *testing.T) {
 	require.True(t, policy.StoreChunks)
 	require.True(t, policy.StoreRequestBody)  // Should default to true
 	require.True(t, policy.StoreResponseBody) // Should default to true
-	require.Len(t, policy.CleanupOptions, 1)
+	require.Len(t, policy.CleanupOptions, 3)
+	require.Equal(t, CleanupResourceChannelHealthProbeRuns, policy.CleanupOptions[2].ResourceType)
 }
 
 func TestSystemService_ModelSettingsBackwardCompatibility(t *testing.T) {

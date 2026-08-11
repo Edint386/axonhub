@@ -17,6 +17,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/channeloverridetemplate"
@@ -1166,6 +1167,320 @@ func (_m *Channel) ToEdge(order *ChannelOrder) *ChannelEdge {
 		order = DefaultChannelOrder
 	}
 	return &ChannelEdge{
+		Node:   _m,
+		Cursor: order.Field.toCursor(_m),
+	}
+}
+
+// ChannelHealthProbeRunEdge is the edge representation of ChannelHealthProbeRun.
+type ChannelHealthProbeRunEdge struct {
+	Node   *ChannelHealthProbeRun `json:"node"`
+	Cursor Cursor                 `json:"cursor"`
+}
+
+// ChannelHealthProbeRunConnection is the connection containing edges to ChannelHealthProbeRun.
+type ChannelHealthProbeRunConnection struct {
+	Edges      []*ChannelHealthProbeRunEdge `json:"edges"`
+	PageInfo   PageInfo                     `json:"pageInfo"`
+	TotalCount int                          `json:"totalCount"`
+}
+
+func (c *ChannelHealthProbeRunConnection) build(nodes []*ChannelHealthProbeRun, pager *channelhealthproberunPager, after *Cursor, first *int, before *Cursor, last *int) {
+	c.PageInfo.HasNextPage = before != nil
+	c.PageInfo.HasPreviousPage = after != nil
+	if first != nil && *first+1 == len(nodes) {
+		c.PageInfo.HasNextPage = true
+		nodes = nodes[:len(nodes)-1]
+	} else if last != nil && *last+1 == len(nodes) {
+		c.PageInfo.HasPreviousPage = true
+		nodes = nodes[:len(nodes)-1]
+	}
+	var nodeAt func(int) *ChannelHealthProbeRun
+	if last != nil {
+		n := len(nodes) - 1
+		nodeAt = func(i int) *ChannelHealthProbeRun {
+			return nodes[n-i]
+		}
+	} else {
+		nodeAt = func(i int) *ChannelHealthProbeRun {
+			return nodes[i]
+		}
+	}
+	c.Edges = make([]*ChannelHealthProbeRunEdge, len(nodes))
+	for i := range nodes {
+		node := nodeAt(i)
+		c.Edges[i] = &ChannelHealthProbeRunEdge{
+			Node:   node,
+			Cursor: pager.toCursor(node),
+		}
+	}
+	if l := len(c.Edges); l > 0 {
+		c.PageInfo.StartCursor = &c.Edges[0].Cursor
+		c.PageInfo.EndCursor = &c.Edges[l-1].Cursor
+	}
+	if c.TotalCount == 0 {
+		c.TotalCount = len(nodes)
+	}
+}
+
+// ChannelHealthProbeRunPaginateOption enables pagination customization.
+type ChannelHealthProbeRunPaginateOption func(*channelhealthproberunPager) error
+
+// WithChannelHealthProbeRunOrder configures pagination ordering.
+func WithChannelHealthProbeRunOrder(order *ChannelHealthProbeRunOrder) ChannelHealthProbeRunPaginateOption {
+	if order == nil {
+		order = DefaultChannelHealthProbeRunOrder
+	}
+	o := *order
+	return func(pager *channelhealthproberunPager) error {
+		if err := o.Direction.Validate(); err != nil {
+			return err
+		}
+		if o.Field == nil {
+			o.Field = DefaultChannelHealthProbeRunOrder.Field
+		}
+		pager.order = &o
+		return nil
+	}
+}
+
+// WithChannelHealthProbeRunFilter configures pagination filter.
+func WithChannelHealthProbeRunFilter(filter func(*ChannelHealthProbeRunQuery) (*ChannelHealthProbeRunQuery, error)) ChannelHealthProbeRunPaginateOption {
+	return func(pager *channelhealthproberunPager) error {
+		if filter == nil {
+			return errors.New("ChannelHealthProbeRunQuery filter cannot be nil")
+		}
+		pager.filter = filter
+		return nil
+	}
+}
+
+type channelhealthproberunPager struct {
+	reverse bool
+	order   *ChannelHealthProbeRunOrder
+	filter  func(*ChannelHealthProbeRunQuery) (*ChannelHealthProbeRunQuery, error)
+}
+
+func newChannelHealthProbeRunPager(opts []ChannelHealthProbeRunPaginateOption, reverse bool) (*channelhealthproberunPager, error) {
+	pager := &channelhealthproberunPager{reverse: reverse}
+	for _, opt := range opts {
+		if err := opt(pager); err != nil {
+			return nil, err
+		}
+	}
+	if pager.order == nil {
+		pager.order = DefaultChannelHealthProbeRunOrder
+	}
+	return pager, nil
+}
+
+func (p *channelhealthproberunPager) applyFilter(query *ChannelHealthProbeRunQuery) (*ChannelHealthProbeRunQuery, error) {
+	if p.filter != nil {
+		return p.filter(query)
+	}
+	return query, nil
+}
+
+func (p *channelhealthproberunPager) toCursor(_m *ChannelHealthProbeRun) Cursor {
+	return p.order.Field.toCursor(_m)
+}
+
+func (p *channelhealthproberunPager) applyCursors(query *ChannelHealthProbeRunQuery, after, before *Cursor) (*ChannelHealthProbeRunQuery, error) {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	for _, predicate := range entgql.CursorsPredicate(after, before, DefaultChannelHealthProbeRunOrder.Field.column, p.order.Field.column, direction) {
+		query = query.Where(predicate)
+	}
+	return query, nil
+}
+
+func (p *channelhealthproberunPager) applyOrder(query *ChannelHealthProbeRunQuery) *ChannelHealthProbeRunQuery {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	query = query.Order(p.order.Field.toTerm(direction.OrderTermOption()))
+	if p.order.Field != DefaultChannelHealthProbeRunOrder.Field {
+		query = query.Order(DefaultChannelHealthProbeRunOrder.Field.toTerm(direction.OrderTermOption()))
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return query
+}
+
+func (p *channelhealthproberunPager) orderExpr(query *ChannelHealthProbeRunQuery) sql.Querier {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return sql.ExprFunc(func(b *sql.Builder) {
+		b.Ident(p.order.Field.column).Pad().WriteString(string(direction))
+		if p.order.Field != DefaultChannelHealthProbeRunOrder.Field {
+			b.Comma().Ident(DefaultChannelHealthProbeRunOrder.Field.column).Pad().WriteString(string(direction))
+		}
+	})
+}
+
+// Paginate executes the query and returns a relay based cursor connection to ChannelHealthProbeRun.
+func (_m *ChannelHealthProbeRunQuery) Paginate(
+	ctx context.Context, after *Cursor, first *int,
+	before *Cursor, last *int, opts ...ChannelHealthProbeRunPaginateOption,
+) (*ChannelHealthProbeRunConnection, error) {
+	if err := validateFirstLast(first, last); err != nil {
+		return nil, err
+	}
+	pager, err := newChannelHealthProbeRunPager(opts, last != nil)
+	if err != nil {
+		return nil, err
+	}
+	if _m, err = pager.applyFilter(_m); err != nil {
+		return nil, err
+	}
+	conn := &ChannelHealthProbeRunConnection{Edges: []*ChannelHealthProbeRunEdge{}}
+	ignoredEdges := !hasCollectedField(ctx, edgesField)
+	if hasCollectedField(ctx, totalCountField) || hasCollectedField(ctx, pageInfoField) {
+		hasPagination := after != nil || first != nil || before != nil || last != nil
+		if hasPagination || ignoredEdges {
+			c := _m.Clone()
+			c.ctx.Fields = nil
+			if conn.TotalCount, err = c.Count(ctx); err != nil {
+				return nil, err
+			}
+			conn.PageInfo.HasNextPage = first != nil && conn.TotalCount > 0
+			conn.PageInfo.HasPreviousPage = last != nil && conn.TotalCount > 0
+		}
+	}
+	if ignoredEdges || (first != nil && *first == 0) || (last != nil && *last == 0) {
+		return conn, nil
+	}
+	if _m, err = pager.applyCursors(_m, after, before); err != nil {
+		return nil, err
+	}
+	limit := paginateLimit(first, last)
+	if limit != 0 {
+		_m.Limit(limit)
+	}
+	if field := collectedField(ctx, edgesField, nodeField); field != nil {
+		if err := _m.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
+			return nil, err
+		}
+	}
+	_m = pager.applyOrder(_m)
+	nodes, err := _m.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn.build(nodes, pager, after, first, before, last)
+	return conn, nil
+}
+
+var (
+	// ChannelHealthProbeRunOrderFieldCreatedAt orders ChannelHealthProbeRun by created_at.
+	ChannelHealthProbeRunOrderFieldCreatedAt = &ChannelHealthProbeRunOrderField{
+		Value: func(_m *ChannelHealthProbeRun) (ent.Value, error) {
+			return _m.CreatedAt, nil
+		},
+		column: channelhealthproberun.FieldCreatedAt,
+		toTerm: channelhealthproberun.ByCreatedAt,
+		toCursor: func(_m *ChannelHealthProbeRun) Cursor {
+			return Cursor{
+				ID:    _m.ID,
+				Value: _m.CreatedAt,
+			}
+		},
+	}
+	// ChannelHealthProbeRunOrderFieldUpdatedAt orders ChannelHealthProbeRun by updated_at.
+	ChannelHealthProbeRunOrderFieldUpdatedAt = &ChannelHealthProbeRunOrderField{
+		Value: func(_m *ChannelHealthProbeRun) (ent.Value, error) {
+			return _m.UpdatedAt, nil
+		},
+		column: channelhealthproberun.FieldUpdatedAt,
+		toTerm: channelhealthproberun.ByUpdatedAt,
+		toCursor: func(_m *ChannelHealthProbeRun) Cursor {
+			return Cursor{
+				ID:    _m.ID,
+				Value: _m.UpdatedAt,
+			}
+		},
+	}
+)
+
+// String implement fmt.Stringer interface.
+func (f ChannelHealthProbeRunOrderField) String() string {
+	var str string
+	switch f.column {
+	case ChannelHealthProbeRunOrderFieldCreatedAt.column:
+		str = "CREATED_AT"
+	case ChannelHealthProbeRunOrderFieldUpdatedAt.column:
+		str = "UPDATED_AT"
+	}
+	return str
+}
+
+// MarshalGQL implements graphql.Marshaler interface.
+func (f ChannelHealthProbeRunOrderField) MarshalGQL(w io.Writer) {
+	io.WriteString(w, strconv.Quote(f.String()))
+}
+
+// UnmarshalGQL implements graphql.Unmarshaler interface.
+func (f *ChannelHealthProbeRunOrderField) UnmarshalGQL(v interface{}) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("ChannelHealthProbeRunOrderField %T must be a string", v)
+	}
+	switch str {
+	case "CREATED_AT":
+		*f = *ChannelHealthProbeRunOrderFieldCreatedAt
+	case "UPDATED_AT":
+		*f = *ChannelHealthProbeRunOrderFieldUpdatedAt
+	default:
+		return fmt.Errorf("%s is not a valid ChannelHealthProbeRunOrderField", str)
+	}
+	return nil
+}
+
+// ChannelHealthProbeRunOrderField defines the ordering field of ChannelHealthProbeRun.
+type ChannelHealthProbeRunOrderField struct {
+	// Value extracts the ordering value from the given ChannelHealthProbeRun.
+	Value    func(*ChannelHealthProbeRun) (ent.Value, error)
+	column   string // field or computed.
+	toTerm   func(...sql.OrderTermOption) channelhealthproberun.OrderOption
+	toCursor func(*ChannelHealthProbeRun) Cursor
+}
+
+// ChannelHealthProbeRunOrder defines the ordering of ChannelHealthProbeRun.
+type ChannelHealthProbeRunOrder struct {
+	Direction OrderDirection                   `json:"direction"`
+	Field     *ChannelHealthProbeRunOrderField `json:"field"`
+}
+
+// DefaultChannelHealthProbeRunOrder is the default ordering of ChannelHealthProbeRun.
+var DefaultChannelHealthProbeRunOrder = &ChannelHealthProbeRunOrder{
+	Direction: entgql.OrderDirectionAsc,
+	Field: &ChannelHealthProbeRunOrderField{
+		Value: func(_m *ChannelHealthProbeRun) (ent.Value, error) {
+			return _m.ID, nil
+		},
+		column: channelhealthproberun.FieldID,
+		toTerm: channelhealthproberun.ByID,
+		toCursor: func(_m *ChannelHealthProbeRun) Cursor {
+			return Cursor{ID: _m.ID}
+		},
+	},
+}
+
+// ToEdge converts ChannelHealthProbeRun into ChannelHealthProbeRunEdge.
+func (_m *ChannelHealthProbeRun) ToEdge(order *ChannelHealthProbeRunOrder) *ChannelHealthProbeRunEdge {
+	if order == nil {
+		order = DefaultChannelHealthProbeRunOrder
+	}
+	return &ChannelHealthProbeRunEdge{
 		Node:   _m,
 		Cursor: order.Field.toCursor(_m),
 	}

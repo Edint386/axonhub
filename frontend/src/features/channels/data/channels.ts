@@ -154,6 +154,11 @@ const CREATE_CHANNEL_MUTATION = `
             authCookie
           }
         }
+        healthProbe {
+          enabled
+          intervalMinutes
+          models { modelID enabled stream }
+        }
       }
       orderingWeight
       priority
@@ -232,6 +237,11 @@ const DUPLICATE_CHANNEL_MUTATION = `
             workspaceId
             authCookie
           }
+        }
+        healthProbe {
+          enabled
+          intervalMinutes
+          models { modelID enabled stream }
         }
       }
       orderingWeight
@@ -312,6 +322,11 @@ const BULK_CREATE_CHANNELS_MUTATION = `
             authCookie
           }
         }
+        healthProbe {
+          enabled
+          intervalMinutes
+          models { modelID enabled stream }
+        }
       }
       orderingWeight
       priority
@@ -390,6 +405,11 @@ const UPDATE_CHANNEL_MUTATION = `
             workspaceId
             authCookie
           }
+        }
+        healthProbe {
+          enabled
+          intervalMinutes
+          models { modelID enabled stream }
         }
       }
       orderingWeight
@@ -596,6 +616,11 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
               workspaceId
               authCookie
             }
+          }
+          healthProbe {
+            enabled
+            intervalMinutes
+            models { modelID enabled stream }
           }
         }
       }
@@ -833,6 +858,11 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
               authCookie
             }
           }
+          healthProbe {
+            enabled
+            intervalMinutes
+            models { modelID enabled stream }
+          }
         }
       }
     }
@@ -988,6 +1018,11 @@ const QUERY_CHANNELS_QUERY = `
                 workspaceId
                 authCookie
               }
+            }
+            healthProbe {
+              enabled
+              intervalMinutes
+              models { modelID enabled stream }
             }
           }
           orderingWeight

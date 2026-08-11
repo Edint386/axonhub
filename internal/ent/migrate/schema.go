@@ -133,6 +133,60 @@ var (
 			},
 		},
 	}
+	// ChannelHealthProbeRunsColumns holds the columns for the "channel_health_probe_runs" table.
+	ChannelHealthProbeRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "model_id", Type: field.TypeString},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"manual", "scheduled"}},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "healthy", "unhealthy"}},
+		{Name: "stream", Type: field.TypeBool},
+		{Name: "ttfb_ms", Type: field.TypeFloat64, Nullable: true},
+		{Name: "ttft_ms", Type: field.TypeFloat64, Nullable: true},
+		{Name: "total_ms", Type: field.TypeFloat64, Default: 0},
+		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "schedule_key", Type: field.TypeString, Nullable: true},
+		{Name: "started_at", Type: field.TypeTime},
+		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "channel_id", Type: field.TypeInt},
+	}
+	// ChannelHealthProbeRunsTable holds the schema information for the "channel_health_probe_runs" table.
+	ChannelHealthProbeRunsTable = &schema.Table{
+		Name:       "channel_health_probe_runs",
+		Columns:    ChannelHealthProbeRunsColumns,
+		PrimaryKey: []*schema.Column{ChannelHealthProbeRunsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "channel_health_probe_runs_channels_health_probe_runs",
+				Columns:    []*schema.Column{ChannelHealthProbeRunsColumns[14]},
+				RefColumns: []*schema.Column{ChannelsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "channel_health_probe_runs_by_channel_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ChannelHealthProbeRunsColumns[14], ChannelHealthProbeRunsColumns[1]},
+			},
+			{
+				Name:    "channel_health_probe_runs_by_channel_model_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ChannelHealthProbeRunsColumns[14], ChannelHealthProbeRunsColumns[3], ChannelHealthProbeRunsColumns[1]},
+			},
+			{
+				Name:    "channel_health_probe_runs_by_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ChannelHealthProbeRunsColumns[5], ChannelHealthProbeRunsColumns[1]},
+			},
+			{
+				Name:    "channel_health_probe_runs_by_schedule_key",
+				Unique:  true,
+				Columns: []*schema.Column{ChannelHealthProbeRunsColumns[11]},
+			},
+		},
+	}
 	// ChannelModelPricesColumns holds the columns for the "channel_model_prices" table.
 	ChannelModelPricesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -1039,6 +1093,7 @@ var (
 		APIKeysTable,
 		APIKeyProfileTemplatesTable,
 		ChannelsTable,
+		ChannelHealthProbeRunsTable,
 		ChannelModelPricesTable,
 		ChannelModelPriceVersionsTable,
 		ChannelOverrideTemplatesTable,
@@ -1068,6 +1123,7 @@ func init() {
 	APIKeysTable.ForeignKeys[0].RefTable = ProjectsTable
 	APIKeysTable.ForeignKeys[1].RefTable = UsersTable
 	APIKeyProfileTemplatesTable.ForeignKeys[0].RefTable = ProjectsTable
+	ChannelHealthProbeRunsTable.ForeignKeys[0].RefTable = ChannelsTable
 	ChannelModelPricesTable.ForeignKeys[0].RefTable = ChannelsTable
 	ChannelModelPriceVersionsTable.ForeignKeys[0].RefTable = ChannelModelPricesTable
 	ChannelOverrideTemplatesTable.ForeignKeys[0].RefTable = UsersTable

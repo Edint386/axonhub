@@ -22,6 +22,11 @@ var defaultStoragePolicy = StoragePolicy{
 			Enabled:      false,
 			CleanupDays:  30,
 		},
+		{
+			ResourceType: CleanupResourceChannelHealthProbeRuns,
+			Enabled:      true,
+			CleanupDays:  30,
+		},
 	},
 }
 

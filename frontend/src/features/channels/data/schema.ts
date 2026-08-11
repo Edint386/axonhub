@@ -331,6 +331,20 @@ export const channelProviderQuotaSettingsSchema = z.object({
 });
 export type ChannelProviderQuotaSettings = z.infer<typeof channelProviderQuotaSettingsSchema>;
 
+export const channelHealthProbeModelSchema = z.object({
+  modelID: z.string(),
+  enabled: z.boolean(),
+  stream: z.boolean(),
+});
+export type ChannelHealthProbeModel = z.infer<typeof channelHealthProbeModelSchema>;
+
+export const channelHealthProbeSettingsSchema = z.object({
+  enabled: z.boolean(),
+  intervalMinutes: z.number().int().positive(),
+  models: z.array(channelHealthProbeModelSchema),
+});
+export type ChannelHealthProbeSettings = z.infer<typeof channelHealthProbeSettingsSchema>;
+
 // Channel Settings
 export const channelSettingsSchema = z.object({
   extraModelPrefix: z.string().optional(),
@@ -350,6 +364,7 @@ export const channelSettingsSchema = z.object({
   retryableStatusCodes: z.array(z.number().int().min(400).max(599)).optional().nullable(),
   retryableErrorPatterns: z.array(retryableErrorPatternSchema).optional().nullable(),
   providerQuota: channelProviderQuotaSettingsSchema.optional().nullable(),
+  healthProbe: channelHealthProbeSettingsSchema.optional().nullable(),
 });
 
 export type ChannelSettings = z.infer<typeof channelSettingsSchema>;

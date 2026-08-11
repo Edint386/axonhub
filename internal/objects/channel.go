@@ -223,6 +223,43 @@ type ChannelSettings struct {
 	// ProviderQuota stores provider-specific credentials used only for quota
 	// polling. Keep upstream request credentials in ChannelCredentials.
 	ProviderQuota *ChannelProviderQuotaSettings `json:"providerQuota,omitempty"`
+
+	// HealthProbe configures synthetic, credential-backed channel health probes.
+	// It is intentionally separate from passive request-derived channel probes.
+	HealthProbe *ChannelHealthProbeSettings `json:"healthProbe,omitempty"`
+}
+
+// ChannelHealthProbeSettings controls scheduled generation probes for one channel.
+// An empty/nil setting means active probing is disabled.
+type ChannelHealthProbeSettings struct {
+	Enabled         bool                      `json:"enabled"`
+	IntervalMinutes int                       `json:"intervalMinutes"`
+	Models          []ChannelHealthProbeModel `json:"models,omitempty"`
+}
+
+// ChannelHealthProbeModel selects one model and request mode for active probing.
+type ChannelHealthProbeModel struct {
+	ModelID string `json:"modelID"`
+	Enabled bool   `json:"enabled"`
+	Stream  bool   `json:"stream"`
+}
+
+const DefaultChannelHealthProbeIntervalMinutes = 5
+
+// Normalize fills defaults and removes whitespace from an active probe policy.
+// Validation is kept separate so callers can normalize old JSON before checking it.
+func (s *ChannelHealthProbeSettings) Normalize() {
+	if s == nil {
+		return
+	}
+
+	if s.IntervalMinutes <= 0 {
+		s.IntervalMinutes = DefaultChannelHealthProbeIntervalMinutes
+	}
+
+	for i := range s.Models {
+		s.Models[i].ModelID = strings.TrimSpace(s.Models[i].ModelID)
+	}
 }
 
 type RetryableErrorPattern struct {

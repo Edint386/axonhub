@@ -17,6 +17,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/channeloverridetemplate"
@@ -61,6 +62,11 @@ var channelImplementors = []string{"Channel", "Node"}
 
 // IsNode implements the Node interface check for GQLGen.
 func (*Channel) IsNode() {}
+
+var channelhealthproberunImplementors = []string{"ChannelHealthProbeRun", "Node"}
+
+// IsNode implements the Node interface check for GQLGen.
+func (*ChannelHealthProbeRun) IsNode() {}
 
 var channelmodelpriceImplementors = []string{"ChannelModelPrice", "Node"}
 
@@ -248,6 +254,15 @@ func (c *Client) noder(ctx context.Context, table string, id int) (Noder, error)
 			Where(channel.ID(id))
 		if fc := graphql.GetFieldContext(ctx); fc != nil {
 			if err := query.collectField(ctx, true, graphql.GetOperationContext(ctx), fc.Field, nil, channelImplementors...); err != nil {
+				return nil, err
+			}
+		}
+		return query.Only(ctx)
+	case channelhealthproberun.Table:
+		query := c.ChannelHealthProbeRun.Query().
+			Where(channelhealthproberun.ID(id))
+		if fc := graphql.GetFieldContext(ctx); fc != nil {
+			if err := query.collectField(ctx, true, graphql.GetOperationContext(ctx), fc.Field, nil, channelhealthproberunImplementors...); err != nil {
 				return nil, err
 			}
 		}
@@ -550,6 +565,22 @@ func (c *Client) noders(ctx context.Context, table string, ids []int) ([]Noder, 
 		query := c.Channel.Query().
 			Where(channel.IDIn(ids...))
 		query, err := query.CollectFields(ctx, channelImplementors...)
+		if err != nil {
+			return nil, err
+		}
+		nodes, err := query.All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, node := range nodes {
+			for _, noder := range idmap[node.ID] {
+				*noder = node
+			}
+		}
+	case channelhealthproberun.Table:
+		query := c.ChannelHealthProbeRun.Query().
+			Where(channelhealthproberun.IDIn(ids...))
+		query, err := query.CollectFields(ctx, channelhealthproberunImplementors...)
 		if err != nil {
 			return nil, err
 		}

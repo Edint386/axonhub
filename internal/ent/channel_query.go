@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/ent/predicate"
@@ -33,6 +34,7 @@ type ChannelQuery struct {
 	withRequests                *RequestQuery
 	withExecutions              *RequestExecutionQuery
 	withUsageLogs               *UsageLogQuery
+	withHealthProbeRuns         *ChannelHealthProbeRunQuery
 	withChannelProbes           *ChannelProbeQuery
 	withChannelModelPrices      *ChannelModelPriceQuery
 	withProviderQuotaStatus     *ProviderQuotaStatusQuery
@@ -41,6 +43,7 @@ type ChannelQuery struct {
 	withNamedRequests           map[string]*RequestQuery
 	withNamedExecutions         map[string]*RequestExecutionQuery
 	withNamedUsageLogs          map[string]*UsageLogQuery
+	withNamedHealthProbeRuns    map[string]*ChannelHealthProbeRunQuery
 	withNamedChannelProbes      map[string]*ChannelProbeQuery
 	withNamedChannelModelPrices map[string]*ChannelModelPriceQuery
 	// intermediate query (i.e. traversal path).
@@ -138,6 +141,28 @@ func (_q *ChannelQuery) QueryUsageLogs() *UsageLogQuery {
 			sqlgraph.From(channel.Table, channel.FieldID, selector),
 			sqlgraph.To(usagelog.Table, usagelog.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, channel.UsageLogsTable, channel.UsageLogsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryHealthProbeRuns chains the current query on the "health_probe_runs" edge.
+func (_q *ChannelQuery) QueryHealthProbeRuns() *ChannelHealthProbeRunQuery {
+	query := (&ChannelHealthProbeRunClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(channel.Table, channel.FieldID, selector),
+			sqlgraph.To(channelhealthproberun.Table, channelhealthproberun.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, channel.HealthProbeRunsTable, channel.HealthProbeRunsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -406,6 +431,7 @@ func (_q *ChannelQuery) Clone() *ChannelQuery {
 		withRequests:            _q.withRequests.Clone(),
 		withExecutions:          _q.withExecutions.Clone(),
 		withUsageLogs:           _q.withUsageLogs.Clone(),
+		withHealthProbeRuns:     _q.withHealthProbeRuns.Clone(),
 		withChannelProbes:       _q.withChannelProbes.Clone(),
 		withChannelModelPrices:  _q.withChannelModelPrices.Clone(),
 		withProviderQuotaStatus: _q.withProviderQuotaStatus.Clone(),
@@ -446,6 +472,17 @@ func (_q *ChannelQuery) WithUsageLogs(opts ...func(*UsageLogQuery)) *ChannelQuer
 		opt(query)
 	}
 	_q.withUsageLogs = query
+	return _q
+}
+
+// WithHealthProbeRuns tells the query-builder to eager-load the nodes that are connected to
+// the "health_probe_runs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ChannelQuery) WithHealthProbeRuns(opts ...func(*ChannelHealthProbeRunQuery)) *ChannelQuery {
+	query := (&ChannelHealthProbeRunClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withHealthProbeRuns = query
 	return _q
 }
 
@@ -566,10 +603,11 @@ func (_q *ChannelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chan
 	var (
 		nodes       = []*Channel{}
 		_spec       = _q.querySpec()
-		loadedTypes = [6]bool{
+		loadedTypes = [7]bool{
 			_q.withRequests != nil,
 			_q.withExecutions != nil,
 			_q.withUsageLogs != nil,
+			_q.withHealthProbeRuns != nil,
 			_q.withChannelProbes != nil,
 			_q.withChannelModelPrices != nil,
 			_q.withProviderQuotaStatus != nil,
@@ -617,6 +655,15 @@ func (_q *ChannelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chan
 			return nil, err
 		}
 	}
+	if query := _q.withHealthProbeRuns; query != nil {
+		if err := _q.loadHealthProbeRuns(ctx, query, nodes,
+			func(n *Channel) { n.Edges.HealthProbeRuns = []*ChannelHealthProbeRun{} },
+			func(n *Channel, e *ChannelHealthProbeRun) {
+				n.Edges.HealthProbeRuns = append(n.Edges.HealthProbeRuns, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
 	if query := _q.withChannelProbes; query != nil {
 		if err := _q.loadChannelProbes(ctx, query, nodes,
 			func(n *Channel) { n.Edges.ChannelProbes = []*ChannelProbe{} },
@@ -657,6 +704,13 @@ func (_q *ChannelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chan
 		if err := _q.loadUsageLogs(ctx, query, nodes,
 			func(n *Channel) { n.appendNamedUsageLogs(name) },
 			func(n *Channel, e *UsageLog) { n.appendNamedUsageLogs(name, e) }); err != nil {
+			return nil, err
+		}
+	}
+	for name, query := range _q.withNamedHealthProbeRuns {
+		if err := _q.loadHealthProbeRuns(ctx, query, nodes,
+			func(n *Channel) { n.appendNamedHealthProbeRuns(name) },
+			func(n *Channel, e *ChannelHealthProbeRun) { n.appendNamedHealthProbeRuns(name, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -757,6 +811,36 @@ func (_q *ChannelQuery) loadUsageLogs(ctx context.Context, query *UsageLogQuery,
 	}
 	query.Where(predicate.UsageLog(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(channel.UsageLogsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ChannelID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "channel_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ChannelQuery) loadHealthProbeRuns(ctx context.Context, query *ChannelHealthProbeRunQuery, nodes []*Channel, init func(*Channel), assign func(*Channel, *ChannelHealthProbeRun)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Channel)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(channelhealthproberun.FieldChannelID)
+	}
+	query.Where(predicate.ChannelHealthProbeRun(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(channel.HealthProbeRunsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -992,6 +1076,20 @@ func (_q *ChannelQuery) WithNamedUsageLogs(name string, opts ...func(*UsageLogQu
 		_q.withNamedUsageLogs = make(map[string]*UsageLogQuery)
 	}
 	_q.withNamedUsageLogs[name] = query
+	return _q
+}
+
+// WithNamedHealthProbeRuns tells the query-builder to eager-load the nodes that are connected to the "health_probe_runs"
+// edge with the given name. The optional arguments are used to configure the query builder of the edge.
+func (_q *ChannelQuery) WithNamedHealthProbeRuns(name string, opts ...func(*ChannelHealthProbeRunQuery)) *ChannelQuery {
+	query := (&ChannelHealthProbeRunClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	if _q.withNamedHealthProbeRuns == nil {
+		_q.withNamedHealthProbeRuns = make(map[string]*ChannelHealthProbeRunQuery)
+	}
+	_q.withNamedHealthProbeRuns[name] = query
 	return _q
 }
 

@@ -34,6 +34,7 @@ import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedDataStoragesIndexRouteImport } from './routes/_authenticated/data-storages/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
+import { Route as AuthenticatedChannelHealthIndexRouteImport } from './routes/_authenticated/channel-health/index'
 import { Route as AuthenticatedApiKeysIndexRouteImport } from './routes/_authenticated/api-keys/index'
 import { Route as AuthenticatedAnalyticsIndexRouteImport } from './routes/_authenticated/analytics/index'
 import { Route as OauthOidcIdpCallbackRouteImport } from './routes/oauth/oidc/idp-callback'
@@ -190,6 +191,12 @@ const AuthenticatedChannelsIndexRoute =
     path: '/channels/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedChannelHealthIndexRoute =
+  AuthenticatedChannelHealthIndexRouteImport.update({
+    id: '/channel-health/',
+    path: '/channel-health/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedApiKeysIndexRoute =
   AuthenticatedApiKeysIndexRouteImport.update({
     id: '/api-keys/',
@@ -338,6 +345,7 @@ export interface FileRoutesByFullPath {
   '/oauth/oidc/idp-callback': typeof OauthOidcIdpCallbackRoute
   '/analytics/': typeof AuthenticatedAnalyticsIndexRoute
   '/api-keys/': typeof AuthenticatedApiKeysIndexRoute
+  '/channel-health/': typeof AuthenticatedChannelHealthIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/chats/': typeof AuthenticatedChatsIndexRoute
   '/data-storages/': typeof AuthenticatedDataStoragesIndexRoute
@@ -384,6 +392,7 @@ export interface FileRoutesByTo {
   '/oauth/oidc/idp-callback': typeof OauthOidcIdpCallbackRoute
   '/analytics': typeof AuthenticatedAnalyticsIndexRoute
   '/api-keys': typeof AuthenticatedApiKeysIndexRoute
+  '/channel-health': typeof AuthenticatedChannelHealthIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/data-storages': typeof AuthenticatedDataStoragesIndexRoute
@@ -433,6 +442,7 @@ export interface FileRoutesById {
   '/oauth/oidc/idp-callback': typeof OauthOidcIdpCallbackRoute
   '/_authenticated/analytics/': typeof AuthenticatedAnalyticsIndexRoute
   '/_authenticated/api-keys/': typeof AuthenticatedApiKeysIndexRoute
+  '/_authenticated/channel-health/': typeof AuthenticatedChannelHealthIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/data-storages/': typeof AuthenticatedDataStoragesIndexRoute
@@ -482,6 +492,7 @@ export interface FileRouteTypes {
     | '/oauth/oidc/idp-callback'
     | '/analytics/'
     | '/api-keys/'
+    | '/channel-health/'
     | '/channels/'
     | '/chats/'
     | '/data-storages/'
@@ -528,6 +539,7 @@ export interface FileRouteTypes {
     | '/oauth/oidc/idp-callback'
     | '/analytics'
     | '/api-keys'
+    | '/channel-health'
     | '/channels'
     | '/chats'
     | '/data-storages'
@@ -576,6 +588,7 @@ export interface FileRouteTypes {
     | '/oauth/oidc/idp-callback'
     | '/_authenticated/analytics/'
     | '/_authenticated/api-keys/'
+    | '/_authenticated/channel-health/'
     | '/_authenticated/channels/'
     | '/_authenticated/chats/'
     | '/_authenticated/data-storages/'
@@ -793,6 +806,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChannelsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/channel-health/': {
+      id: '/_authenticated/channel-health/'
+      path: '/channel-health'
+      fullPath: '/channel-health/'
+      preLoaderRoute: typeof AuthenticatedChannelHealthIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/api-keys/': {
       id: '/_authenticated/api-keys/'
       path: '/api-keys'
@@ -974,6 +994,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRequestsRequestIdRoute: typeof AuthenticatedRequestsRequestIdRoute
   AuthenticatedAnalyticsIndexRoute: typeof AuthenticatedAnalyticsIndexRoute
   AuthenticatedApiKeysIndexRoute: typeof AuthenticatedApiKeysIndexRoute
+  AuthenticatedChannelHealthIndexRoute: typeof AuthenticatedChannelHealthIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedDataStoragesIndexRoute: typeof AuthenticatedDataStoragesIndexRoute
@@ -1008,6 +1029,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRequestsRequestIdRoute: AuthenticatedRequestsRequestIdRoute,
   AuthenticatedAnalyticsIndexRoute: AuthenticatedAnalyticsIndexRoute,
   AuthenticatedApiKeysIndexRoute: AuthenticatedApiKeysIndexRoute,
+  AuthenticatedChannelHealthIndexRoute: AuthenticatedChannelHealthIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedDataStoragesIndexRoute: AuthenticatedDataStoragesIndexRoute,

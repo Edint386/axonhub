@@ -115,6 +115,7 @@ export function mergeChannelSettingsForUpdate(
     retryableStatusCodes: pick('retryableStatusCodes', existing?.retryableStatusCodes ?? []),
     retryableErrorPatterns: pick('retryableErrorPatterns', existing?.retryableErrorPatterns ?? []),
     providerQuota: pick('providerQuota', existing?.providerQuota ?? null),
+    healthProbe: pick('healthProbe', existing?.healthProbe ?? null),
   };
 }
 
