@@ -45,6 +45,8 @@ const (
 	FieldAutoSyncSupportedModels = "auto_sync_supported_models"
 	// FieldAutoSyncModelPattern holds the string denoting the auto_sync_model_pattern field in the database.
 	FieldAutoSyncModelPattern = "auto_sync_model_pattern"
+	// FieldModelPriceMultiplier holds the string denoting the model_price_multiplier field in the database.
+	FieldModelPriceMultiplier = "model_price_multiplier"
 	// FieldTags holds the string denoting the tags field in the database.
 	FieldTags = "tags"
 	// FieldDefaultTestModel holds the string denoting the default_test_model field in the database.
@@ -137,6 +139,7 @@ var Columns = []string{
 	FieldManualModels,
 	FieldAutoSyncSupportedModels,
 	FieldAutoSyncModelPattern,
+	FieldModelPriceMultiplier,
 	FieldTags,
 	FieldDefaultTestModel,
 	FieldPolicies,
@@ -183,6 +186,10 @@ var (
 	DefaultAutoSyncSupportedModels bool
 	// DefaultAutoSyncModelPattern holds the default value on creation for the "auto_sync_model_pattern" field.
 	DefaultAutoSyncModelPattern string
+	// DefaultModelPriceMultiplier holds the default value on creation for the "model_price_multiplier" field.
+	DefaultModelPriceMultiplier float64
+	// ModelPriceMultiplierValidator is a validator for the "model_price_multiplier" field. It is called by the builders before save.
+	ModelPriceMultiplierValidator func(float64) error
 	// DefaultTags holds the default value on creation for the "tags" field.
 	DefaultTags []string
 	// DefaultPolicies holds the default value on creation for the "policies" field.
@@ -357,6 +364,11 @@ func ByAutoSyncSupportedModels(opts ...sql.OrderTermOption) OrderOption {
 // ByAutoSyncModelPattern orders the results by the auto_sync_model_pattern field.
 func ByAutoSyncModelPattern(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAutoSyncModelPattern, opts...).ToFunc()
+}
+
+// ByModelPriceMultiplier orders the results by the model_price_multiplier field.
+func ByModelPriceMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldModelPriceMultiplier, opts...).ToFunc()
 }
 
 // ByDefaultTestModel orders the results by the default_test_model field.

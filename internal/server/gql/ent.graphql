@@ -419,6 +419,10 @@ type Channel implements Node {
   Regex pattern to filter models during auto-sync. Empty string means no filtering.
   """
   autoSyncModelPattern: String
+  """
+  Multiplier applied to this channel's base model prices when calculating usage cost.
+  """
+  modelPriceMultiplier: Float!
   tags: [String!]
   defaultTestModel: String!
   policies: ChannelPolicies @goField(forceResolver: true)
@@ -1438,6 +1442,17 @@ input ChannelWhereInput {
   autoSyncModelPatternNotNil: Boolean
   autoSyncModelPatternEqualFold: String
   autoSyncModelPatternContainsFold: String
+  """
+  model_price_multiplier field predicates
+  """
+  modelPriceMultiplier: Float
+  modelPriceMultiplierNEQ: Float
+  modelPriceMultiplierIn: [Float!]
+  modelPriceMultiplierNotIn: [Float!]
+  modelPriceMultiplierGT: Float
+  modelPriceMultiplierGTE: Float
+  modelPriceMultiplierLT: Float
+  modelPriceMultiplierLTE: Float
   """
   default_test_model field predicates
   """

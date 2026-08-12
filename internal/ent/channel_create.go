@@ -163,6 +163,20 @@ func (_c *ChannelCreate) SetNillableAutoSyncModelPattern(v *string) *ChannelCrea
 	return _c
 }
 
+// SetModelPriceMultiplier sets the "model_price_multiplier" field.
+func (_c *ChannelCreate) SetModelPriceMultiplier(v float64) *ChannelCreate {
+	_c.mutation.SetModelPriceMultiplier(v)
+	return _c
+}
+
+// SetNillableModelPriceMultiplier sets the "model_price_multiplier" field if the given value is not nil.
+func (_c *ChannelCreate) SetNillableModelPriceMultiplier(v *float64) *ChannelCreate {
+	if v != nil {
+		_c.SetModelPriceMultiplier(*v)
+	}
+	return _c
+}
+
 // SetTags sets the "tags" field.
 func (_c *ChannelCreate) SetTags(v []string) *ChannelCreate {
 	_c.mutation.SetTags(v)
@@ -426,6 +440,10 @@ func (_c *ChannelCreate) defaults() error {
 		v := channel.DefaultAutoSyncModelPattern
 		_c.mutation.SetAutoSyncModelPattern(v)
 	}
+	if _, ok := _c.mutation.ModelPriceMultiplier(); !ok {
+		v := channel.DefaultModelPriceMultiplier
+		_c.mutation.SetModelPriceMultiplier(v)
+	}
 	if _, ok := _c.mutation.Tags(); !ok {
 		v := channel.DefaultTags
 		_c.mutation.SetTags(v)
@@ -485,6 +503,14 @@ func (_c *ChannelCreate) check() error {
 	}
 	if _, ok := _c.mutation.AutoSyncSupportedModels(); !ok {
 		return &ValidationError{Name: "auto_sync_supported_models", err: errors.New(`ent: missing required field "Channel.auto_sync_supported_models"`)}
+	}
+	if _, ok := _c.mutation.ModelPriceMultiplier(); !ok {
+		return &ValidationError{Name: "model_price_multiplier", err: errors.New(`ent: missing required field "Channel.model_price_multiplier"`)}
+	}
+	if v, ok := _c.mutation.ModelPriceMultiplier(); ok {
+		if err := channel.ModelPriceMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "model_price_multiplier", err: fmt.Errorf(`ent: validator failed for field "Channel.model_price_multiplier": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.DefaultTestModel(); !ok {
 		return &ValidationError{Name: "default_test_model", err: errors.New(`ent: missing required field "Channel.default_test_model"`)}
@@ -573,6 +599,10 @@ func (_c *ChannelCreate) createSpec() (*Channel, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AutoSyncModelPattern(); ok {
 		_spec.SetField(channel.FieldAutoSyncModelPattern, field.TypeString, value)
 		_node.AutoSyncModelPattern = value
+	}
+	if value, ok := _c.mutation.ModelPriceMultiplier(); ok {
+		_spec.SetField(channel.FieldModelPriceMultiplier, field.TypeFloat64, value)
+		_node.ModelPriceMultiplier = value
 	}
 	if value, ok := _c.mutation.Tags(); ok {
 		_spec.SetField(channel.FieldTags, field.TypeJSON, value)
@@ -929,6 +959,24 @@ func (u *ChannelUpsert) UpdateAutoSyncModelPattern() *ChannelUpsert {
 // ClearAutoSyncModelPattern clears the value of the "auto_sync_model_pattern" field.
 func (u *ChannelUpsert) ClearAutoSyncModelPattern() *ChannelUpsert {
 	u.SetNull(channel.FieldAutoSyncModelPattern)
+	return u
+}
+
+// SetModelPriceMultiplier sets the "model_price_multiplier" field.
+func (u *ChannelUpsert) SetModelPriceMultiplier(v float64) *ChannelUpsert {
+	u.Set(channel.FieldModelPriceMultiplier, v)
+	return u
+}
+
+// UpdateModelPriceMultiplier sets the "model_price_multiplier" field to the value that was provided on create.
+func (u *ChannelUpsert) UpdateModelPriceMultiplier() *ChannelUpsert {
+	u.SetExcluded(channel.FieldModelPriceMultiplier)
+	return u
+}
+
+// AddModelPriceMultiplier adds v to the "model_price_multiplier" field.
+func (u *ChannelUpsert) AddModelPriceMultiplier(v float64) *ChannelUpsert {
+	u.Add(channel.FieldModelPriceMultiplier, v)
 	return u
 }
 
@@ -1333,6 +1381,27 @@ func (u *ChannelUpsertOne) UpdateAutoSyncModelPattern() *ChannelUpsertOne {
 func (u *ChannelUpsertOne) ClearAutoSyncModelPattern() *ChannelUpsertOne {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearAutoSyncModelPattern()
+	})
+}
+
+// SetModelPriceMultiplier sets the "model_price_multiplier" field.
+func (u *ChannelUpsertOne) SetModelPriceMultiplier(v float64) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetModelPriceMultiplier(v)
+	})
+}
+
+// AddModelPriceMultiplier adds v to the "model_price_multiplier" field.
+func (u *ChannelUpsertOne) AddModelPriceMultiplier(v float64) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.AddModelPriceMultiplier(v)
+	})
+}
+
+// UpdateModelPriceMultiplier sets the "model_price_multiplier" field to the value that was provided on create.
+func (u *ChannelUpsertOne) UpdateModelPriceMultiplier() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateModelPriceMultiplier()
 	})
 }
 
@@ -1929,6 +1998,27 @@ func (u *ChannelUpsertBulk) UpdateAutoSyncModelPattern() *ChannelUpsertBulk {
 func (u *ChannelUpsertBulk) ClearAutoSyncModelPattern() *ChannelUpsertBulk {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearAutoSyncModelPattern()
+	})
+}
+
+// SetModelPriceMultiplier sets the "model_price_multiplier" field.
+func (u *ChannelUpsertBulk) SetModelPriceMultiplier(v float64) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetModelPriceMultiplier(v)
+	})
+}
+
+// AddModelPriceMultiplier adds v to the "model_price_multiplier" field.
+func (u *ChannelUpsertBulk) AddModelPriceMultiplier(v float64) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.AddModelPriceMultiplier(v)
+	})
+}
+
+// UpdateModelPriceMultiplier sets the "model_price_multiplier" field to the value that was provided on create.
+func (u *ChannelUpsertBulk) UpdateModelPriceMultiplier() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateModelPriceMultiplier()
 	})
 }
 

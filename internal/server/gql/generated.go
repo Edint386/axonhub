@@ -355,6 +355,7 @@ type ComplexityRoot struct {
 		ID                      func(childComplexity int) int
 		LiveLimiterStats        func(childComplexity int) int
 		ManualModels            func(childComplexity int) int
+		ModelPriceMultiplier    func(childComplexity int) int
 		Name                    func(childComplexity int) int
 		OrderingWeight          func(childComplexity int) int
 		Policies                func(childComplexity int) int
@@ -1013,7 +1014,7 @@ type ComplexityRoot struct {
 		RetainTrace                           func(childComplexity int, id objects.GUID) int
 		RotateAPIKey                          func(childComplexity int, id objects.GUID) int
 		SaveChannelEndpoints                  func(childComplexity int, input biz.SaveChannelEndpointsInput) int
-		SaveChannelModelPrices                func(childComplexity int, channelID objects.GUID, input []*biz.SaveChannelModelPriceInput) int
+		SaveChannelModelPrices                func(childComplexity int, channelID objects.GUID, multiplier *float64, input []*biz.SaveChannelModelPriceInput) int
 		SaveProxyPreset                       func(childComplexity int, input biz.ProxyPreset) int
 		SyncChannelModels                     func(childComplexity int, channelID objects.GUID, pattern *string) int
 		TestChannel                           func(childComplexity int, input TestChannelInput) int
@@ -2304,7 +2305,7 @@ type MutationResolver interface {
 	BulkEnablePromptProtectionRules(ctx context.Context, ids []*objects.GUID) (bool, error)
 	BulkDisablePromptProtectionRules(ctx context.Context, ids []*objects.GUID) (bool, error)
 	PreviewPromptProtectionRule(ctx context.Context, input PromptProtectionRulePreviewInput) (*PromptProtectionRulePreviewResult, error)
-	SaveChannelModelPrices(ctx context.Context, channelID objects.GUID, input []*biz.SaveChannelModelPriceInput) ([]*ent.ChannelModelPrice, error)
+	SaveChannelModelPrices(ctx context.Context, channelID objects.GUID, multiplier *float64, input []*biz.SaveChannelModelPriceInput) ([]*ent.ChannelModelPrice, error)
 }
 type OIDCIdentityResolver interface {
 	ID(ctx context.Context, obj *ent.OIDCIdentity) (*objects.GUID, error)
@@ -3500,6 +3501,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Channel.ManualModels(childComplexity), true
+	case "Channel.modelPriceMultiplier":
+		if e.complexity.Channel.ModelPriceMultiplier == nil {
+			break
+		}
+
+		return e.complexity.Channel.ModelPriceMultiplier(childComplexity), true
 	case "Channel.name":
 		if e.complexity.Channel.Name == nil {
 			break
@@ -6412,7 +6419,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.SaveChannelModelPrices(childComplexity, args["channelId"].(objects.GUID), args["input"].([]*biz.SaveChannelModelPriceInput)), true
+		return e.complexity.Mutation.SaveChannelModelPrices(childComplexity, args["channelId"].(objects.GUID), args["multiplier"].(*float64), args["input"].([]*biz.SaveChannelModelPriceInput)), true
 	case "Mutation.saveProxyPreset":
 		if e.complexity.Mutation.SaveProxyPreset == nil {
 			break
@@ -12838,11 +12845,16 @@ func (ec *executionContext) field_Mutation_saveChannelModelPrices_args(ctx conte
 		return nil, err
 	}
 	args["channelId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSaveChannelModelPriceInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐSaveChannelModelPriceInputᚄ)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "multiplier", ec.unmarshalOFloat2ᚖfloat64)
 	if err != nil {
 		return nil, err
 	}
-	args["input"] = arg1
+	args["multiplier"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSaveChannelModelPriceInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐSaveChannelModelPriceInputᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg2
 	return args, nil
 }
 
@@ -18505,6 +18517,8 @@ func (ec *executionContext) fieldContext_ApplyChannelOverrideTemplatePayload_cha
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -19567,6 +19581,8 @@ func (ec *executionContext) fieldContext_BulkImportChannelsResult_channels(_ con
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -19718,6 +19734,8 @@ func (ec *executionContext) fieldContext_BulkUpdateChannelOrderingResult_channel
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -20079,6 +20097,35 @@ func (ec *executionContext) fieldContext_Channel_autoSyncModelPattern(_ context.
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Channel_modelPriceMultiplier(ctx context.Context, field graphql.CollectedField, obj *ent.Channel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Channel_modelPriceMultiplier,
+		func(ctx context.Context) (any, error) {
+			return obj.ModelPriceMultiplier, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Channel_modelPriceMultiplier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Channel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
 		},
 	}
 	return fc, nil
@@ -21175,6 +21222,8 @@ func (ec *executionContext) fieldContext_ChannelEdge_node(_ context.Context, fie
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -21912,6 +21961,8 @@ func (ec *executionContext) fieldContext_ChannelModelPrice_channel(_ context.Con
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -23837,6 +23888,8 @@ func (ec *executionContext) fieldContext_ChannelProbe_channel(_ context.Context,
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -25814,6 +25867,8 @@ func (ec *executionContext) fieldContext_ClearChannelOverrideTemplatesPayload_ch
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -30413,6 +30468,8 @@ func (ec *executionContext) fieldContext_ModelChannelConnection_channel(_ contex
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -31578,6 +31635,8 @@ func (ec *executionContext) fieldContext_Mutation_createChannel(ctx context.Cont
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -31683,6 +31742,8 @@ func (ec *executionContext) fieldContext_Mutation_duplicateChannel(ctx context.C
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -31788,6 +31849,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateChannels(ctx context
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -31893,6 +31956,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannel(ctx context.Cont
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -31998,6 +32063,8 @@ func (ec *executionContext) fieldContext_Mutation_saveChannelEndpoints(ctx conte
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -32103,6 +32170,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelStatus(ctx contex
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -37835,7 +37904,7 @@ func (ec *executionContext) _Mutation_saveChannelModelPrices(ctx context.Context
 		ec.fieldContext_Mutation_saveChannelModelPrices,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().SaveChannelModelPrices(ctx, fc.Args["channelId"].(objects.GUID), fc.Args["input"].([]*biz.SaveChannelModelPriceInput))
+			return ec.resolvers.Mutation().SaveChannelModelPrices(ctx, fc.Args["channelId"].(objects.GUID), fc.Args["multiplier"].(*float64), fc.Args["input"].([]*biz.SaveChannelModelPriceInput))
 		},
 		nil,
 		ec.marshalNChannelModelPrice2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐChannelModelPriceᚄ,
@@ -42848,6 +42917,8 @@ func (ec *executionContext) fieldContext_ProviderQuotaStatus_channel(_ context.C
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -44118,6 +44189,8 @@ func (ec *executionContext) fieldContext_Query_allChannelSummarys(ctx context.Co
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -48332,6 +48405,8 @@ func (ec *executionContext) fieldContext_Request_channel(_ context.Context, fiel
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -49500,6 +49575,8 @@ func (ec *executionContext) fieldContext_RequestExecution_channel(_ context.Cont
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -57130,6 +57207,8 @@ func (ec *executionContext) fieldContext_UnassociatedChannel_channel(_ context.C
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -58209,6 +58288,8 @@ func (ec *executionContext) fieldContext_UsageLog_channel(_ context.Context, fie
 				return ec.fieldContext_Channel_autoSyncSupportedModels(ctx, field)
 			case "autoSyncModelPattern":
 				return ec.fieldContext_Channel_autoSyncModelPattern(ctx, field)
+			case "modelPriceMultiplier":
+				return ec.fieldContext_Channel_modelPriceMultiplier(ctx, field)
 			case "tags":
 				return ec.fieldContext_Channel_tags(ctx, field)
 			case "defaultTestModel":
@@ -68008,7 +68089,7 @@ func (ec *executionContext) unmarshalInputChannelWhereInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "type", "typeNEQ", "typeIn", "typeNotIn", "baseURL", "baseURLNEQ", "baseURLIn", "baseURLNotIn", "baseURLGT", "baseURLGTE", "baseURLLT", "baseURLLTE", "baseURLContains", "baseURLHasPrefix", "baseURLHasSuffix", "baseURLIsNil", "baseURLNotNil", "baseURLEqualFold", "baseURLContainsFold", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "autoSyncSupportedModels", "autoSyncSupportedModelsNEQ", "autoSyncModelPattern", "autoSyncModelPatternNEQ", "autoSyncModelPatternIn", "autoSyncModelPatternNotIn", "autoSyncModelPatternGT", "autoSyncModelPatternGTE", "autoSyncModelPatternLT", "autoSyncModelPatternLTE", "autoSyncModelPatternContains", "autoSyncModelPatternHasPrefix", "autoSyncModelPatternHasSuffix", "autoSyncModelPatternIsNil", "autoSyncModelPatternNotNil", "autoSyncModelPatternEqualFold", "autoSyncModelPatternContainsFold", "defaultTestModel", "defaultTestModelNEQ", "defaultTestModelIn", "defaultTestModelNotIn", "defaultTestModelGT", "defaultTestModelGTE", "defaultTestModelLT", "defaultTestModelLTE", "defaultTestModelContains", "defaultTestModelHasPrefix", "defaultTestModelHasSuffix", "defaultTestModelEqualFold", "defaultTestModelContainsFold", "orderingWeight", "orderingWeightNEQ", "orderingWeightIn", "orderingWeightNotIn", "orderingWeightGT", "orderingWeightGTE", "orderingWeightLT", "orderingWeightLTE", "priority", "priorityNEQ", "priorityIn", "priorityNotIn", "priorityGT", "priorityGTE", "priorityLT", "priorityLTE", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "remark", "remarkNEQ", "remarkIn", "remarkNotIn", "remarkGT", "remarkGTE", "remarkLT", "remarkLTE", "remarkContains", "remarkHasPrefix", "remarkHasSuffix", "remarkIsNil", "remarkNotNil", "remarkEqualFold", "remarkContainsFold", "hasRequests", "hasRequestsWith", "hasExecutions", "hasExecutionsWith", "hasUsageLogs", "hasUsageLogsWith", "hasChannelProbes", "hasChannelProbesWith", "hasChannelModelPrices", "hasChannelModelPricesWith", "hasProviderQuotaStatus", "hasProviderQuotaStatusWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "type", "typeNEQ", "typeIn", "typeNotIn", "baseURL", "baseURLNEQ", "baseURLIn", "baseURLNotIn", "baseURLGT", "baseURLGTE", "baseURLLT", "baseURLLTE", "baseURLContains", "baseURLHasPrefix", "baseURLHasSuffix", "baseURLIsNil", "baseURLNotNil", "baseURLEqualFold", "baseURLContainsFold", "name", "nameNEQ", "nameIn", "nameNotIn", "nameGT", "nameGTE", "nameLT", "nameLTE", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "autoSyncSupportedModels", "autoSyncSupportedModelsNEQ", "autoSyncModelPattern", "autoSyncModelPatternNEQ", "autoSyncModelPatternIn", "autoSyncModelPatternNotIn", "autoSyncModelPatternGT", "autoSyncModelPatternGTE", "autoSyncModelPatternLT", "autoSyncModelPatternLTE", "autoSyncModelPatternContains", "autoSyncModelPatternHasPrefix", "autoSyncModelPatternHasSuffix", "autoSyncModelPatternIsNil", "autoSyncModelPatternNotNil", "autoSyncModelPatternEqualFold", "autoSyncModelPatternContainsFold", "modelPriceMultiplier", "modelPriceMultiplierNEQ", "modelPriceMultiplierIn", "modelPriceMultiplierNotIn", "modelPriceMultiplierGT", "modelPriceMultiplierGTE", "modelPriceMultiplierLT", "modelPriceMultiplierLTE", "defaultTestModel", "defaultTestModelNEQ", "defaultTestModelIn", "defaultTestModelNotIn", "defaultTestModelGT", "defaultTestModelGTE", "defaultTestModelLT", "defaultTestModelLTE", "defaultTestModelContains", "defaultTestModelHasPrefix", "defaultTestModelHasSuffix", "defaultTestModelEqualFold", "defaultTestModelContainsFold", "orderingWeight", "orderingWeightNEQ", "orderingWeightIn", "orderingWeightNotIn", "orderingWeightGT", "orderingWeightGTE", "orderingWeightLT", "orderingWeightLTE", "priority", "priorityNEQ", "priorityIn", "priorityNotIn", "priorityGT", "priorityGTE", "priorityLT", "priorityLTE", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "remark", "remarkNEQ", "remarkIn", "remarkNotIn", "remarkGT", "remarkGTE", "remarkLT", "remarkLTE", "remarkContains", "remarkHasPrefix", "remarkHasSuffix", "remarkIsNil", "remarkNotNil", "remarkEqualFold", "remarkContainsFold", "hasRequests", "hasRequestsWith", "hasExecutions", "hasExecutionsWith", "hasUsageLogs", "hasUsageLogsWith", "hasChannelProbes", "hasChannelProbesWith", "hasChannelModelPrices", "hasChannelModelPricesWith", "hasProviderQuotaStatus", "hasProviderQuotaStatusWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -68607,6 +68688,62 @@ func (ec *executionContext) unmarshalInputChannelWhereInput(ctx context.Context,
 				return it, err
 			}
 			it.AutoSyncModelPatternContainsFold = data
+		case "modelPriceMultiplier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplier"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplier = data
+		case "modelPriceMultiplierNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplierNEQ"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplierNEQ = data
+		case "modelPriceMultiplierIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplierIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplierIn = data
+		case "modelPriceMultiplierNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplierNotIn"))
+			data, err := ec.unmarshalOFloat2ᚕfloat64ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplierNotIn = data
+		case "modelPriceMultiplierGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplierGT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplierGT = data
+		case "modelPriceMultiplierGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplierGTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplierGTE = data
+		case "modelPriceMultiplierLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplierLT"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplierLT = data
+		case "modelPriceMultiplierLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelPriceMultiplierLTE"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelPriceMultiplierLTE = data
 		case "defaultTestModel":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("defaultTestModel"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -91543,6 +91680,11 @@ func (ec *executionContext) _Channel(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "autoSyncModelPattern":
 			out.Values[i] = ec._Channel_autoSyncModelPattern(ctx, field, obj)
+		case "modelPriceMultiplier":
+			out.Values[i] = ec._Channel_modelPriceMultiplier(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "tags":
 			out.Values[i] = ec._Channel_tags(ctx, field, obj)
 		case "defaultTestModel":

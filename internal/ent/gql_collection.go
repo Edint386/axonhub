@@ -798,6 +798,11 @@ func (_q *ChannelQuery) collectField(ctx context.Context, oneNode bool, opCtx *g
 				selectedFields = append(selectedFields, channel.FieldAutoSyncModelPattern)
 				fieldSeen[channel.FieldAutoSyncModelPattern] = struct{}{}
 			}
+		case "modelPriceMultiplier":
+			if _, ok := fieldSeen[channel.FieldModelPriceMultiplier]; !ok {
+				selectedFields = append(selectedFields, channel.FieldModelPriceMultiplier)
+				fieldSeen[channel.FieldModelPriceMultiplier] = struct{}{}
+			}
 		case "tags":
 			if _, ok := fieldSeen[channel.FieldTags]; !ok {
 				selectedFields = append(selectedFields, channel.FieldTags)

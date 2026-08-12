@@ -109,6 +109,7 @@ var (
 		{Name: "manual_models", Type: field.TypeJSON, Nullable: true},
 		{Name: "auto_sync_supported_models", Type: field.TypeBool, Default: false},
 		{Name: "auto_sync_model_pattern", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "model_price_multiplier", Type: field.TypeFloat64, Default: 1},
 		{Name: "tags", Type: field.TypeJSON, Nullable: true},
 		{Name: "default_test_model", Type: field.TypeString},
 		{Name: "policies", Type: field.TypeJSON, Nullable: true},
