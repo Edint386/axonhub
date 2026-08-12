@@ -78,6 +78,7 @@
   "requests.filters.apiKey": "API Key",
   "requests.duration.firstToken": "First token {{duration}}",
   "requests.duration.total": "Total {{duration}}",
+  "requests.duration.failedAttempt": "Spent {{duration}}",
   "requests.tooltips.inputTokens": "Input tokens",
   "requests.tooltips.outputTokens": "Output tokens",
   "requests.tooltips.passThroughApplied": "Pass-through applied",

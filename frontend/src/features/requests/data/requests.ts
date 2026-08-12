@@ -64,15 +64,17 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
             metricsLatencyMs
             metricsFirstTokenLatencyMs
             metricsReasoningDurationMs
-            executions(first: 10, orderBy: { field: CREATED_AT, direction: DESC }) {
+            executions(first: 100, orderBy: { field: CREATED_AT, direction: DESC }) {
               edges {
                 node {
                   id
                   createdAt
+                  updatedAt
                   modelID
                   status
                   reasoningEffort
                   passThroughApplied${executionChannelFields}
+                  metricsLatencyMs
                 }
                 cursor
               }
@@ -256,6 +258,7 @@ function buildRequestExecutionsQuery(permissions: { canViewChannels: boolean }) 
                 stream
                 requestURL
                 passThroughApplied
+                metricsLatencyMs
                 metricsFirstTokenLatencyMs
                 metricsReasoningDurationMs
               }

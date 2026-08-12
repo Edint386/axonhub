@@ -55,7 +55,7 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
   } = useRequestExecutions(
     requestId,
     {
-      first: 10,
+      first: 100,
       orderBy: { field: 'CREATED_AT', direction: 'DESC' },
     },
     { projectId }
@@ -787,7 +787,9 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
                                 {t('requests.columns.latency')}
                               </span>
                               <p className='text-muted-foreground font-mono text-sm'>
-                                {execution.status === 'completed' || execution.status === 'failed' ? formatLatency(calculateLatency(execution.createdAt, execution.updatedAt)) : '-'}
+                                {execution.status === 'completed' || execution.status === 'failed'
+                                  ? formatLatency(execution.metricsLatencyMs ?? calculateLatency(execution.createdAt, execution.updatedAt))
+                                  : '-'}
                               </p>
                             </div>
                             <div className='bg-background space-y-2 rounded-lg border p-3'>

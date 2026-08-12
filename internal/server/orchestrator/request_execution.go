@@ -122,6 +122,36 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawResponse(ctx context.Co
 	return response, nil
 }
 
+func executionLatencyMetrics(perf *biz.PerformanceRecord, observedAt time.Time) *biz.LatencyMetrics {
+	if perf == nil || perf.StartTime.IsZero() {
+		return nil
+	}
+
+	endTime := observedAt
+	if perf.RequestCompleted && !perf.EndTime.IsZero() {
+		endTime = perf.EndTime
+	}
+
+	latencyMs := biz.ClampLatency(endTime.Sub(perf.StartTime).Milliseconds())
+	metrics := &biz.LatencyMetrics{
+		LatencyMs: &latencyMs,
+	}
+
+	if perf.Stream && perf.FirstTokenTime != nil {
+		firstTokenLatencyMs := biz.ClampLatency(perf.FirstTokenTime.Sub(perf.StartTime).Milliseconds())
+		metrics.FirstTokenLatencyMs = &firstTokenLatencyMs
+	}
+
+	if perf.Stream {
+		reasoningDurationMs := perf.CalculateReasoningDurationMs()
+		if reasoningDurationMs > 0 {
+			metrics.ReasoningDurationMs = &reasoningDurationMs
+		}
+	}
+
+	return metrics
+}
+
 func (m *persistRequestExecutionMiddleware) OnOutboundLlmResponse(ctx context.Context, llmResp *llm.Response) (*llm.Response, error) {
 	state := m.outbound.state
 	if state == nil || state.RequestExec == nil {
@@ -132,41 +162,7 @@ func (m *persistRequestExecutionMiddleware) OnOutboundLlmResponse(ctx context.Co
 	persistCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// Build latency metrics from performance record
-	var metrics *biz.LatencyMetrics
-
-	if state.Perf != nil && !state.Perf.StartTime.IsZero() {
-		var (
-			firstTokenLatencyMs int64
-			requestLatencyMs    int64
-		)
-
-		if state.Perf.RequestCompleted && !state.Perf.EndTime.IsZero() {
-			firstTokenLatencyMs, requestLatencyMs, _ = state.Perf.Calculate()
-		} else {
-			requestLatencyMs = time.Since(state.Perf.StartTime).Milliseconds()
-			if state.Perf.Stream && state.Perf.FirstTokenTime != nil {
-				firstTokenLatencyMs = state.Perf.FirstTokenTime.Sub(state.Perf.StartTime).Milliseconds()
-			}
-
-			requestLatencyMs = biz.ClampLatency(requestLatencyMs)
-			firstTokenLatencyMs = biz.ClampLatency(firstTokenLatencyMs)
-		}
-
-		metrics = &biz.LatencyMetrics{
-			LatencyMs: &requestLatencyMs,
-		}
-		if state.Perf.Stream && state.Perf.FirstTokenTime != nil {
-			metrics.FirstTokenLatencyMs = &firstTokenLatencyMs
-		}
-
-		if state.Perf.Stream {
-			reasoningDurationMs := state.Perf.CalculateReasoningDurationMs()
-			if reasoningDurationMs > 0 {
-				metrics.ReasoningDurationMs = &reasoningDurationMs
-			}
-		}
-	}
+	metrics := executionLatencyMetrics(state.Perf, time.Now())
 
 	// Audio responses (binary TTS / non-JSON STT) must be converted to JSON-safe payloads
 	// before persisting into the JSON response_body column.
@@ -222,6 +218,7 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 		state.RequestExec.ID,
 		ExtractErrorMessage(err),
 		ExtractErrorInfo(err),
+		executionLatencyMetrics(state.Perf, time.Now()),
 	)
 	if updateErr != nil {
 		log.Warn(persistCtx, "Failed to update request execution status to failed", log.Cause(updateErr))
