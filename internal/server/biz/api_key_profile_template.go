@@ -129,7 +129,7 @@ func (s *APIKeyProfileTemplateService) UpdateTemplate(ctx context.Context, id in
 			if err := normalizeAndValidateProfileRoutingPolicy(profile); err != nil {
 				return err
 			}
-			if err := validateProfileLatencyThreshold(publishedProfile); err != nil {
+			if err := validateProfileLatencyThreshold(profile); err != nil {
 				return err
 			}
 
