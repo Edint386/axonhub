@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { graphqlRequest } from '@/gql/graphql';
 
 const activeChannelHealthProbeRunSchema = z.object({
@@ -29,9 +29,22 @@ const channelHealthProbeChannelSchema = z.object({
   channelID: z.string(),
   channelName: z.string(),
   channelStatus: z.string(),
+  priority: z.number(),
   enabled: z.boolean(),
   intervalMinutes: z.number(),
   models: z.array(channelHealthProbeModelOverviewSchema),
+});
+
+const channelHealthProbePolicySchema = z.object({
+  enabled: z.boolean(),
+  acceptableLatencyMs: z.number(),
+  extraChannels: z.number(),
+  apiKeyMaxFirstTokenLatencyMs: z.number().nullable().optional(),
+});
+
+const channelHealthProbeOverviewSchema = z.object({
+  channels: z.array(channelHealthProbeChannelSchema),
+  policy: channelHealthProbePolicySchema,
 });
 
 const channelHealthProbeHistoryPageSchema = z.object({
@@ -42,6 +55,8 @@ const channelHealthProbeHistoryPageSchema = z.object({
 export type ActiveChannelHealthProbeRun = z.infer<typeof activeChannelHealthProbeRunSchema>;
 export type ChannelHealthProbeModelOverview = z.infer<typeof channelHealthProbeModelOverviewSchema>;
 export type ChannelHealthProbeChannel = z.infer<typeof channelHealthProbeChannelSchema>;
+export type ChannelHealthProbePolicy = z.infer<typeof channelHealthProbePolicySchema>;
+export type ChannelHealthProbeOverview = z.infer<typeof channelHealthProbeOverviewSchema>;
 export type ChannelHealthProbeHistoryPage = z.infer<typeof channelHealthProbeHistoryPageSchema>;
 
 export interface ChannelHealthProbeModelInput {
@@ -61,6 +76,12 @@ export interface RunChannelHealthProbeInput {
   channelID: string;
   modelID: string;
   stream: boolean;
+}
+
+export interface UpdateChannelHealthProbePolicyInput {
+  enabled: boolean;
+  acceptableLatencyMs: number;
+  extraChannels: number;
 }
 
 export interface ChannelHealthProbeHistoryInput {
@@ -94,6 +115,7 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
       channelID
       channelName
       channelStatus
+      priority
       enabled
       intervalMinutes
       models {
@@ -104,6 +126,12 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
           ${CHANNEL_HEALTH_PROBE_RUN_FIELDS}
         }
       }
+    }
+    channelHealthProbePolicy {
+      enabled
+      acceptableLatencyMs
+      extraChannels
+      apiKeyMaxFirstTokenLatencyMs
     }
   }
 `;
@@ -125,6 +153,7 @@ const UPDATE_CHANNEL_HEALTH_PROBE_SETTINGS_MUTATION = `
       channelID
       channelName
       channelStatus
+      priority
       enabled
       intervalMinutes
       models {
@@ -135,6 +164,17 @@ const UPDATE_CHANNEL_HEALTH_PROBE_SETTINGS_MUTATION = `
           ${CHANNEL_HEALTH_PROBE_RUN_FIELDS}
         }
       }
+    }
+  }
+`;
+
+const UPDATE_CHANNEL_HEALTH_PROBE_POLICY_MUTATION = `
+  mutation UpdateChannelHealthProbePolicy($input: UpdateChannelHealthProbePolicyInput!) {
+    updateChannelHealthProbePolicy(input: $input) {
+      enabled
+      acceptableLatencyMs
+      extraChannels
+      apiKeyMaxFirstTokenLatencyMs
     }
   }
 `;
@@ -151,19 +191,43 @@ export function useChannelHealthProbeOverview() {
   return useQuery({
     queryKey: ['channel-health-probe-overview'],
     queryFn: async () => {
-      const data = await graphqlRequest<{ channelHealthProbeOverview: ChannelHealthProbeChannel[] }>(CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY);
-      return z.array(channelHealthProbeChannelSchema).parse(data.channelHealthProbeOverview);
+      const data = await graphqlRequest<{
+        channelHealthProbeOverview: ChannelHealthProbeChannel[];
+        channelHealthProbePolicy: ChannelHealthProbePolicy;
+      }>(CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY);
+      return channelHealthProbeOverviewSchema.parse({
+        channels: data.channelHealthProbeOverview,
+        policy: data.channelHealthProbePolicy,
+      });
     },
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   });
 }
 
+export function useUpdateChannelHealthProbePolicy() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: UpdateChannelHealthProbePolicyInput) => {
+      const data = await graphqlRequest<{ updateChannelHealthProbePolicy: ChannelHealthProbePolicy }>(
+        UPDATE_CHANNEL_HEALTH_PROBE_POLICY_MUTATION,
+        { input }
+      );
+      return channelHealthProbePolicySchema.parse(data.updateChannelHealthProbePolicy);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['channel-health-probe-overview'] });
+    },
+  });
+}
+
 export function useChannelHealthProbeHistory(input: ChannelHealthProbeHistoryInput) {
   return useQuery({
-    queryKey: ['channel-health-probe-history', input.channelID, input.modelID, input.status, input.source, input.offset, input.limit],
+    queryKey: ['channel-health-probe-history', input],
     queryFn: async () => {
-      const data = await graphqlRequest<{ channelHealthProbeHistory: ChannelHealthProbeHistoryPage }>(CHANNEL_HEALTH_PROBE_HISTORY_QUERY, { input });
+      const data = await graphqlRequest<{ channelHealthProbeHistory: ChannelHealthProbeHistoryPage }>(CHANNEL_HEALTH_PROBE_HISTORY_QUERY, {
+        input,
+      });
       return channelHealthProbeHistoryPageSchema.parse(data.channelHealthProbeHistory);
     },
     refetchInterval: 15_000,
@@ -193,7 +257,9 @@ export function useRunChannelHealthProbe() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: RunChannelHealthProbeInput) => {
-      const data = await graphqlRequest<{ runChannelHealthProbe: ActiveChannelHealthProbeRun }>(RUN_CHANNEL_HEALTH_PROBE_MUTATION, { input });
+      const data = await graphqlRequest<{ runChannelHealthProbe: ActiveChannelHealthProbeRun }>(RUN_CHANNEL_HEALTH_PROBE_MUTATION, {
+        input,
+      });
       return activeChannelHealthProbeRunSchema.parse(data.runChannelHealthProbe);
     },
     onSuccess: () => {

@@ -35,6 +35,11 @@ func (r *mutationResolver) UpdateChannelHealthProbeSettings(ctx context.Context,
 	return activeChannelHealthProbeChannel(item), nil
 }
 
+// UpdateChannelHealthProbePolicy is the resolver for the updateChannelHealthProbePolicy field.
+func (r *mutationResolver) UpdateChannelHealthProbePolicy(ctx context.Context, input biz.UpdateChannelHealthProbePolicyInput) (*biz.ChannelHealthProbePolicy, error) {
+	return r.channelHealthProbeService.UpdatePolicy(ctx, input)
+}
+
 // RunChannelHealthProbe is the resolver for the runChannelHealthProbe field.
 func (r *mutationResolver) RunChannelHealthProbe(ctx context.Context, input biz.RunChannelHealthProbeInput) (*ActiveChannelHealthProbeRun, error) {
 	item, err := r.channelHealthProbeRunner.RunManual(ctx, input)
@@ -55,6 +60,11 @@ func (r *queryResolver) ChannelHealthProbeOverview(ctx context.Context) ([]*Chan
 		result = append(result, activeChannelHealthProbeChannel(item))
 	}
 	return result, nil
+}
+
+// ChannelHealthProbePolicy is the resolver for the channelHealthProbePolicy field.
+func (r *queryResolver) ChannelHealthProbePolicy(ctx context.Context) (*biz.ChannelHealthProbePolicy, error) {
+	return r.channelHealthProbeService.Policy(ctx)
 }
 
 // ChannelHealthProbeHistory is the resolver for the channelHealthProbeHistory field.

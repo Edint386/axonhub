@@ -140,7 +140,7 @@ var (
 		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
 		{Name: "model_id", Type: field.TypeString},
 		{Name: "source", Type: field.TypeEnum, Enums: []string{"manual", "scheduled"}},
-		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "healthy", "unhealthy"}},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "healthy", "unhealthy", "skipped"}},
 		{Name: "stream", Type: field.TypeBool},
 		{Name: "ttfb_ms", Type: field.TypeFloat64, Nullable: true},
 		{Name: "ttft_ms", Type: field.TypeFloat64, Nullable: true},

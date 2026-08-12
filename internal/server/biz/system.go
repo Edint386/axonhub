@@ -532,19 +532,30 @@ type DeveloperModelSettings struct {
 }
 
 type SystemChannelSettings struct {
-	Probe            ChannelProbeSetting         `json:"probe"`
-	AutoSync         ChannelModelAutoSyncSetting `json:"auto_sync"`
-	TestSystemPrompt string                      `json:"test_system_prompt"`
-	TestUserPrompt   string                      `json:"test_user_prompt"`
+	Probe                 ChannelProbeSetting           `json:"probe"`
+	AutoSync              ChannelModelAutoSyncSetting   `json:"auto_sync"`
+	ActiveHealthProbeScan *ActiveHealthProbeScanSetting `json:"active_health_probe_scan,omitempty"`
+	TestSystemPrompt      string                        `json:"test_system_prompt"`
+	TestUserPrompt        string                        `json:"test_user_prompt"`
 }
 
 // UpdateSystemChannelSettings is a partial update for channel system settings.
 // Omitted or null fields are left unchanged; empty or whitespace-only prompt values restore defaults.
 type UpdateSystemChannelSettings struct {
-	Probe            *ChannelProbeSetting         `json:"probe"`
-	AutoSync         *ChannelModelAutoSyncSetting `json:"auto_sync"`
-	TestSystemPrompt *string                      `json:"test_system_prompt"`
-	TestUserPrompt   *string                      `json:"test_user_prompt"`
+	Probe                 *ChannelProbeSetting          `json:"probe"`
+	AutoSync              *ChannelModelAutoSyncSetting  `json:"auto_sync"`
+	ActiveHealthProbeScan *ActiveHealthProbeScanSetting `json:"active_health_probe_scan"`
+	TestSystemPrompt      *string                       `json:"test_system_prompt"`
+	TestUserPrompt        *string                       `json:"test_user_prompt"`
+}
+
+// ActiveHealthProbeScanSetting controls the global priority-aware window for
+// scheduled synthetic probes. Per-channel intervals and model switches remain
+// the source of due eligibility.
+type ActiveHealthProbeScanSetting struct {
+	Enabled             bool `json:"enabled"`
+	AcceptableLatencyMs int  `json:"acceptable_latency_ms"`
+	ExtraChannels       int  `json:"extra_channels"`
 }
 
 type ChannelModelAutoSyncSetting struct {
@@ -1335,6 +1346,12 @@ func normalizeSystemChannelSettings(setting *SystemChannelSettings) {
 	if strings.TrimSpace(setting.TestUserPrompt) == "" {
 		setting.TestUserPrompt = defaultChannelSetting.TestUserPrompt
 	}
+	if setting.ActiveHealthProbeScan == nil {
+		policy := defaultActiveHealthProbeScanSetting
+		setting.ActiveHealthProbeScan = &policy
+	} else if setting.ActiveHealthProbeScan.AcceptableLatencyMs == 0 {
+		setting.ActiveHealthProbeScan.AcceptableLatencyMs = defaultActiveHealthProbeScanSetting.AcceptableLatencyMs
+	}
 }
 
 func validateSystemChannelSettings(setting *SystemChannelSettings) error {
@@ -1343,6 +1360,25 @@ func validateSystemChannelSettings(setting *SystemChannelSettings) error {
 	}
 	if utf8.RuneCountInString(setting.TestUserPrompt) > maxChannelTestPromptRunes {
 		return fmt.Errorf("test user prompt must not exceed %d characters", maxChannelTestPromptRunes)
+	}
+	if setting.ActiveHealthProbeScan == nil {
+		return fmt.Errorf("active health probe scan settings must not be nil")
+	}
+	if setting.ActiveHealthProbeScan.AcceptableLatencyMs < minActiveHealthProbeAcceptableLatencyMs ||
+		setting.ActiveHealthProbeScan.AcceptableLatencyMs > maxActiveHealthProbeAcceptableLatencyMs {
+		return fmt.Errorf(
+			"active health probe acceptable latency must be between %d and %d milliseconds",
+			minActiveHealthProbeAcceptableLatencyMs,
+			maxActiveHealthProbeAcceptableLatencyMs,
+		)
+	}
+	if setting.ActiveHealthProbeScan.ExtraChannels < minActiveHealthProbeExtraChannels ||
+		setting.ActiveHealthProbeScan.ExtraChannels > maxActiveHealthProbeExtraChannels {
+		return fmt.Errorf(
+			"active health probe extra channels must be between %d and %d",
+			minActiveHealthProbeExtraChannels,
+			maxActiveHealthProbeExtraChannels,
+		)
 	}
 
 	return nil
@@ -1499,6 +1535,10 @@ func applySystemChannelSettingsPatch(setting *SystemChannelSettings, input Updat
 	}
 	if input.AutoSync != nil {
 		setting.AutoSync = *input.AutoSync
+	}
+	if input.ActiveHealthProbeScan != nil {
+		policy := *input.ActiveHealthProbeScan
+		setting.ActiveHealthProbeScan = &policy
 	}
 	if input.TestSystemPrompt != nil {
 		setting.TestSystemPrompt = *input.TestSystemPrompt

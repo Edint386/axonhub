@@ -24,3 +24,28 @@ func TestValidateSystemChannelSettingsPromptLength(t *testing.T) {
 
 	require.Error(t, validateSystemChannelSettings(&setting))
 }
+
+func TestNormalizeSystemChannelSettingsBackfillsActiveProbePolicy(t *testing.T) {
+	setting := SystemChannelSettings{}
+	normalizeSystemChannelSettings(&setting)
+
+	require.NotNil(t, setting.ActiveHealthProbeScan)
+	require.False(t, setting.ActiveHealthProbeScan.Enabled)
+	require.Equal(t, 60_000, setting.ActiveHealthProbeScan.AcceptableLatencyMs)
+	require.Equal(t, 1, setting.ActiveHealthProbeScan.ExtraChannels)
+	require.NoError(t, validateSystemChannelSettings(&setting))
+}
+
+func TestValidateSystemChannelSettingsActiveProbePolicyLimits(t *testing.T) {
+	setting := SystemChannelSettings{
+		ActiveHealthProbeScan: &ActiveHealthProbeScanSetting{AcceptableLatencyMs: 1, ExtraChannels: 0},
+	}
+	normalizeSystemChannelSettings(&setting)
+	require.NoError(t, validateSystemChannelSettings(&setting))
+
+	setting.ActiveHealthProbeScan.AcceptableLatencyMs = maxActiveHealthProbeAcceptableLatencyMs + 1
+	require.ErrorContains(t, validateSystemChannelSettings(&setting), "acceptable latency")
+	setting.ActiveHealthProbeScan.AcceptableLatencyMs = 1
+	setting.ActiveHealthProbeScan.ExtraChannels = maxActiveHealthProbeExtraChannels + 1
+	require.ErrorContains(t, validateSystemChannelSettings(&setting), "extra channels")
+}

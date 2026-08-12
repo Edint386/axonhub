@@ -684,6 +684,7 @@ enum ChannelHealthProbeRunStatus @goModel(model: "github.com/looplj/axonhub/inte
   pending
   healthy
   unhealthy
+  skipped
 }
 """
 ChannelHealthProbeRunWhereInput is used for filtering ChannelHealthProbeRun objects.

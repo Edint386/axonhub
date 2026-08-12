@@ -43,7 +43,7 @@ func (ChannelHealthProbeRun) Fields() []ent.Field {
 		field.Int("channel_id").Immutable(),
 		field.String("model_id").Immutable(),
 		field.Enum("source").Values("manual", "scheduled").Immutable(),
-		field.Enum("status").Values("pending", "healthy", "unhealthy"),
+		field.Enum("status").Values("pending", "healthy", "unhealthy", "skipped"),
 		field.Bool("stream").Immutable(),
 		field.Float("ttfb_ms").Optional().Nillable(),
 		field.Float("ttft_ms").Optional().Nillable(),

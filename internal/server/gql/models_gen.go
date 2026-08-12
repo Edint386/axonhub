@@ -198,6 +198,7 @@ type ChannelHealthProbeChannel struct {
 	ChannelID       objects.GUID                           `json:"channelID"`
 	ChannelName     string                                 `json:"channelName"`
 	ChannelStatus   string                                 `json:"channelStatus"`
+	Priority        int                                    `json:"priority"`
 	Enabled         bool                                   `json:"enabled"`
 	IntervalMinutes int                                    `json:"intervalMinutes"`
 	Models          []*biz.ChannelHealthProbeModelOverview `json:"models"`

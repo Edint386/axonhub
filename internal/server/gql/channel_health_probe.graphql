@@ -26,9 +26,17 @@ type ChannelHealthProbeChannel {
   channelID: ID!
   channelName: String!
   channelStatus: String!
+  priority: Int!
   enabled: Boolean!
   intervalMinutes: Int!
   models: [ChannelHealthProbeModelOverview!]!
+}
+
+type ChannelHealthProbePolicy {
+  enabled: Boolean!
+  acceptableLatencyMs: Int!
+  extraChannels: Int!
+  apiKeyMaxFirstTokenLatencyMs: Float
 }
 
 type ChannelHealthProbeHistoryPage {
@@ -49,6 +57,12 @@ input UpdateChannelHealthProbeSettingsInput {
   models: [ActiveChannelHealthProbeModelInput!]!
 }
 
+input UpdateChannelHealthProbePolicyInput {
+  enabled: Boolean!
+  acceptableLatencyMs: Int!
+  extraChannels: Int!
+}
+
 input RunChannelHealthProbeInput {
   channelID: ID!
   modelID: String!
@@ -66,10 +80,12 @@ input ChannelHealthProbeHistoryInput {
 
 extend type Query {
   channelHealthProbeOverview: [ChannelHealthProbeChannel!]!
+  channelHealthProbePolicy: ChannelHealthProbePolicy!
   channelHealthProbeHistory(input: ChannelHealthProbeHistoryInput!): ChannelHealthProbeHistoryPage!
 }
 
 extend type Mutation {
   updateChannelHealthProbeSettings(input: UpdateChannelHealthProbeSettingsInput!): ChannelHealthProbeChannel!
+  updateChannelHealthProbePolicy(input: UpdateChannelHealthProbePolicyInput!): ChannelHealthProbePolicy!
   runChannelHealthProbe(input: RunChannelHealthProbeInput!): ActiveChannelHealthProbeRun!
 }

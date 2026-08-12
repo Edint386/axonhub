@@ -137,6 +137,7 @@ const (
 	StatusPending   Status = "pending"
 	StatusHealthy   Status = "healthy"
 	StatusUnhealthy Status = "unhealthy"
+	StatusSkipped   Status = "skipped"
 )
 
 func (s Status) String() string {
@@ -146,7 +147,7 @@ func (s Status) String() string {
 // StatusValidator is a validator for the "status" field enum values. It is called by the builders before save.
 func StatusValidator(s Status) error {
 	switch s {
-	case StatusPending, StatusHealthy, StatusUnhealthy:
+	case StatusPending, StatusHealthy, StatusUnhealthy, StatusSkipped:
 		return nil
 	default:
 		return fmt.Errorf("channelhealthproberun: invalid enum value for status field: %q", s)

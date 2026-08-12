@@ -4,7 +4,18 @@ const (
 	defaultChannelTestSystemPrompt = "You are a helpful assistant."
 	defaultChannelTestUserPrompt   = "Hello world, I'm AxonHub.\nPlease tell me who you are?"
 	maxChannelTestPromptRunes      = 4096
+
+	minActiveHealthProbeAcceptableLatencyMs = 1
+	maxActiveHealthProbeAcceptableLatencyMs = 10 * 60 * 1000
+	minActiveHealthProbeExtraChannels       = 0
+	maxActiveHealthProbeExtraChannels       = 20
 )
+
+var defaultActiveHealthProbeScanSetting = ActiveHealthProbeScanSetting{
+	Enabled:             false,
+	AcceptableLatencyMs: 60 * 1000,
+	ExtraChannels:       1,
+}
 
 var defaultStoragePolicy = StoragePolicy{
 	StoreChunks:       false,
@@ -59,8 +70,9 @@ var defaultChannelSetting = SystemChannelSettings{
 	AutoSync: ChannelModelAutoSyncSetting{
 		Frequency: AutoSyncFrequencyOneHour,
 	},
-	TestSystemPrompt: defaultChannelTestSystemPrompt,
-	TestUserPrompt:   defaultChannelTestUserPrompt,
+	ActiveHealthProbeScan: &defaultActiveHealthProbeScanSetting,
+	TestSystemPrompt:      defaultChannelTestSystemPrompt,
+	TestUserPrompt:        defaultChannelTestUserPrompt,
 }
 
 var defaultGeneralSettings = SystemGeneralSettings{

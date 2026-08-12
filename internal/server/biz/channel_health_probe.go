@@ -10,12 +10,15 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"go.uber.org/fx"
 
+	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/predicate"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/scopes"
 )
 
 const (
@@ -31,6 +34,7 @@ type ChannelHealthProbeServiceParams struct {
 
 	Ent            *ent.Client
 	ChannelService *ChannelService
+	SystemService  *SystemService
 }
 
 // ChannelHealthProbeService owns active probe configuration and persisted run
@@ -39,12 +43,14 @@ type ChannelHealthProbeService struct {
 	*AbstractService
 
 	channelService *ChannelService
+	systemService  *SystemService
 }
 
 func NewChannelHealthProbeService(params ChannelHealthProbeServiceParams) *ChannelHealthProbeService {
 	return &ChannelHealthProbeService{
 		AbstractService: &AbstractService{db: params.Ent},
 		channelService:  params.ChannelService,
+		systemService:   params.SystemService,
 	}
 }
 
@@ -59,6 +65,19 @@ type RunChannelHealthProbeInput struct {
 	ChannelID objects.GUID
 	ModelID   string
 	Stream    bool
+}
+
+type UpdateChannelHealthProbePolicyInput struct {
+	Enabled             bool
+	AcceptableLatencyMs int
+	ExtraChannels       int
+}
+
+type ChannelHealthProbePolicy struct {
+	Enabled                      bool
+	AcceptableLatencyMs          int
+	ExtraChannels                int
+	APIKeyMaxFirstTokenLatencyMs *float64
 }
 
 type ChannelHealthProbeHistoryInput struct {
@@ -97,6 +116,7 @@ type ChannelHealthProbeChannelOverview struct {
 	ChannelID       objects.GUID
 	ChannelName     string
 	ChannelStatus   string
+	Priority        int
 	Enabled         bool
 	IntervalMinutes int
 	Models          []*ChannelHealthProbeModelOverview
@@ -111,8 +131,92 @@ type ChannelHealthProbeTarget struct {
 	ChannelID       int
 	ModelID         string
 	Stream          bool
+	Priority        int
+	OrderingWeight  int
 	IntervalMinutes int
 	ScheduleKey     string
+}
+
+func (svc *ChannelHealthProbeService) ScanPolicy(ctx context.Context) (ActiveHealthProbeScanSetting, error) {
+	if svc.systemService == nil {
+		return defaultActiveHealthProbeScanSetting, nil
+	}
+
+	setting, err := authz.RunWithSystemBypass(ctx, "active-channel-health-probe-policy", func(bypassCtx context.Context) (*SystemChannelSettings, error) {
+		return svc.systemService.ChannelSetting(bypassCtx)
+	})
+	if err != nil {
+		return ActiveHealthProbeScanSetting{}, err
+	}
+	if setting.ActiveHealthProbeScan == nil {
+		return defaultActiveHealthProbeScanSetting, nil
+	}
+
+	return *setting.ActiveHealthProbeScan, nil
+}
+
+func (svc *ChannelHealthProbeService) Policy(ctx context.Context) (*ChannelHealthProbePolicy, error) {
+	if err := authz.RequireScope(ctx, scopes.ScopeReadChannels); err != nil {
+		return nil, err
+	}
+
+	policy, err := svc.ScanPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
+	overview := &ChannelHealthProbePolicy{
+		Enabled:             policy.Enabled,
+		AcceptableLatencyMs: policy.AcceptableLatencyMs,
+		ExtraChannels:       policy.ExtraChannels,
+	}
+
+	if !authz.HasScope(ctx, scopes.ScopeReadAPIKeys) {
+		return overview, nil
+	}
+	apiKeys, err := svc.entFromContext(ctx).APIKey.Query().
+		Where(apikey.StatusEQ(apikey.StatusEnabled)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query API key latency thresholds: %w", err)
+	}
+	for _, key := range apiKeys {
+		profile := key.GetActiveProfile()
+		if profile == nil || profile.MaxFirstTokenLatencyMs == nil || *profile.MaxFirstTokenLatencyMs <= 0 {
+			continue
+		}
+		latency := float64(*profile.MaxFirstTokenLatencyMs)
+		if overview.APIKeyMaxFirstTokenLatencyMs == nil || latency < *overview.APIKeyMaxFirstTokenLatencyMs {
+			overview.APIKeyMaxFirstTokenLatencyMs = &latency
+		}
+	}
+
+	return overview, nil
+}
+
+func (svc *ChannelHealthProbeService) UpdatePolicy(
+	ctx context.Context,
+	input UpdateChannelHealthProbePolicyInput,
+) (*ChannelHealthProbePolicy, error) {
+	if err := authz.RequireScope(ctx, scopes.ScopeWriteChannels); err != nil {
+		return nil, err
+	}
+	if svc.systemService == nil {
+		return nil, fmt.Errorf("system service is not available")
+	}
+
+	policy := ActiveHealthProbeScanSetting{
+		Enabled:             input.Enabled,
+		AcceptableLatencyMs: input.AcceptableLatencyMs,
+		ExtraChannels:       input.ExtraChannels,
+	}
+	err := authz.RunWithSystemBypassVoid(ctx, "update-active-channel-health-probe-policy", func(bypassCtx context.Context) error {
+		return svc.systemService.UpdateChannelSetting(bypassCtx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &policy})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return svc.Policy(ctx)
 }
 
 func normalizeAndValidateChannelHealthProbeSettings(
@@ -217,7 +321,11 @@ func (svc *ChannelHealthProbeService) UpdateSettings(
 func (svc *ChannelHealthProbeService) Overview(ctx context.Context) ([]*ChannelHealthProbeChannelOverview, error) {
 	channels, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusNEQ(channel.StatusArchived)).
-		Order(ent.Asc(channel.FieldName)).
+		Order(
+			ent.Desc(channel.FieldPriority),
+			ent.Desc(channel.FieldOrderingWeight),
+			ent.Asc(channel.FieldID),
+		).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channels for health overview: %w", err)
@@ -269,13 +377,14 @@ func (svc *ChannelHealthProbeService) latestRunsByChannelAndModel(
 	ctx context.Context,
 	channelIDs []int,
 ) (map[string]*ChannelHealthProbeRunRecord, error) {
-	return svc.latestRunsByChannelAndModelSince(ctx, channelIDs, time.Time{})
+	return svc.latestRunsByChannelAndModelSince(ctx, channelIDs, time.Time{}, false)
 }
 
 func (svc *ChannelHealthProbeService) latestRunsByChannelAndModelSince(
 	ctx context.Context,
 	channelIDs []int,
 	since time.Time,
+	includeSkipped bool,
 ) (map[string]*ChannelHealthProbeRunRecord, error) {
 	if len(channelIDs) == 0 {
 		return map[string]*ChannelHealthProbeRunRecord{}, nil
@@ -283,6 +392,9 @@ func (svc *ChannelHealthProbeService) latestRunsByChannelAndModelSince(
 
 	query := svc.entFromContext(ctx).ChannelHealthProbeRun.Query().
 		Where(channelhealthproberun.ChannelIDIn(channelIDs...))
+	if !includeSkipped {
+		query = query.Where(channelhealthproberun.StatusNEQ(channelhealthproberun.StatusSkipped))
+	}
 	if !since.IsZero() {
 		query = query.Where(channelhealthproberun.StartedAtGTE(since))
 	}
@@ -424,6 +536,7 @@ func buildChannelHealthProbeOverview(
 		ChannelID:       objects.GUID{Type: "Channel", ID: ch.ID},
 		ChannelName:     ch.Name,
 		ChannelStatus:   ch.Status.String(),
+		Priority:        ch.Priority,
 		Enabled:         enabled,
 		IntervalMinutes: interval,
 		Models:          models,
@@ -494,6 +607,11 @@ func (svc *ChannelHealthProbeService) DueTargets(
 	now = now.UTC()
 	channels, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusEQ(channel.StatusEnabled)).
+		Order(
+			ent.Desc(channel.FieldPriority),
+			ent.Desc(channel.FieldOrderingWeight),
+			ent.Asc(channel.FieldID),
+		).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channels for scheduled health probes: %w", err)
@@ -525,6 +643,8 @@ func (svc *ChannelHealthProbeService) DueTargets(
 				ChannelID:       ch.ID,
 				ModelID:         modelID,
 				Stream:          model.Stream,
+				Priority:        ch.Priority,
+				OrderingWeight:  ch.OrderingWeight,
 				IntervalMinutes: settings.IntervalMinutes,
 				ScheduleKey: fmt.Sprintf(
 					"%d:%s:%t:%d",
@@ -548,7 +668,7 @@ func (svc *ChannelHealthProbeService) DueTargets(
 	}
 
 	since := now.Add(-maxInterval)
-	latestProbeRuns, err := svc.latestRunsByChannelAndModelSince(ctx, channelIDs, since)
+	latestProbeRuns, err := svc.latestRunsByChannelAndModelSince(ctx, channelIDs, since, true)
 	if err != nil {
 		return nil, err
 	}
@@ -571,6 +691,31 @@ func (svc *ChannelHealthProbeService) DueTargets(
 		targets = append(targets, target)
 	}
 	return targets, nil
+}
+
+func (svc *ChannelHealthProbeService) SkipScheduledTargets(
+	ctx context.Context,
+	targets []ChannelHealthProbeTarget,
+	skippedAt time.Time,
+) error {
+	for _, target := range targets {
+		_, err := svc.entFromContext(ctx).ChannelHealthProbeRun.Create().
+			SetChannelID(target.ChannelID).
+			SetModelID(target.ModelID).
+			SetSource(channelhealthproberun.SourceScheduled).
+			SetStatus(channelhealthproberun.StatusSkipped).
+			SetStream(target.Stream).
+			SetScheduleKey(target.ScheduleKey).
+			SetStartedAt(skippedAt).
+			SetCompletedAt(skippedAt).
+			SetTotalMs(0).
+			Save(ctx)
+		if err != nil && !ent.IsConstraintError(err) {
+			return fmt.Errorf("failed to persist skipped scheduled channel health probe: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (svc *ChannelHealthProbeService) ClaimScheduledRun(

@@ -354,6 +354,23 @@ func TestSystemService_UpdateChannelSetting_CreatesMissingSetting(t *testing.T) 
 	require.Equal(t, userPrompt, setting.TestUserPrompt)
 }
 
+func TestSystemService_UpdateChannelSetting_PersistsActiveProbePolicy(t *testing.T) {
+	service, client := setupTestSystemService(t, xcache.Config{Mode: xcache.ModeMemory})
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+	policy := ActiveHealthProbeScanSetting{
+		Enabled:             true,
+		AcceptableLatencyMs: 20_000,
+		ExtraChannels:       2,
+	}
+	require.NoError(t, service.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &policy}))
+
+	setting, err := service.ChannelSetting(ctx)
+	require.NoError(t, err)
+	require.Equal(t, policy, *setting.ActiveHealthProbeScan)
+}
+
 func runSystemSettingUpdate(t *testing.T, service *SystemService, ctx context.Context, input UpdateSystemChannelSettings) <-chan error {
 	t.Helper()
 	result := make(chan error, 1)

@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -65,35 +66,175 @@ func (runner *ChannelHealthProbeRunner) runScheduled(ctx context.Context) {
 		log.Error(ctx, "failed to list scheduled channel health probes", log.Cause(err))
 		return
 	}
+	policy, err := runner.service.ScanPolicy(ctx)
+	if err != nil {
+		log.Error(ctx, "failed to load scheduled channel health probe policy", log.Cause(err))
+		return
+	}
 
+	if policy.Enabled {
+		runner.runPriorityScheduled(ctx, targets, policy)
+		return
+	}
+
+	runner.runConcurrentScheduled(ctx, targets)
+}
+
+func (runner *ChannelHealthProbeRunner) runConcurrentScheduled(
+	ctx context.Context,
+	targets []biz.ChannelHealthProbeTarget,
+) {
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(channelHealthProbeMaxConcurrency)
 	for _, target := range targets {
 		target := target
 		group.Go(func() error {
-			startedAt := time.Now().UTC()
-			run, claimed, err := runner.service.ClaimScheduledRun(groupCtx, target, startedAt)
-			if err != nil {
-				log.Error(groupCtx, "failed to claim scheduled channel health probe",
-					log.Int("channel_id", target.ChannelID),
-					log.String("model_id", target.ModelID),
-					log.Cause(err))
-				return nil
-			}
-			if !claimed {
-				return nil
-			}
+			runner.executeScheduledTarget(groupCtx, target)
+			return nil
+		})
+	}
+	_ = group.Wait()
+}
 
-			if _, err := runner.execute(groupCtx, run); err != nil {
-				log.Error(groupCtx, "failed to persist scheduled channel health probe result",
-					log.Int("channel_id", target.ChannelID),
-					log.String("model_id", target.ModelID),
+func (runner *ChannelHealthProbeRunner) runPriorityScheduled(
+	ctx context.Context,
+	targets []biz.ChannelHealthProbeTarget,
+	policy biz.ActiveHealthProbeScanSetting,
+) {
+	groups := make(map[string][]biz.ChannelHealthProbeTarget)
+	modelIDs := make([]string, 0)
+	for _, target := range targets {
+		if _, ok := groups[target.ModelID]; !ok {
+			modelIDs = append(modelIDs, target.ModelID)
+		}
+		groups[target.ModelID] = append(groups[target.ModelID], target)
+	}
+	for _, modelID := range modelIDs {
+		modelTargets := groups[modelID]
+		sort.SliceStable(modelTargets, func(i, j int) bool {
+			if modelTargets[i].Priority != modelTargets[j].Priority {
+				return modelTargets[i].Priority > modelTargets[j].Priority
+			}
+			if modelTargets[i].OrderingWeight != modelTargets[j].OrderingWeight {
+				return modelTargets[i].OrderingWeight > modelTargets[j].OrderingWeight
+			}
+			return modelTargets[i].ChannelID < modelTargets[j].ChannelID
+		})
+		groups[modelID] = modelTargets
+	}
+
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(channelHealthProbeMaxConcurrency)
+	for _, modelID := range modelIDs {
+		modelTargets := groups[modelID]
+		group.Go(func() error {
+			skipped := runPriorityProbeTargets(
+				groupCtx,
+				modelTargets,
+				policy.AcceptableLatencyMs,
+				policy.ExtraChannels,
+				runner.executeScheduledTarget,
+			)
+			if len(skipped) == 0 {
+				return nil
+			}
+			if err := runner.service.SkipScheduledTargets(groupCtx, skipped, time.Now().UTC()); err != nil {
+				log.Error(groupCtx, "failed to persist skipped scheduled channel health probes",
+					log.String("model_id", modelID),
 					log.Cause(err))
 			}
 			return nil
 		})
 	}
 	_ = group.Wait()
+}
+
+type scheduledProbeTargetExecutor func(
+	context.Context,
+	biz.ChannelHealthProbeTarget,
+) (*biz.ChannelHealthProbeRunRecord, bool)
+
+// runPriorityProbeTargets returns targets that should be persisted as skipped.
+// A false executor result means another scheduler instance owns this ordered
+// group, so this instance exits without skipping anything.
+func runPriorityProbeTargets(
+	ctx context.Context,
+	targets []biz.ChannelHealthProbeTarget,
+	acceptableLatencyMs int,
+	extraChannels int,
+	execute scheduledProbeTargetExecutor,
+) []biz.ChannelHealthProbeTarget {
+	accepted := false
+	remainingExtra := 0
+	for i, target := range targets {
+		if accepted && remainingExtra == 0 {
+			return targets[i:]
+		}
+
+		wasAccepted := accepted
+		record, proceed := execute(ctx, target)
+		if !proceed {
+			return nil
+		}
+		if wasAccepted {
+			remainingExtra--
+		} else if channelHealthProbeRunIsAcceptable(record, acceptableLatencyMs) {
+			accepted = true
+			remainingExtra = extraChannels
+		}
+	}
+
+	return nil
+}
+
+func channelHealthProbeRunIsAcceptable(run *biz.ChannelHealthProbeRunRecord, thresholdMs int) bool {
+	if run == nil || run.Status != "healthy" || thresholdMs <= 0 {
+		return false
+	}
+
+	latencyMs := run.TotalMs
+	if run.Stream {
+		if run.TTFTMs != nil {
+			latencyMs = *run.TTFTMs
+		} else if run.TTFBMs != nil {
+			latencyMs = *run.TTFBMs
+		}
+	} else if run.TTFBMs != nil {
+		latencyMs = *run.TTFBMs
+	} else if run.TTFTMs != nil {
+		latencyMs = *run.TTFTMs
+	}
+
+	return latencyMs >= 0 && latencyMs <= float64(thresholdMs)
+}
+
+func (runner *ChannelHealthProbeRunner) executeScheduledTarget(
+	ctx context.Context,
+	target biz.ChannelHealthProbeTarget,
+) (*biz.ChannelHealthProbeRunRecord, bool) {
+	startedAt := time.Now().UTC()
+	run, claimed, err := runner.service.ClaimScheduledRun(ctx, target, startedAt)
+	if err != nil {
+		log.Error(ctx, "failed to claim scheduled channel health probe",
+			log.Int("channel_id", target.ChannelID),
+			log.String("model_id", target.ModelID),
+			log.Cause(err))
+		return nil, true
+	}
+	if !claimed {
+		return nil, false
+	}
+
+	record, err := runner.execute(ctx, run)
+	if err != nil {
+		log.Error(ctx, "failed to persist scheduled channel health probe result",
+			log.Int("channel_id", target.ChannelID),
+			log.String("model_id", target.ModelID),
+			log.Cause(err))
+		return nil, true
+	}
+
+	return record, true
 }
 
 func (runner *ChannelHealthProbeRunner) RunManual(

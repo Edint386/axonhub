@@ -31,6 +31,7 @@ func activeChannelHealthProbeChannel(item *biz.ChannelHealthProbeChannelOverview
 		ChannelID:       item.ChannelID,
 		ChannelName:     item.ChannelName,
 		ChannelStatus:   item.ChannelStatus,
+		Priority:        item.Priority,
 		Enabled:         item.Enabled,
 		IntervalMinutes: item.IntervalMinutes,
 		Models:          item.Models,
