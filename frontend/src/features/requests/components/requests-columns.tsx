@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useGeneralSettings, useSecuritySettings, useUpdateSecuritySettings } from '@/features/system/data/system';
 import { useRequestPermissions } from '../../../hooks/useRequestPermissions';
-import { Request } from '../data/schema';
+import { Request, RequestExecution } from '../data/schema';
 import { calculateTokensPerSecond, getTokensPerSecondValue } from '../utils/tokens-per-second';
 import { getStatusColor } from './help';
 
@@ -31,6 +31,15 @@ function getCacheHitRateColor(rate: number): string {
   if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
   if (rate >= 20) return 'text-orange-600 dark:text-orange-400';
   return 'text-red-600 dark:text-red-400';
+}
+
+function getFailedExecutionDurationMs(execution: Partial<RequestExecution>): number | null {
+  if (execution.status !== 'failed') return null;
+  if (execution.metricsLatencyMs != null) return execution.metricsLatencyMs;
+  if (!execution.createdAt || !execution.updatedAt) return null;
+
+  const durationMs = new Date(execution.updatedAt).getTime() - new Date(execution.createdAt).getTime();
+  return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : null;
 }
 
 export const DEFAULT_HIDDEN_COLUMN_IDS = ['status', 'source', 'apiFormat', 'clientIP', 'tokensPerSecond'];
@@ -270,17 +279,26 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                           <IconArrowsJoin2 className='h-3.5 w-3.5' />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side='right' className='max-w-xs p-2'>
+                      <TooltipContent side='right' className='max-h-80 min-w-[240px] max-w-sm overflow-y-auto p-2'>
                         <div className='space-y-1.5'>
-                          <p className='text-xs font-medium'>{t('requests.tooltips.executionChain')}</p>
-                          {[...executions].reverse().map((execution, index) => (
-                            <div key={execution.id ?? index} className='flex items-center gap-2 text-xs'>
-                              <Badge className={`${getStatusColor(execution.status ?? '')} h-5 px-1.5 text-[10px]`}>
-                                {execution.status ? t(`requests.status.${execution.status}`) : t('requests.columns.unknown')}
-                              </Badge>
-                              <span>{execution.channel?.name || t('requests.columns.unknown')}</span>
-                            </div>
-                          ))}
+                          <p className='text-xs font-medium'>{t('requests.columns.retryProcess')}</p>
+                          {[...executions].reverse().map((execution, index) => {
+                            const failedDurationMs = getFailedExecutionDurationMs(execution);
+
+                            return (
+                              <div key={execution.id ?? index} className='flex items-center gap-2 text-xs'>
+                                <Badge className={`${getStatusColor(execution.status ?? '')} h-5 shrink-0 px-1.5 text-[10px]`}>
+                                  {execution.status ? t(`requests.status.${execution.status}`) : t('requests.columns.unknown')}
+                                </Badge>
+                                <span className='min-w-0 flex-1 truncate'>{execution.channel?.name || t('requests.columns.unknown')}</span>
+                                {failedDurationMs != null && (
+                                  <span className='text-muted-foreground shrink-0 font-mono'>
+                                    {t('requests.duration.failedAttempt', { duration: formatDuration(failedDurationMs) })}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </TooltipContent>
                     </Tooltip>

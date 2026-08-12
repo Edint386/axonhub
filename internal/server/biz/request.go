@@ -769,7 +769,7 @@ func (s *RequestService) UpdateRequestExecutionCanceled(
 	executionID int,
 	errorMsg string,
 ) error {
-	return s.UpdateRequestExecutionStatus(ctx, executionID, requestexecution.StatusCanceled, errorMsg, nil)
+	return s.UpdateRequestExecutionStatus(ctx, executionID, requestexecution.StatusCanceled, errorMsg, nil, nil)
 }
 
 // ExecutionErrorInfo holds error details for a failed request execution.
@@ -777,23 +777,25 @@ type ExecutionErrorInfo struct {
 	StatusCode *int
 }
 
-// UpdateRequestExecutionFailed updates request execution status to failed with error message and optional error details.
+// UpdateRequestExecutionFailed updates request execution status to failed with error details and latency metrics.
 func (s *RequestService) UpdateRequestExecutionFailed(
 	ctx context.Context,
 	executionID int,
 	errorMsg string,
 	errorInfo *ExecutionErrorInfo,
+	metrics *LatencyMetrics,
 ) error {
-	return s.UpdateRequestExecutionStatus(ctx, executionID, requestexecution.StatusFailed, errorMsg, errorInfo)
+	return s.UpdateRequestExecutionStatus(ctx, executionID, requestexecution.StatusFailed, errorMsg, errorInfo, metrics)
 }
 
-// UpdateRequestExecutionStatus updates request execution status to the provided value (e.g., canceled or failed), with optional error message.
+// UpdateRequestExecutionStatus updates request execution status and its optional error and latency details.
 func (s *RequestService) UpdateRequestExecutionStatus(
 	ctx context.Context,
 	executionID int,
 	status requestexecution.Status,
 	errorMsg string,
 	errorInfo *ExecutionErrorInfo,
+	metrics *LatencyMetrics,
 ) error {
 	client := s.entFromContext(ctx)
 
@@ -805,6 +807,18 @@ func (s *RequestService) UpdateRequestExecutionStatus(
 
 	if errorInfo != nil && errorInfo.StatusCode != nil {
 		upd = upd.SetResponseStatusCode(*errorInfo.StatusCode)
+	}
+
+	if metrics != nil {
+		if metrics.LatencyMs != nil {
+			upd = upd.SetMetricsLatencyMs(*metrics.LatencyMs)
+		}
+		if metrics.FirstTokenLatencyMs != nil {
+			upd = upd.SetMetricsFirstTokenLatencyMs(*metrics.FirstTokenLatencyMs)
+		}
+		if metrics.ReasoningDurationMs != nil {
+			upd = upd.SetMetricsReasoningDurationMs(*metrics.ReasoningDurationMs)
+		}
 	}
 
 	_, err := upd.Save(ctx)
@@ -823,7 +837,7 @@ func (s *RequestService) UpdateRequestExecutionStatusFromError(ctx context.Conte
 		status = requestexecution.StatusCanceled
 	}
 
-	return s.UpdateRequestExecutionStatus(ctx, executionID, status, rawErr.Error(), nil)
+	return s.UpdateRequestExecutionStatus(ctx, executionID, status, rawErr.Error(), nil, nil)
 }
 
 type jsonStreamEvent struct {
