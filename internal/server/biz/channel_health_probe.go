@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/predicate"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
 )
 
@@ -258,17 +259,36 @@ type latestChannelHealthProbeRunID struct {
 	LatestID  int    `json:"latest_id"`
 }
 
+type latestChannelHealthRealRequestID struct {
+	ChannelID int    `json:"channel_id"`
+	ModelID   string `json:"model_id"`
+	LatestID  int    `json:"latest_id"`
+}
+
 func (svc *ChannelHealthProbeService) latestRunsByChannelAndModel(
 	ctx context.Context,
 	channelIDs []int,
+) (map[string]*ChannelHealthProbeRunRecord, error) {
+	return svc.latestRunsByChannelAndModelSince(ctx, channelIDs, time.Time{})
+}
+
+func (svc *ChannelHealthProbeService) latestRunsByChannelAndModelSince(
+	ctx context.Context,
+	channelIDs []int,
+	since time.Time,
 ) (map[string]*ChannelHealthProbeRunRecord, error) {
 	if len(channelIDs) == 0 {
 		return map[string]*ChannelHealthProbeRunRecord{}, nil
 	}
 
+	query := svc.entFromContext(ctx).ChannelHealthProbeRun.Query().
+		Where(channelhealthproberun.ChannelIDIn(channelIDs...))
+	if !since.IsZero() {
+		query = query.Where(channelhealthproberun.StartedAtGTE(since))
+	}
+
 	var latestIDs []latestChannelHealthProbeRunID
-	err := svc.entFromContext(ctx).ChannelHealthProbeRun.Query().
-		Where(channelhealthproberun.ChannelIDIn(channelIDs...)).
+	err := query.
 		GroupBy(channelhealthproberun.FieldChannelID, channelhealthproberun.FieldModelID).
 		Aggregate(func(selector *entsql.Selector) string {
 			return entsql.As(entsql.Max(selector.C(channelhealthproberun.FieldID)), "latest_id")
@@ -296,6 +316,57 @@ func (svc *ChannelHealthProbeService) latestRunsByChannelAndModel(
 	result := make(map[string]*ChannelHealthProbeRunRecord, len(runs))
 	for _, run := range runs {
 		result[channelHealthProbeModelKey(run.ChannelID, run.ModelID)] = channelHealthProbeRunRecord(run)
+	}
+	return result, nil
+}
+
+// latestRealRequestActivityByChannelAndModel returns the start time of the
+// latest non-test request that selected each channel/request-model pair. Test
+// requests are excluded because manual and scheduled probes are tracked in the
+// dedicated health-probe table.
+func (svc *ChannelHealthProbeService) latestRealRequestActivityByChannelAndModel(
+	ctx context.Context,
+	channelIDs []int,
+	since time.Time,
+) (map[string]time.Time, error) {
+	if len(channelIDs) == 0 {
+		return map[string]time.Time{}, nil
+	}
+
+	var latestIDs []latestChannelHealthRealRequestID
+	err := svc.entFromContext(ctx).Request.Query().
+		Where(
+			request.ChannelIDIn(channelIDs...),
+			request.SourceNEQ(request.SourceTest),
+			request.CreatedAtGTE(since),
+		).
+		GroupBy(request.FieldChannelID, request.FieldModelID).
+		Aggregate(func(selector *entsql.Selector) string {
+			return entsql.As(entsql.Max(selector.C(request.FieldID)), "latest_id")
+		}).
+		Scan(ctx, &latestIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query latest real channel request IDs: %w", err)
+	}
+
+	ids := make([]int, 0, len(latestIDs))
+	for _, row := range latestIDs {
+		ids = append(ids, row.LatestID)
+	}
+	if len(ids) == 0 {
+		return map[string]time.Time{}, nil
+	}
+
+	requests, err := svc.entFromContext(ctx).Request.Query().
+		Where(request.IDIn(ids...)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load latest real channel requests: %w", err)
+	}
+
+	result := make(map[string]time.Time, len(requests))
+	for _, req := range requests {
+		result[channelHealthProbeModelKey(req.ChannelID, req.ModelID)] = req.CreatedAt
 	}
 	return result, nil
 }
@@ -420,6 +491,7 @@ func (svc *ChannelHealthProbeService) DueTargets(
 	ctx context.Context,
 	now time.Time,
 ) ([]ChannelHealthProbeTarget, error) {
+	now = now.UTC()
 	channels, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusEQ(channel.StatusEnabled)).
 		All(ctx)
@@ -427,7 +499,9 @@ func (svc *ChannelHealthProbeService) DueTargets(
 		return nil, fmt.Errorf("failed to query channels for scheduled health probes: %w", err)
 	}
 
-	targets := make([]ChannelHealthProbeTarget, 0)
+	channelIDs := make([]int, 0, len(channels))
+	candidates := make([]ChannelHealthProbeTarget, 0)
+	maxInterval := time.Duration(0)
 	for _, ch := range channels {
 		if ch.Settings == nil || ch.Settings.HealthProbe == nil {
 			continue
@@ -439,13 +513,15 @@ func (svc *ChannelHealthProbeService) DueTargets(
 			continue
 		}
 
-		bucket := now.UTC().Truncate(time.Duration(settings.IntervalMinutes) * time.Minute)
+		interval := time.Duration(settings.IntervalMinutes) * time.Minute
+		bucket := now.Truncate(interval)
+		channelIncluded := false
 		for _, model := range settings.Models {
 			if !model.Enabled || strings.TrimSpace(model.ModelID) == "" {
 				continue
 			}
 			modelID := strings.TrimSpace(model.ModelID)
-			targets = append(targets, ChannelHealthProbeTarget{
+			candidates = append(candidates, ChannelHealthProbeTarget{
 				ChannelID:       ch.ID,
 				ModelID:         modelID,
 				Stream:          model.Stream,
@@ -458,7 +534,41 @@ func (svc *ChannelHealthProbeService) DueTargets(
 					bucket.Unix(),
 				),
 			})
+			channelIncluded = true
 		}
+		if channelIncluded {
+			channelIDs = append(channelIDs, ch.ID)
+			if interval > maxInterval {
+				maxInterval = interval
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return []ChannelHealthProbeTarget{}, nil
+	}
+
+	since := now.Add(-maxInterval)
+	latestProbeRuns, err := svc.latestRunsByChannelAndModelSince(ctx, channelIDs, since)
+	if err != nil {
+		return nil, err
+	}
+	latestRealRequests, err := svc.latestRealRequestActivityByChannelAndModel(ctx, channelIDs, since)
+	if err != nil {
+		return nil, err
+	}
+
+	targets := make([]ChannelHealthProbeTarget, 0, len(candidates))
+	for _, target := range candidates {
+		modelKey := channelHealthProbeModelKey(target.ChannelID, target.ModelID)
+		latestActivityAt := latestRealRequests[modelKey]
+		if latestRun := latestProbeRuns[modelKey]; latestRun != nil && latestRun.StartedAt.After(latestActivityAt) {
+			latestActivityAt = latestRun.StartedAt
+		}
+		interval := time.Duration(target.IntervalMinutes) * time.Minute
+		if !latestActivityAt.IsZero() && now.Before(latestActivityAt.Add(interval)) {
+			continue
+		}
+		targets = append(targets, target)
 	}
 	return targets, nil
 }
