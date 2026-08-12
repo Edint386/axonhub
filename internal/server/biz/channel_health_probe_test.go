@@ -12,6 +12,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
 )
 
@@ -56,6 +57,51 @@ func TestChannelHealthProbeService_ClaimScheduledRunIsUnique(t *testing.T) {
 	require.False(t, claimed)
 	require.Nil(t, second)
 	require.Equal(t, 1, client.ChannelHealthProbeRun.Query().Where(channelhealthproberun.ChannelIDEQ(ch.ID)).CountX(ctx))
+}
+
+func TestChannelHealthProbeService_DueTargetsUsesLatestActivityAndConfiguredInterval(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-activity?mode=memory&_fk=0")
+	defer client.Close()
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+
+	ch := createHealthProbeTestChannel(t, ctx, client, "activity", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
+		Enabled:         true,
+		IntervalMinutes: 7,
+		Models: []objects.ChannelHealthProbeModel{
+			{ModelID: "gpt-4", Enabled: true, Stream: true},
+			{ModelID: "gpt-3.5", Enabled: true, Stream: false},
+		},
+	})
+	base := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+	createHealthProbeTestRequest(t, ctx, client, ch.ID, "gpt-4", request.SourceAPI, base)
+	createHealthProbeTestRequest(t, ctx, client, ch.ID, "gpt-4", request.SourcePlayground, base.Add(4*time.Minute))
+	// Test-channel traffic must not postpone a scheduled active probe.
+	createHealthProbeTestRequest(t, ctx, client, ch.ID, "gpt-4", request.SourceTest, base.Add(9*time.Minute))
+	_, err := client.ChannelHealthProbeRun.Create().
+		SetChannelID(ch.ID).
+		SetModelID("gpt-3.5").
+		SetSource(channelhealthproberun.SourceManual).
+		SetStatus(channelhealthproberun.StatusHealthy).
+		SetStream(false).
+		SetStartedAt(base.Add(3 * time.Minute)).
+		SetCreatedAt(base.Add(3 * time.Minute)).
+		SetTotalMs(10).
+		Save(ctx)
+	require.NoError(t, err)
+
+	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
+	targets, err := svc.DueTargets(ctx, base.Add(10*time.Minute-time.Second))
+	require.NoError(t, err)
+	require.Empty(t, targets)
+
+	targets, err = svc.DueTargets(ctx, base.Add(10*time.Minute))
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	require.Equal(t, "gpt-3.5", targets[0].ModelID)
+
+	targets, err = svc.DueTargets(ctx, base.Add(11*time.Minute))
+	require.NoError(t, err)
+	require.Len(t, targets, 2)
 }
 
 func TestChannelHealthProbeService_HistoryPaginationAndFilters(t *testing.T) {
@@ -164,4 +210,26 @@ func createHealthProbeTestChannel(
 		builder.SetSettings(&objects.ChannelSettings{HealthProbe: settings})
 	}
 	return builder.SaveX(ctx)
+}
+
+func createHealthProbeTestRequest(
+	t *testing.T,
+	ctx context.Context,
+	client *ent.Client,
+	channelID int,
+	modelID string,
+	source request.Source,
+	createdAt time.Time,
+) *ent.Request {
+	t.Helper()
+	return client.Request.Create().
+		SetChannelID(channelID).
+		SetModelID(modelID).
+		SetSource(source).
+		SetStatus(request.StatusCompleted).
+		SetStream(false).
+		SetRequestBody([]byte("{}")).
+		SetCreatedAt(createdAt).
+		SetUpdatedAt(createdAt).
+		SaveX(ctx)
 }
