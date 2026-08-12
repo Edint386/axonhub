@@ -165,10 +165,12 @@ func applyCostMultiplier(
 	}
 
 	for itemIndex := range items {
-		items[itemIndex].Subtotal = items[itemIndex].Subtotal.Mul(multiplier)
-		for tierIndex := range items[itemIndex].TierBreakdown {
-			items[itemIndex].TierBreakdown[tierIndex].Subtotal =
-				items[itemIndex].TierBreakdown[tierIndex].Subtotal.Mul(multiplier)
+		item := &items[itemIndex]
+		item.Subtotal = item.Subtotal.Mul(multiplier)
+		tiers := item.TierBreakdown
+		for tierIndex := range tiers {
+			tier := &tiers[tierIndex]
+			tier.Subtotal = tier.Subtotal.Mul(multiplier)
 		}
 	}
 
