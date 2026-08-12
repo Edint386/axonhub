@@ -2115,6 +2115,8 @@ type ChannelMutation struct {
 	appendmanual_models          []string
 	auto_sync_supported_models   *bool
 	auto_sync_model_pattern      *string
+	model_price_multiplier       *float64
+	addmodel_price_multiplier    *float64
 	tags                         *[]string
 	appendtags                   []string
 	default_test_model           *string
@@ -2835,6 +2837,62 @@ func (m *ChannelMutation) AutoSyncModelPatternCleared() bool {
 func (m *ChannelMutation) ResetAutoSyncModelPattern() {
 	m.auto_sync_model_pattern = nil
 	delete(m.clearedFields, channel.FieldAutoSyncModelPattern)
+}
+
+// SetModelPriceMultiplier sets the "model_price_multiplier" field.
+func (m *ChannelMutation) SetModelPriceMultiplier(f float64) {
+	m.model_price_multiplier = &f
+	m.addmodel_price_multiplier = nil
+}
+
+// ModelPriceMultiplier returns the value of the "model_price_multiplier" field in the mutation.
+func (m *ChannelMutation) ModelPriceMultiplier() (r float64, exists bool) {
+	v := m.model_price_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModelPriceMultiplier returns the old "model_price_multiplier" field's value of the Channel entity.
+// If the Channel object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMutation) OldModelPriceMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModelPriceMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModelPriceMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModelPriceMultiplier: %w", err)
+	}
+	return oldValue.ModelPriceMultiplier, nil
+}
+
+// AddModelPriceMultiplier adds f to the "model_price_multiplier" field.
+func (m *ChannelMutation) AddModelPriceMultiplier(f float64) {
+	if m.addmodel_price_multiplier != nil {
+		*m.addmodel_price_multiplier += f
+	} else {
+		m.addmodel_price_multiplier = &f
+	}
+}
+
+// AddedModelPriceMultiplier returns the value that was added to the "model_price_multiplier" field in this mutation.
+func (m *ChannelMutation) AddedModelPriceMultiplier() (r float64, exists bool) {
+	v := m.addmodel_price_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetModelPriceMultiplier resets all changes to the "model_price_multiplier" field.
+func (m *ChannelMutation) ResetModelPriceMultiplier() {
+	m.model_price_multiplier = nil
+	m.addmodel_price_multiplier = nil
 }
 
 // SetTags sets the "tags" field.
@@ -3703,7 +3761,7 @@ func (m *ChannelMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, channel.FieldCreatedAt)
 	}
@@ -3742,6 +3800,9 @@ func (m *ChannelMutation) Fields() []string {
 	}
 	if m.auto_sync_model_pattern != nil {
 		fields = append(fields, channel.FieldAutoSyncModelPattern)
+	}
+	if m.model_price_multiplier != nil {
+		fields = append(fields, channel.FieldModelPriceMultiplier)
 	}
 	if m.tags != nil {
 		fields = append(fields, channel.FieldTags)
@@ -3807,6 +3868,8 @@ func (m *ChannelMutation) Field(name string) (ent.Value, bool) {
 		return m.AutoSyncSupportedModels()
 	case channel.FieldAutoSyncModelPattern:
 		return m.AutoSyncModelPattern()
+	case channel.FieldModelPriceMultiplier:
+		return m.ModelPriceMultiplier()
 	case channel.FieldTags:
 		return m.Tags()
 	case channel.FieldDefaultTestModel:
@@ -3862,6 +3925,8 @@ func (m *ChannelMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldAutoSyncSupportedModels(ctx)
 	case channel.FieldAutoSyncModelPattern:
 		return m.OldAutoSyncModelPattern(ctx)
+	case channel.FieldModelPriceMultiplier:
+		return m.OldModelPriceMultiplier(ctx)
 	case channel.FieldTags:
 		return m.OldTags(ctx)
 	case channel.FieldDefaultTestModel:
@@ -3982,6 +4047,13 @@ func (m *ChannelMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetAutoSyncModelPattern(v)
 		return nil
+	case channel.FieldModelPriceMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModelPriceMultiplier(v)
+		return nil
 	case channel.FieldTags:
 		v, ok := value.([]string)
 		if !ok {
@@ -4063,6 +4135,9 @@ func (m *ChannelMutation) AddedFields() []string {
 	if m.adddeleted_at != nil {
 		fields = append(fields, channel.FieldDeletedAt)
 	}
+	if m.addmodel_price_multiplier != nil {
+		fields = append(fields, channel.FieldModelPriceMultiplier)
+	}
 	if m.addordering_weight != nil {
 		fields = append(fields, channel.FieldOrderingWeight)
 	}
@@ -4079,6 +4154,8 @@ func (m *ChannelMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case channel.FieldDeletedAt:
 		return m.AddedDeletedAt()
+	case channel.FieldModelPriceMultiplier:
+		return m.AddedModelPriceMultiplier()
 	case channel.FieldOrderingWeight:
 		return m.AddedOrderingWeight()
 	case channel.FieldPriority:
@@ -4098,6 +4175,13 @@ func (m *ChannelMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddDeletedAt(v)
+		return nil
+	case channel.FieldModelPriceMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddModelPriceMultiplier(v)
 		return nil
 	case channel.FieldOrderingWeight:
 		v, ok := value.(int)
@@ -4247,6 +4331,9 @@ func (m *ChannelMutation) ResetField(name string) error {
 		return nil
 	case channel.FieldAutoSyncModelPattern:
 		m.ResetAutoSyncModelPattern()
+		return nil
+	case channel.FieldModelPriceMultiplier:
+		m.ResetModelPriceMultiplier()
 		return nil
 	case channel.FieldTags:
 		m.ResetTags()

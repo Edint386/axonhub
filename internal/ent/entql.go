@@ -108,6 +108,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			channel.FieldManualModels:            {Type: field.TypeJSON, Column: channel.FieldManualModels},
 			channel.FieldAutoSyncSupportedModels: {Type: field.TypeBool, Column: channel.FieldAutoSyncSupportedModels},
 			channel.FieldAutoSyncModelPattern:    {Type: field.TypeString, Column: channel.FieldAutoSyncModelPattern},
+			channel.FieldModelPriceMultiplier:    {Type: field.TypeFloat64, Column: channel.FieldModelPriceMultiplier},
 			channel.FieldTags:                    {Type: field.TypeJSON, Column: channel.FieldTags},
 			channel.FieldDefaultTestModel:        {Type: field.TypeString, Column: channel.FieldDefaultTestModel},
 			channel.FieldPolicies:                {Type: field.TypeJSON, Column: channel.FieldPolicies},
@@ -1744,6 +1745,11 @@ func (f *ChannelFilter) WhereAutoSyncSupportedModels(p entql.BoolP) {
 // WhereAutoSyncModelPattern applies the entql string predicate on the auto_sync_model_pattern field.
 func (f *ChannelFilter) WhereAutoSyncModelPattern(p entql.StringP) {
 	f.Where(p.Field(channel.FieldAutoSyncModelPattern))
+}
+
+// WhereModelPriceMultiplier applies the entql float64 predicate on the model_price_multiplier field.
+func (f *ChannelFilter) WhereModelPriceMultiplier(p entql.Float64P) {
+	f.Where(p.Field(channel.FieldModelPriceMultiplier))
 }
 
 // WhereTags applies the entql json.RawMessage predicate on the tags field.

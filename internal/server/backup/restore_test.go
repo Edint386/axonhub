@@ -59,6 +59,10 @@ func TestBackupService_Restore(t *testing.T) {
 	defer client.Close()
 
 	ch1 := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ch1, err := client.Channel.UpdateOne(ch1).
+		SetModelPriceMultiplier(2.4).
+		Save(ctx)
+	require.NoError(t, err)
 	existingPrice := createBackupTestChannelModelPrice(t, client, ctx, ch1.ID, "gpt-4")
 	m1 := createBackupTestModel(t, client, ctx, "openai", "gpt-4")
 
@@ -67,6 +71,11 @@ func TestBackupService_Restore(t *testing.T) {
 		IncludeModels:      true,
 		IncludeModelPrices: true,
 	})
+	require.NoError(t, err)
+
+	_, err = client.Channel.UpdateOneID(ch1.ID).
+		SetModelPriceMultiplier(1).
+		Save(ctx)
 	require.NoError(t, err)
 
 	channelsBefore, err := client.Channel.Query().Count(ctx)
@@ -99,6 +108,7 @@ func TestBackupService_Restore(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ch1.Name, restoredChannel.Name)
 	require.Equal(t, ch1.BaseURL, restoredChannel.BaseURL)
+	require.Equal(t, 2.4, restoredChannel.ModelPriceMultiplier)
 
 	restoredModel, err := client.Model.Query().
 		Where(model.ModelID(m1.ModelID)).
@@ -115,6 +125,54 @@ func TestBackupService_Restore(t *testing.T) {
 		First(ctx)
 	require.NoError(t, err)
 	require.Equal(t, existingPrice.ReferenceID, restoredPrice.ReferenceID)
+}
+
+func TestBackupService_Restore_PreMultiplierBackupUsesDefault(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+	existing := createBackupTestChannel(t, client, ctx, "Legacy Existing Channel", channel.TypeOpenai)
+	existing, err := client.Channel.UpdateOne(existing).
+		SetModelPriceMultiplier(3).
+		Save(ctx)
+	require.NoError(t, err)
+
+	legacyChannel := func(name string) *BackupChannel {
+		return &BackupChannel{
+			Channel: ent.Channel{
+				Name:             name,
+				Type:             channel.TypeOpenai,
+				Status:           channel.StatusEnabled,
+				SupportedModels:  []string{"gpt-4"},
+				DefaultTestModel: "gpt-4",
+				Settings:         &objects.ChannelSettings{},
+			},
+			Credentials: objects.ChannelCredentials{APIKey: "legacy-key"},
+		}
+	}
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersionV5,
+		Channels: []*BackupChannel{
+			legacyChannel("Legacy Channel"),
+			legacyChannel(existing.Name),
+		},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeChannels:         true,
+		ChannelConflictStrategy: ConflictStrategyOverwrite,
+	})
+	require.NoError(t, err)
+
+	restored, err := client.Channel.Query().
+		Where(channel.Name("Legacy Channel")).
+		Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, float64(1), restored.ModelPriceMultiplier)
+
+	restoredExisting, err := client.Channel.Get(ctx, existing.ID)
+	require.NoError(t, err)
+	require.Equal(t, float64(3), restoredExisting.ModelPriceMultiplier)
 }
 
 func TestBackupService_Restore_ModelPricesOnly(t *testing.T) {

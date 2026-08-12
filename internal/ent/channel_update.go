@@ -222,6 +222,27 @@ func (_u *ChannelUpdate) ClearAutoSyncModelPattern() *ChannelUpdate {
 	return _u
 }
 
+// SetModelPriceMultiplier sets the "model_price_multiplier" field.
+func (_u *ChannelUpdate) SetModelPriceMultiplier(v float64) *ChannelUpdate {
+	_u.mutation.ResetModelPriceMultiplier()
+	_u.mutation.SetModelPriceMultiplier(v)
+	return _u
+}
+
+// SetNillableModelPriceMultiplier sets the "model_price_multiplier" field if the given value is not nil.
+func (_u *ChannelUpdate) SetNillableModelPriceMultiplier(v *float64) *ChannelUpdate {
+	if v != nil {
+		_u.SetModelPriceMultiplier(*v)
+	}
+	return _u
+}
+
+// AddModelPriceMultiplier adds value to the "model_price_multiplier" field.
+func (_u *ChannelUpdate) AddModelPriceMultiplier(v float64) *ChannelUpdate {
+	_u.mutation.AddModelPriceMultiplier(v)
+	return _u
+}
+
 // SetTags sets the "tags" field.
 func (_u *ChannelUpdate) SetTags(v []string) *ChannelUpdate {
 	_u.mutation.SetTags(v)
@@ -670,6 +691,11 @@ func (_u *ChannelUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Channel.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ModelPriceMultiplier(); ok {
+		if err := channel.ModelPriceMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "model_price_multiplier", err: fmt.Errorf(`ent: validator failed for field "Channel.model_price_multiplier": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -756,6 +782,12 @@ func (_u *ChannelUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.AutoSyncModelPatternCleared() {
 		_spec.ClearField(channel.FieldAutoSyncModelPattern, field.TypeString)
+	}
+	if value, ok := _u.mutation.ModelPriceMultiplier(); ok {
+		_spec.SetField(channel.FieldModelPriceMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedModelPriceMultiplier(); ok {
+		_spec.AddField(channel.FieldModelPriceMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Tags(); ok {
 		_spec.SetField(channel.FieldTags, field.TypeJSON, value)
@@ -1285,6 +1317,27 @@ func (_u *ChannelUpdateOne) ClearAutoSyncModelPattern() *ChannelUpdateOne {
 	return _u
 }
 
+// SetModelPriceMultiplier sets the "model_price_multiplier" field.
+func (_u *ChannelUpdateOne) SetModelPriceMultiplier(v float64) *ChannelUpdateOne {
+	_u.mutation.ResetModelPriceMultiplier()
+	_u.mutation.SetModelPriceMultiplier(v)
+	return _u
+}
+
+// SetNillableModelPriceMultiplier sets the "model_price_multiplier" field if the given value is not nil.
+func (_u *ChannelUpdateOne) SetNillableModelPriceMultiplier(v *float64) *ChannelUpdateOne {
+	if v != nil {
+		_u.SetModelPriceMultiplier(*v)
+	}
+	return _u
+}
+
+// AddModelPriceMultiplier adds value to the "model_price_multiplier" field.
+func (_u *ChannelUpdateOne) AddModelPriceMultiplier(v float64) *ChannelUpdateOne {
+	_u.mutation.AddModelPriceMultiplier(v)
+	return _u
+}
+
 // SetTags sets the "tags" field.
 func (_u *ChannelUpdateOne) SetTags(v []string) *ChannelUpdateOne {
 	_u.mutation.SetTags(v)
@@ -1746,6 +1799,11 @@ func (_u *ChannelUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Channel.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ModelPriceMultiplier(); ok {
+		if err := channel.ModelPriceMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "model_price_multiplier", err: fmt.Errorf(`ent: validator failed for field "Channel.model_price_multiplier": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1849,6 +1907,12 @@ func (_u *ChannelUpdateOne) sqlSave(ctx context.Context) (_node *Channel, err er
 	}
 	if _u.mutation.AutoSyncModelPatternCleared() {
 		_spec.ClearField(channel.FieldAutoSyncModelPattern, field.TypeString)
+	}
+	if value, ok := _u.mutation.ModelPriceMultiplier(); ok {
+		_spec.SetField(channel.FieldModelPriceMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedModelPriceMultiplier(); ok {
+		_spec.AddField(channel.FieldModelPriceMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Tags(); ok {
 		_spec.SetField(channel.FieldTags, field.TypeJSON, value)

@@ -40,7 +40,7 @@ func (svc *BackupService) Restore(ctx context.Context, data []byte, opts Restore
 		return err
 	}
 
-	if !lo.Contains([]string{BackupVersion, BackupVersionV4, BackupVersionV3, BackupVersionV2, BackupVersionV1}, backupData.Version) {
+	if !lo.Contains([]string{BackupVersion, BackupVersionV5, BackupVersionV4, BackupVersionV3, BackupVersionV2, BackupVersionV1}, backupData.Version) {
 		log.Warn(ctx, "backup version mismatch",
 			log.String("expected", BackupVersion),
 			log.String("got", backupData.Version))
@@ -88,7 +88,7 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	}
 
 	if opts.IncludeChannels {
-		if err := svc.restoreChannels(ctx, db, backupData.Channels, opts); err != nil {
+		if err := svc.restoreChannels(ctx, db, backupData.Version, backupData.Channels, opts); err != nil {
 			return err
 		}
 	}
@@ -599,7 +599,13 @@ func (svc *BackupService) restoreChannelModelPrices(
 	return nil
 }
 
-func (svc *BackupService) restoreChannels(ctx context.Context, db *ent.Client, channels []*BackupChannel, opts RestoreOptions) error {
+func (svc *BackupService) restoreChannels(
+	ctx context.Context,
+	db *ent.Client,
+	backupVersion string,
+	channels []*BackupChannel,
+	opts RestoreOptions,
+) error {
 	for _, chData := range channels {
 		existing, err := db.Channel.Query().
 			Where(channel.Name(chData.Name)).
@@ -618,6 +624,11 @@ func (svc *BackupService) restoreChannels(ctx context.Context, db *ent.Client, c
 		if chData.BaseURL != "" {
 			baseURL = &chData.BaseURL
 		}
+
+		// Backups before 1.5 did not contain this field. In that case, leave an
+		// existing channel unchanged or let a new channel use the schema default
+		// instead of interpreting the missing value as a deliberate zero.
+		hasModelPriceMultiplier := backupVersion == BackupVersion
 
 		if existing != nil {
 			switch opts.ChannelConflictStrategy {
@@ -643,6 +654,9 @@ func (svc *BackupService) restoreChannels(ctx context.Context, db *ent.Client, c
 					SetSettings(chData.Settings).
 					SetOrderingWeight(chData.OrderingWeight).
 					SetPriority(chData.Priority)
+				if hasModelPriceMultiplier {
+					update.SetModelPriceMultiplier(chData.ModelPriceMultiplier)
+				}
 
 				if chData.Remark != nil {
 					update.SetRemark(*chData.Remark)
@@ -674,6 +688,9 @@ func (svc *BackupService) restoreChannels(ctx context.Context, db *ent.Client, c
 				SetSettings(chData.Settings).
 				SetOrderingWeight(chData.OrderingWeight).
 				SetPriority(chData.Priority)
+			if hasModelPriceMultiplier {
+				create.SetModelPriceMultiplier(chData.ModelPriceMultiplier)
+			}
 
 			if chData.Remark != nil {
 				create.SetRemark(*chData.Remark)

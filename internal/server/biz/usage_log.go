@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
@@ -52,6 +53,8 @@ func (s *UsageLogService) computeUsageCost(ctx context.Context, channelID int, m
 
 	if modelPrice, ok := ch.ModelPrice(modelID); ok {
 		items, total := ComputeUsageCost(usage, modelPrice.Price, time.Now())
+		multiplier := ch.ModelPriceMultiplier()
+		items, total = applyCostMultiplier(items, total, decimal.NewFromFloat(multiplier))
 
 		totalCost := total.InexactFloat64()
 		if log.DebugEnabled(ctx) {
@@ -60,6 +63,7 @@ func (s *UsageLogService) computeUsageCost(ctx context.Context, channelID int, m
 				log.String("model_id", modelID),
 				log.Float64("total_cost", totalCost),
 				log.Int64("total_tokens", usage.TotalTokens),
+				log.Float64("model_price_multiplier", multiplier),
 				log.String("price_reference_id", modelPrice.ReferenceID),
 			)
 		}

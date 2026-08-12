@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -88,6 +89,49 @@ func TestChannelService_SaveChannelModelPrices(t *testing.T) {
 			require.Equal(t, res.ReferenceID, version.ReferenceID)
 			require.Len(t, res.ReferenceID, 8)
 		}
+	})
+
+	t.Run("persist multiplier without rewriting base prices", func(t *testing.T) {
+		cachedChannel, err := svc.GetChannel(ctx, ch.ID)
+		require.NoError(t, err)
+		svc.SetEnabledChannelsForTest([]*Channel{cachedChannel})
+
+		pricesBefore, err := client.ChannelModelPrice.Query().
+			Where(channelmodelprice.ChannelID(ch.ID)).
+			Order(ent.Asc(channelmodelprice.FieldID)).
+			All(ctx)
+		require.NoError(t, err)
+		require.Len(t, pricesBefore, 2)
+
+		versionCountBefore, err := client.ChannelModelPriceVersion.Query().Count(ctx)
+		require.NoError(t, err)
+
+		multiplier := 1.75
+		results, err := svc.SaveChannelModelPricesWithMultiplier(ctx, ch.ID, &multiplier, []SaveChannelModelPriceInput{
+			{ModelID: "gpt-4", Price: price1},
+			{ModelID: "gpt-3.5-turbo", Price: price2},
+		})
+		require.NoError(t, err)
+		require.Len(t, results, 2)
+
+		persistedChannel, err := client.Channel.Get(ctx, ch.ID)
+		require.NoError(t, err)
+		require.Equal(t, multiplier, persistedChannel.ModelPriceMultiplier)
+		require.Equal(t, multiplier, cachedChannel.ModelPriceMultiplier())
+
+		pricesAfter, err := client.ChannelModelPrice.Query().
+			Where(channelmodelprice.ChannelID(ch.ID)).
+			Order(ent.Asc(channelmodelprice.FieldID)).
+			All(ctx)
+		require.NoError(t, err)
+		require.Equal(t, pricesBefore[0].Price, pricesAfter[0].Price)
+		require.Equal(t, pricesBefore[0].ReferenceID, pricesAfter[0].ReferenceID)
+		require.Equal(t, pricesBefore[1].Price, pricesAfter[1].Price)
+		require.Equal(t, pricesBefore[1].ReferenceID, pricesAfter[1].ReferenceID)
+
+		versionCountAfter, err := client.ChannelModelPriceVersion.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, versionCountBefore, versionCountAfter)
 	})
 
 	t.Run("batch update and archive old version", func(t *testing.T) {
@@ -204,6 +248,13 @@ func TestChannelService_SaveChannelModelPrices(t *testing.T) {
 		require.Contains(t, err.Error(), "duplicate model price input")
 		require.Contains(t, err.Error(), "model_id=gpt-4")
 	})
+
+	t.Run("invalid multiplier should error", func(t *testing.T) {
+		for _, multiplier := range []float64{-1, math.NaN(), math.Inf(1)} {
+			_, err := svc.SaveChannelModelPricesWithMultiplier(ctx, ch.ID, &multiplier, nil)
+			require.ErrorContains(t, err, "finite non-negative")
+		}
+	})
 }
 
 func loToDecimalPtr(s string) *decimal.Decimal {
@@ -226,6 +277,7 @@ func TestChannelService_DuplicateChannelCopiesModelPrices(t *testing.T) {
 		SetCredentials(objects.ChannelCredentials{APIKey: "key1"}).
 		SetSupportedModels([]string{"gpt-4", "gpt-4o"}).
 		SetDefaultTestModel("gpt-4").
+		SetModelPriceMultiplier(1.6).
 		SetStatus(channel.StatusEnabled).
 		Save(ctx)
 	require.NoError(t, err)
@@ -257,6 +309,7 @@ func TestChannelService_DuplicateChannelCopiesModelPrices(t *testing.T) {
 		DefaultTestModel: "gpt-4",
 	})
 	require.NoError(t, err)
+	require.Equal(t, source.ModelPriceMultiplier, duplicated.ModelPriceMultiplier)
 
 	copiedPrices, err := client.ChannelModelPrice.Query().
 		Where(channelmodelprice.ChannelID(duplicated.ID)).

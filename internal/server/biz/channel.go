@@ -90,9 +90,13 @@ type Channel struct {
 	// Unlike the two caches above this one is refreshed at runtime:
 	// SaveChannelModelPrices calls preloadModelPrices again on the channel
 	// instance that in-flight requests are already reading from. Every access
-	// must therefore go through modelPricesMu.
-	modelPricesMu     sync.RWMutex
-	cachedModelPrices map[string]*ent.ChannelModelPrice
+	// must therefore go through modelPricesMu. The channel-level multiplier is
+	// protected by the same lock because it is saved from the same dialog and
+	// consumed together with these prices.
+	modelPricesMu                   sync.RWMutex
+	cachedModelPrices               map[string]*ent.ChannelModelPrice
+	cachedModelPriceMultiplier      float64
+	modelPriceMultiplierInitialized bool
 
 	// cachedEnabledAPIKeys caches enabled API keys (computed once when channel is loaded)
 	cachedEnabledAPIKeys []string
@@ -1085,10 +1089,36 @@ func (c *Channel) ModelPriceCount() int {
 	return len(c.cachedModelPrices)
 }
 
+// ModelPriceMultiplier returns the multiplier applied to cached base model
+// prices. Channels built from the database initialize it explicitly, including
+// a valid zero multiplier. The fallback keeps older manually-constructed test
+// channels compatible with the database default of one.
+func (c *Channel) ModelPriceMultiplier() float64 {
+	c.modelPricesMu.RLock()
+	defer c.modelPricesMu.RUnlock()
+
+	if c.modelPriceMultiplierInitialized {
+		return c.cachedModelPriceMultiplier
+	}
+
+	if c.Channel != nil && c.Channel.ModelPriceMultiplier != 0 {
+		return c.Channel.ModelPriceMultiplier
+	}
+
+	return 1
+}
+
 // setModelPrices replaces the cached model prices.
 func (c *Channel) setModelPrices(prices map[string]*ent.ChannelModelPrice) {
 	c.modelPricesMu.Lock()
 	c.cachedModelPrices = prices
+	c.modelPricesMu.Unlock()
+}
+
+func (c *Channel) setModelPriceMultiplier(multiplier float64) {
+	c.modelPricesMu.Lock()
+	c.cachedModelPriceMultiplier = multiplier
+	c.modelPriceMultiplierInitialized = true
 	c.modelPricesMu.Unlock()
 }
 

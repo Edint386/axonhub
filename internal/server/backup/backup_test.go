@@ -215,6 +215,10 @@ func TestBackupService_Backup(t *testing.T) {
 
 	ch1 := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
 	ch2 := createBackupTestChannel(t, client, ctx, "Channel 2", channel.TypeAnthropic)
+	ch1, err := client.Channel.UpdateOne(ch1).
+		SetModelPriceMultiplier(1.8).
+		Save(ctx)
+	require.NoError(t, err)
 
 	_ = createBackupTestChannelModelPrice(t, client, ctx, ch1.ID, "gpt-4")
 
@@ -241,6 +245,7 @@ func TestBackupService_Backup(t *testing.T) {
 	require.Len(t, backupData.ChannelModelPrices, 1)
 
 	require.Equal(t, ch1.Name, backupData.Channels[0].Name)
+	require.Equal(t, 1.8, backupData.Channels[0].ModelPriceMultiplier)
 	require.Equal(t, ch2.Name, backupData.Channels[1].Name)
 	require.Equal(t, m1.Name, backupData.Models[0].Name)
 	require.Equal(t, m2.Name, backupData.Models[1].Name)

@@ -153,6 +153,28 @@ func ComputeUsageCost(usage *llm.Usage, price objects.ModelPrice, now time.Time)
 	return computeUsageCostWithItems(usage, effectiveItems)
 }
 
+// applyCostMultiplier scales the final cost breakdown without changing the
+// stored base model price. Quantities and tier boundaries remain unchanged.
+func applyCostMultiplier(
+	items []objects.CostItem,
+	total decimal.Decimal,
+	multiplier decimal.Decimal,
+) ([]objects.CostItem, decimal.Decimal) {
+	if multiplier.Equal(decimal.NewFromInt(1)) {
+		return items, total
+	}
+
+	for itemIndex := range items {
+		items[itemIndex].Subtotal = items[itemIndex].Subtotal.Mul(multiplier)
+		for tierIndex := range items[itemIndex].TierBreakdown {
+			items[itemIndex].TierBreakdown[tierIndex].Subtotal =
+				items[itemIndex].TierBreakdown[tierIndex].Subtotal.Mul(multiplier)
+		}
+	}
+
+	return items, total.Mul(multiplier)
+}
+
 func computeUsageCostWithItems(usage *llm.Usage, priceItems []objects.ModelPriceItem) ([]objects.CostItem, decimal.Decimal) {
 	var items []objects.CostItem
 

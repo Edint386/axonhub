@@ -922,6 +922,16 @@ type ChannelWhereInput struct {
 	AutoSyncModelPatternEqualFold    *string  `json:"autoSyncModelPatternEqualFold,omitempty"`
 	AutoSyncModelPatternContainsFold *string  `json:"autoSyncModelPatternContainsFold,omitempty"`
 
+	// "model_price_multiplier" field predicates.
+	ModelPriceMultiplier      *float64  `json:"modelPriceMultiplier,omitempty"`
+	ModelPriceMultiplierNEQ   *float64  `json:"modelPriceMultiplierNEQ,omitempty"`
+	ModelPriceMultiplierIn    []float64 `json:"modelPriceMultiplierIn,omitempty"`
+	ModelPriceMultiplierNotIn []float64 `json:"modelPriceMultiplierNotIn,omitempty"`
+	ModelPriceMultiplierGT    *float64  `json:"modelPriceMultiplierGT,omitempty"`
+	ModelPriceMultiplierGTE   *float64  `json:"modelPriceMultiplierGTE,omitempty"`
+	ModelPriceMultiplierLT    *float64  `json:"modelPriceMultiplierLT,omitempty"`
+	ModelPriceMultiplierLTE   *float64  `json:"modelPriceMultiplierLTE,omitempty"`
+
 	// "default_test_model" field predicates.
 	DefaultTestModel             *string  `json:"defaultTestModel,omitempty"`
 	DefaultTestModelNEQ          *string  `json:"defaultTestModelNEQ,omitempty"`
@@ -1329,6 +1339,30 @@ func (i *ChannelWhereInput) P() (predicate.Channel, error) {
 	}
 	if i.AutoSyncModelPatternContainsFold != nil {
 		predicates = append(predicates, channel.AutoSyncModelPatternContainsFold(*i.AutoSyncModelPatternContainsFold))
+	}
+	if i.ModelPriceMultiplier != nil {
+		predicates = append(predicates, channel.ModelPriceMultiplierEQ(*i.ModelPriceMultiplier))
+	}
+	if i.ModelPriceMultiplierNEQ != nil {
+		predicates = append(predicates, channel.ModelPriceMultiplierNEQ(*i.ModelPriceMultiplierNEQ))
+	}
+	if len(i.ModelPriceMultiplierIn) > 0 {
+		predicates = append(predicates, channel.ModelPriceMultiplierIn(i.ModelPriceMultiplierIn...))
+	}
+	if len(i.ModelPriceMultiplierNotIn) > 0 {
+		predicates = append(predicates, channel.ModelPriceMultiplierNotIn(i.ModelPriceMultiplierNotIn...))
+	}
+	if i.ModelPriceMultiplierGT != nil {
+		predicates = append(predicates, channel.ModelPriceMultiplierGT(*i.ModelPriceMultiplierGT))
+	}
+	if i.ModelPriceMultiplierGTE != nil {
+		predicates = append(predicates, channel.ModelPriceMultiplierGTE(*i.ModelPriceMultiplierGTE))
+	}
+	if i.ModelPriceMultiplierLT != nil {
+		predicates = append(predicates, channel.ModelPriceMultiplierLT(*i.ModelPriceMultiplierLT))
+	}
+	if i.ModelPriceMultiplierLTE != nil {
+		predicates = append(predicates, channel.ModelPriceMultiplierLTE(*i.ModelPriceMultiplierLTE))
 	}
 	if i.DefaultTestModel != nil {
 		predicates = append(predicates, channel.DefaultTestModelEQ(*i.DefaultTestModel))

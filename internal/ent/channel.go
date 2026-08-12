@@ -46,6 +46,8 @@ type Channel struct {
 	AutoSyncSupportedModels bool `json:"auto_sync_supported_models,omitempty"`
 	// Regex pattern to filter models during auto-sync. Empty string means no filtering.
 	AutoSyncModelPattern string `json:"auto_sync_model_pattern,omitempty"`
+	// Multiplier applied to this channel's base model prices when calculating usage cost.
+	ModelPriceMultiplier float64 `json:"model_price_multiplier,omitempty"`
 	// Tags holds the value of the "tags" field.
 	Tags []string `json:"tags,omitempty"`
 	// DefaultTestModel holds the value of the "default_test_model" field.
@@ -164,6 +166,8 @@ func (*Channel) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case channel.FieldAutoSyncSupportedModels:
 			values[i] = new(sql.NullBool)
+		case channel.FieldModelPriceMultiplier:
+			values[i] = new(sql.NullFloat64)
 		case channel.FieldID, channel.FieldDeletedAt, channel.FieldOrderingWeight, channel.FieldPriority:
 			values[i] = new(sql.NullInt64)
 		case channel.FieldType, channel.FieldBaseURL, channel.FieldName, channel.FieldStatus, channel.FieldAutoSyncModelPattern, channel.FieldDefaultTestModel, channel.FieldErrorMessage, channel.FieldRemark:
@@ -276,6 +280,12 @@ func (_m *Channel) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field auto_sync_model_pattern", values[i])
 			} else if value.Valid {
 				_m.AutoSyncModelPattern = value.String
+			}
+		case channel.FieldModelPriceMultiplier:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field model_price_multiplier", values[i])
+			} else if value.Valid {
+				_m.ModelPriceMultiplier = value.Float64
 			}
 		case channel.FieldTags:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -450,6 +460,9 @@ func (_m *Channel) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("auto_sync_model_pattern=")
 	builder.WriteString(_m.AutoSyncModelPattern)
+	builder.WriteString(", ")
+	builder.WriteString("model_price_multiplier=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ModelPriceMultiplier))
 	builder.WriteString(", ")
 	builder.WriteString("tags=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Tags))

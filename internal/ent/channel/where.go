@@ -90,6 +90,11 @@ func AutoSyncModelPattern(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldAutoSyncModelPattern, v))
 }
 
+// ModelPriceMultiplier applies equality check predicate on the "model_price_multiplier" field. It's identical to ModelPriceMultiplierEQ.
+func ModelPriceMultiplier(v float64) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldModelPriceMultiplier, v))
+}
+
 // DefaultTestModel applies equality check predicate on the "default_test_model" field. It's identical to DefaultTestModelEQ.
 func DefaultTestModel(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldDefaultTestModel, v))
@@ -523,6 +528,46 @@ func AutoSyncModelPatternEqualFold(v string) predicate.Channel {
 // AutoSyncModelPatternContainsFold applies the ContainsFold predicate on the "auto_sync_model_pattern" field.
 func AutoSyncModelPatternContainsFold(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldContainsFold(FieldAutoSyncModelPattern, v))
+}
+
+// ModelPriceMultiplierEQ applies the EQ predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierEQ(v float64) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldModelPriceMultiplier, v))
+}
+
+// ModelPriceMultiplierNEQ applies the NEQ predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierNEQ(v float64) predicate.Channel {
+	return predicate.Channel(sql.FieldNEQ(FieldModelPriceMultiplier, v))
+}
+
+// ModelPriceMultiplierIn applies the In predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierIn(vs ...float64) predicate.Channel {
+	return predicate.Channel(sql.FieldIn(FieldModelPriceMultiplier, vs...))
+}
+
+// ModelPriceMultiplierNotIn applies the NotIn predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierNotIn(vs ...float64) predicate.Channel {
+	return predicate.Channel(sql.FieldNotIn(FieldModelPriceMultiplier, vs...))
+}
+
+// ModelPriceMultiplierGT applies the GT predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierGT(v float64) predicate.Channel {
+	return predicate.Channel(sql.FieldGT(FieldModelPriceMultiplier, v))
+}
+
+// ModelPriceMultiplierGTE applies the GTE predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierGTE(v float64) predicate.Channel {
+	return predicate.Channel(sql.FieldGTE(FieldModelPriceMultiplier, v))
+}
+
+// ModelPriceMultiplierLT applies the LT predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierLT(v float64) predicate.Channel {
+	return predicate.Channel(sql.FieldLT(FieldModelPriceMultiplier, v))
+}
+
+// ModelPriceMultiplierLTE applies the LTE predicate on the "model_price_multiplier" field.
+func ModelPriceMultiplierLTE(v float64) predicate.Channel {
+	return predicate.Channel(sql.FieldLTE(FieldModelPriceMultiplier, v))
 }
 
 // TagsIsNil applies the IsNil predicate on the "tags" field.

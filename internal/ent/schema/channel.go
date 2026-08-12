@@ -1,6 +1,9 @@
 package schema
 
 import (
+	"errors"
+	"math"
+
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
 	"entgo.io/ent/schema"
@@ -127,6 +130,19 @@ func (Channel) Fields() []ent.Field {
 		field.Bool("auto_sync_supported_models").Default(false),
 		field.String("auto_sync_model_pattern").Optional().Default("").
 			Comment("Regex pattern to filter models during auto-sync. Empty string means no filtering."),
+		field.Float("model_price_multiplier").
+			Default(1).
+			Comment("Multiplier applied to this channel's base model prices when calculating usage cost.").
+			Validate(func(multiplier float64) error {
+				if multiplier < 0 || math.IsNaN(multiplier) || math.IsInf(multiplier, 0) {
+					return errors.New("model price multiplier must be a finite non-negative number")
+				}
+
+				return nil
+			}).
+			Annotations(
+				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput),
+			),
 		field.Strings("tags").Optional().Default([]string{}),
 		field.String("default_test_model"),
 		field.JSON("policies", objects.ChannelPolicies{}).
