@@ -19,7 +19,8 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 	err := svc.RunInTransaction(ctx, func(ctx context.Context) error {
 		db := svc.entFromContext(ctx)
 
-		if _, err := db.Channel.Get(ctx, sourceID); err != nil {
+		source, err := db.Channel.Get(ctx, sourceID)
+		if err != nil {
 			return fmt.Errorf("failed to get source channel: %w", err)
 		}
 
@@ -37,6 +38,12 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 		ch, err := svc.createChannel(ctx, input)
 		if err != nil {
 			return err
+		}
+		ch, err = db.Channel.UpdateOne(ch).
+			SetModelPriceMultiplier(source.ModelPriceMultiplier).
+			Save(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to copy channel model price multiplier: %w", err)
 		}
 
 		prices, err := db.ChannelModelPrice.Query().

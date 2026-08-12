@@ -148,5 +148,9 @@ input SaveChannelModelPriceInput {
 }
 
 extend type Mutation {
-  saveChannelModelPrices(channelId: ID!, input: [SaveChannelModelPriceInput!]!): [ChannelModelPrice!]!
+  saveChannelModelPrices(
+    channelId: ID!
+    multiplier: Float
+    input: [SaveChannelModelPriceInput!]!
+  ): [ChannelModelPrice!]!
 }

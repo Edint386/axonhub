@@ -117,6 +117,73 @@ func TestUsageCost_PerUnitPromptAndCompletion(t *testing.T) {
 	require.Len(t, ul.CostItems, 2)
 }
 
+func TestUsageCost_AppliesChannelModelPriceMultiplier(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenaiFake).
+		SetName("multiplied-cost").
+		SetSupportedModels([]string{"multiplied-model"}).
+		SetDefaultTestModel("multiplied-model").
+		SetModelPriceMultiplier(2.5).
+		SetStatus(channel.StatusEnabled).
+		SetCredentials(objects.ChannelCredentials{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	baseUnitPrice := decimal.NewFromInt(2)
+	basePrice := objects.ModelPrice{Items: []objects.ModelPriceItem{
+		{
+			ItemCode: objects.PriceItemCodeUsage,
+			Pricing: objects.Pricing{
+				Mode:         objects.PricingModeUsagePerUnit,
+				UsagePerUnit: &baseUnitPrice,
+			},
+		},
+	}}
+	storedPrice, err := client.ChannelModelPrice.Create().
+		SetChannelID(ch.ID).
+		SetModelID("multiplied-model").
+		SetPrice(basePrice).
+		SetReferenceID("multiplied-ref").
+		Save(ctx)
+	require.NoError(t, err)
+
+	systemService := NewSystemService(SystemServiceParams{Ent: client})
+	channelService := NewChannelServiceForTest(client)
+	built, err := channelService.GetChannel(ctx, ch.ID)
+	require.NoError(t, err)
+	channelService.preloadModelPrices(ctx, built)
+	channelService.SetEnabledChannelsForTest([]*Channel{built})
+
+	usageLogService := NewUsageLogService(client, systemService, channelService)
+	usageLog, err := usageLogService.CreateUsageLog(ctx, CreateUsageLogParams{
+		RequestID:     1,
+		ProjectID:     1,
+		ChannelID:     ch.ID,
+		ActualModelID: "multiplied-model",
+		Usage: &llm.Usage{
+			PromptTokens: 1_000_000,
+			TotalTokens:  1_000_000,
+		},
+		Source: "api",
+		Format: "openai/chat_completions",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, usageLog.TotalCost)
+	require.InDelta(t, 5, *usageLog.TotalCost, 1e-12)
+	require.Len(t, usageLog.CostItems, 1)
+	require.True(t, usageLog.CostItems[0].Subtotal.Equal(decimal.NewFromInt(5)))
+	require.Equal(t, "multiplied-ref", usageLog.CostPriceReferenceID)
+
+	// Synchronizing or applying the multiplier must not bake it into the stored
+	// provider/base price.
+	require.Equal(t, basePrice, storedPrice.Price)
+}
+
 func TestUsageCost_TieredPrompt(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()

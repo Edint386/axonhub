@@ -199,7 +199,8 @@ func (l BackupUsageLog) MarshalJSON() ([]byte, error) {
 }
 
 const (
-	BackupVersion   = "1.4"
+	BackupVersion   = "1.5"
+	BackupVersionV5 = "1.4"
 	BackupVersionV4 = "1.3"
 	BackupVersionV1 = "1.0"
 	BackupVersionV2 = "1.1"

@@ -647,6 +647,7 @@ const GET_CHANNEL_MODEL_PRICES_QUERY = `
     node(id: $id) {
     ... on Channel {
       id
+      modelPriceMultiplier
       channelModelPrices {
         id
         modelID
@@ -719,8 +720,8 @@ const GET_CHANNEL_MODEL_PRICES_QUERY = `
 `;
 
 const SAVE_CHANNEL_MODEL_PRICES_MUTATION = `
-  mutation SaveChannelModelPrices($channelId: ID!, $input: [SaveChannelModelPriceInput!]!) {
-    saveChannelModelPrices(channelId: $channelId, input: $input) {
+  mutation SaveChannelModelPrices($channelId: ID!, $multiplier: Float!, $input: [SaveChannelModelPriceInput!]!) {
+    saveChannelModelPrices(channelId: $channelId, multiplier: $multiplier, input: $input) {
       id
       modelID
       price {
@@ -1060,11 +1061,14 @@ export function useChannelModelPrices(channelId: string) {
     queryKey: ['channelModelPrices', channelId],
     queryFn: async () => {
       try {
-        const data = await graphqlRequest<{ node: { channelModelPrices: ChannelModelPrice[] } }>(GET_CHANNEL_MODEL_PRICES_QUERY, {
-          id: channelId,
-        });
-        const node = data.node as { channelModelPrices: ChannelModelPrice[] };
-        return (node?.channelModelPrices || []).map((p) => channelModelPriceSchema.parse(p));
+        const data = await graphqlRequest<{
+          node: { modelPriceMultiplier: number; channelModelPrices: ChannelModelPrice[] };
+        }>(GET_CHANNEL_MODEL_PRICES_QUERY, { id: channelId });
+        const node = data.node;
+        return {
+          multiplier: node?.modelPriceMultiplier ?? 1,
+          prices: (node?.channelModelPrices || []).map((p) => channelModelPriceSchema.parse(p)),
+        };
       } catch (error) {
         handleError(error, t('common.errors.internalServerError'));
         throw error;
@@ -1080,10 +1084,19 @@ export function useSaveChannelModelPrices() {
   const { handleError } = useErrorHandler();
 
   return useMutation({
-    mutationFn: async ({ channelId, input }: { channelId: string; input: SaveChannelModelPriceInput[] }) => {
+    mutationFn: async ({
+      channelId,
+      multiplier,
+      input,
+    }: {
+      channelId: string;
+      multiplier: number;
+      input: SaveChannelModelPriceInput[];
+    }) => {
       try {
         const data = await graphqlRequest<{ saveChannelModelPrices: ChannelModelPrice[] }>(SAVE_CHANNEL_MODEL_PRICES_MUTATION, {
           channelId,
+          multiplier,
           input,
         });
         return data.saveChannelModelPrices.map((p) => channelModelPriceSchema.parse(p));

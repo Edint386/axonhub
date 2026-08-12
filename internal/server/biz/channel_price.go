@@ -375,6 +375,31 @@ func (svc *ChannelService) SaveChannelModelPrices(
 	channelID int,
 	inputs []SaveChannelModelPriceInput,
 ) ([]*ent.ChannelModelPrice, error) {
+	return svc.saveChannelModelPrices(ctx, channelID, nil, inputs)
+}
+
+// SaveChannelModelPricesWithMultiplier saves base prices and, when supplied,
+// the channel-level multiplier in the same transaction. A nil multiplier keeps
+// compatibility with callers that only update model prices.
+func (svc *ChannelService) SaveChannelModelPricesWithMultiplier(
+	ctx context.Context,
+	channelID int,
+	multiplier *float64,
+	inputs []SaveChannelModelPriceInput,
+) ([]*ent.ChannelModelPrice, error) {
+	return svc.saveChannelModelPrices(ctx, channelID, multiplier, inputs)
+}
+
+func (svc *ChannelService) saveChannelModelPrices(
+	ctx context.Context,
+	channelID int,
+	multiplier *float64,
+	inputs []SaveChannelModelPriceInput,
+) ([]*ent.ChannelModelPrice, error) {
+	if multiplier != nil && (*multiplier < 0 || math.IsNaN(*multiplier) || math.IsInf(*multiplier, 0)) {
+		return nil, fmt.Errorf("model price multiplier must be a finite non-negative number")
+	}
+
 	seenModelIDs := make(map[string]struct{}, len(inputs))
 	for _, input := range inputs {
 		if _, ok := seenModelIDs[input.ModelID]; ok {
@@ -482,25 +507,41 @@ func (svc *ChannelService) SaveChannelModelPrices(
 			results = append(results, entity)
 		}
 
-		// Force update channel updated_at to trigger reload cache.¬
-		return db.Channel.UpdateOneID(channelID).
-			SetUpdatedAt(now).
-			Exec(ctx)
+		// Force update channel updated_at to trigger reload cache and persist the
+		// multiplier independently from the base model prices.
+		channelUpdate := db.Channel.UpdateOneID(channelID).
+			SetUpdatedAt(now)
+		if multiplier != nil {
+			channelUpdate.SetModelPriceMultiplier(*multiplier)
+		}
+
+		return channelUpdate.Exec(ctx)
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Refresh cached model prices for enabled channel
-	if ch := svc.GetEnabledChannel(channelID); ch != nil {
-		svc.preloadModelPrices(ctx, ch)
+	// Publish cached pricing only after an outer GraphQL transaction commits.
+	// Use the service client for the post-commit query because a transaction
+	// client stored in ctx is no longer usable after commit.
+	runAfterCommit(ctx, func(cacheCtx context.Context) {
+		if ch := svc.GetEnabledChannel(channelID); ch != nil {
+			if multiplier != nil {
+				ch.setModelPriceMultiplier(*multiplier)
+			}
+			svc.preloadModelPrices(ent.NewContext(cacheCtx, svc.db), ch)
 
-		if log.DebugEnabled(ctx) {
-			log.Debug(ctx, "refreshed cached model prices after save",
-				log.Int("channel_id", channelID),
-				log.Int("count", ch.ModelPriceCount()),
-			)
+			if log.DebugEnabled(cacheCtx) {
+				log.Debug(cacheCtx, "refreshed cached model prices after save",
+					log.Int("channel_id", channelID),
+					log.Int("count", ch.ModelPriceCount()),
+				)
+			}
 		}
+	})
+
+	if multiplier != nil {
+		svc.reloadChannelsAfterCommit(ctx)
 	}
 
 	return results, nil

@@ -88,6 +88,7 @@ func TestChannelService_SyncChannelModelsAutoConfiguresMissingPrices(t *testing.
 		SetCredentials(objects.ChannelCredentials{APIKey: "test-key"}).
 		SetSupportedModels([]string{"existing-model"}).
 		SetDefaultTestModel("existing-model").
+		SetModelPriceMultiplier(2.25).
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -108,6 +109,7 @@ func TestChannelService_SyncChannelModelsAutoConfiguresMissingPrices(t *testing.
 
 	updated, err := svc.SyncChannelModels(ctx, ch.ID, nil)
 	require.NoError(t, err)
+	require.Equal(t, 2.25, updated.ModelPriceMultiplier)
 	require.ElementsMatch(t, []string{
 		"existing-model",
 		"priced-model",
@@ -172,6 +174,7 @@ func TestChannelService_SyncChannelModelsAutoConfiguresMissingPrices(t *testing.
 
 	updated, err = svc.SyncChannelModels(ctx, ch.ID, nil)
 	require.NoError(t, err)
+	require.Equal(t, 2.25, updated.ModelPriceMultiplier)
 	require.Equal(t, 2, notifier.notifyCount)
 	retriedPrice, err := client.ChannelModelPrice.Query().
 		Where(

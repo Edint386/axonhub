@@ -944,6 +944,29 @@ func TestComputeUsageCost_WithSchedule_Timezone(t *testing.T) {
 	require.InDelta(t, 0.00006, total.InexactFloat64(), 0.0000001)
 }
 
+func TestApplyCostMultiplier_ScalesBreakdown(t *testing.T) {
+	items := []objects.CostItem{
+		{
+			Subtotal: decimal.RequireFromString("3"),
+			TierBreakdown: []objects.TierCost{
+				{Subtotal: decimal.RequireFromString("1")},
+				{Subtotal: decimal.RequireFromString("2")},
+			},
+		},
+	}
+
+	scaledItems, scaledTotal := applyCostMultiplier(
+		items,
+		decimal.RequireFromString("3"),
+		decimal.RequireFromString("1.5"),
+	)
+
+	require.True(t, scaledTotal.Equal(decimal.RequireFromString("4.5")))
+	require.True(t, scaledItems[0].Subtotal.Equal(decimal.RequireFromString("4.5")))
+	require.True(t, scaledItems[0].TierBreakdown[0].Subtotal.Equal(decimal.RequireFromString("1.5")))
+	require.True(t, scaledItems[0].TierBreakdown[1].Subtotal.Equal(decimal.RequireFromString("3")))
+}
+
 func mustDecimalPtr(s string) *decimal.Decimal {
 	d, err := decimal.NewFromString(s)
 	if err != nil {
