@@ -358,7 +358,7 @@ export default function Playground() {
                     items={channelOptions}
                     isLoading={channelsLoading}
                     emptyMessage={t('playground.errors.noChannelsAvailable')}
-                    placeholder={channelsLoading ? t('loading') : t('playground.settings.selectChannel')}
+                    placeholder={channelsLoading ? t('common.loading') : t('playground.settings.selectChannel')}
                   />
                 </div>
               )}
@@ -373,9 +373,9 @@ export default function Playground() {
                   items={modelOptions}
                   isLoading={selectedModelSourceLoading}
                   emptyMessage={t('playground.errors.noModelsAvailable')}
-                  placeholder={selectedModelSourceLoading ? t('loading') : t('playground.settings.selectModel')}
+                  placeholder={selectedModelSourceLoading ? t('common.loading') : t('playground.settings.selectModel')}
                 />
-                {selectedModelSourceLoading && <p className='text-muted-foreground text-[10px]'>{t('loading')}...</p>}
+                {selectedModelSourceLoading && <p className='text-muted-foreground text-[10px]'>{t('common.loading')}</p>}
                 {!selectedModelSourceLoading && modelOptions.length > 0 && (
                   <p className='text-muted-foreground text-[10px]'>
                     {isModelGatewaySource
@@ -515,7 +515,7 @@ export default function Playground() {
                                 <Action onClick={() => regenerate()} label={t('playground.chat.retry')}>
                                   <RefreshCcw className='size-3' />
                                 </Action>
-                                <Action onClick={() => navigator.clipboard.writeText(textContent)} label={t('copy')}>
+                                <Action onClick={() => navigator.clipboard.writeText(textContent)} label={t('common.buttons.copy')}>
                                   <Copy className='size-3' />
                                 </Action>
                               </Actions>

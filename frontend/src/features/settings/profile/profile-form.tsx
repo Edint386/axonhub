@@ -121,7 +121,7 @@ export default function ProfileForm() {
   };
 
   if (isLoading) {
-    return <div>{t('loading')}</div>;
+    return <div>{t('common.loading')}</div>;
   }
 
   return (

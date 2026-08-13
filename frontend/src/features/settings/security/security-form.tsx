@@ -67,7 +67,7 @@ export default function SecurityForm() {
       console.error('Failed to change password:', error);
       toast.error(
         t('security.messages.passwordChangeError', 'Failed to change password: ') +
-          (error.response?.errors?.[0]?.message || error.message || t('common.errors.unknown')),
+          (error.response?.errors?.[0]?.message || error.message || t('common.errors.unknownError')),
       );
     } finally {
       setIsUpdating(false);

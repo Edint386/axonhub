@@ -116,6 +116,7 @@
   "common.buttons.remove": "Remove",
   "common.buttons.openMenu": "Open menu",
   "common.buttons.close": "Close",
+  "common.buttons.copy": "Copy",
   "common.buttons.retry": "Retry",
   "common.status.inactiveRetry": "Inactive - click to retry",
   "common.actions.openMenu": "Open menu",
