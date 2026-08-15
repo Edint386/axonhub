@@ -549,13 +549,24 @@ type UpdateSystemChannelSettings struct {
 	TestUserPrompt        *string                       `json:"test_user_prompt"`
 }
 
-// ActiveHealthProbeScanSetting controls the global priority-aware window for
-// scheduled synthetic probes. Per-channel intervals and model switches remain
-// the source of due eligibility.
+// ActiveHealthProbeModelSetting is the global model-level control for active
+// synthetic probes. Model switches are intentionally global so a model is
+// either probed on every supporting enabled channel or not probed at all.
+type ActiveHealthProbeModelSetting struct {
+	ModelID string `json:"model_id"`
+	Enabled bool   `json:"enabled"`
+	Stream  bool   `json:"stream"`
+}
+
+// ActiveHealthProbeScanSetting controls the global model switches and the
+// priority-aware window for scheduled synthetic probes. Per-channel intervals
+// remain the cadence source; legacy per-channel model switches are used only
+// when Models is absent.
 type ActiveHealthProbeScanSetting struct {
-	Enabled             bool `json:"enabled"`
-	AcceptableLatencyMs int  `json:"acceptable_latency_ms"`
-	ExtraChannels       int  `json:"extra_channels"`
+	Enabled             bool                            `json:"enabled"`
+	AcceptableLatencyMs int                             `json:"acceptable_latency_ms"`
+	ExtraChannels       int                             `json:"extra_channels"`
+	Models              []ActiveHealthProbeModelSetting `json:"models,omitempty"`
 }
 
 type ChannelModelAutoSyncSetting struct {
@@ -1352,6 +1363,11 @@ func normalizeSystemChannelSettings(setting *SystemChannelSettings) {
 	} else if setting.ActiveHealthProbeScan.AcceptableLatencyMs == 0 {
 		setting.ActiveHealthProbeScan.AcceptableLatencyMs = defaultActiveHealthProbeScanSetting.AcceptableLatencyMs
 	}
+	if setting.ActiveHealthProbeScan != nil {
+		for index := range setting.ActiveHealthProbeScan.Models {
+			setting.ActiveHealthProbeScan.Models[index].ModelID = strings.TrimSpace(setting.ActiveHealthProbeScan.Models[index].ModelID)
+		}
+	}
 }
 
 func validateSystemChannelSettings(setting *SystemChannelSettings) error {
@@ -1379,6 +1395,16 @@ func validateSystemChannelSettings(setting *SystemChannelSettings) error {
 			minActiveHealthProbeExtraChannels,
 			maxActiveHealthProbeExtraChannels,
 		)
+	}
+	seenModels := make(map[string]struct{}, len(setting.ActiveHealthProbeScan.Models))
+	for _, model := range setting.ActiveHealthProbeScan.Models {
+		if strings.TrimSpace(model.ModelID) == "" {
+			return fmt.Errorf("active health probe model ID must not be empty")
+		}
+		if _, exists := seenModels[model.ModelID]; exists {
+			return fmt.Errorf("active health probe model %q is configured more than once", model.ModelID)
+		}
+		seenModels[model.ModelID] = struct{}{}
 	}
 
 	return nil

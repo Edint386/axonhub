@@ -22,6 +22,10 @@ const channelHealthProbeModelOverviewSchema = z.object({
   modelID: z.string(),
   enabled: z.boolean(),
   stream: z.boolean(),
+  firstTokenMs: z.number().nullable().optional(),
+  p95Ms: z.number().nullable().optional(),
+  lastProbedAt: z.string().nullable().optional(),
+  sampleCount: z.number(),
   latestRun: activeChannelHealthProbeRunSchema.nullable().optional(),
 });
 
@@ -40,6 +44,7 @@ const channelHealthProbePolicySchema = z.object({
   acceptableLatencyMs: z.number(),
   extraChannels: z.number(),
   apiKeyMaxFirstTokenLatencyMs: z.number().nullable().optional(),
+  models: z.array(z.object({ modelID: z.string(), enabled: z.boolean(), stream: z.boolean() })),
 });
 
 const channelHealthProbeOverviewSchema = z.object({
@@ -82,6 +87,13 @@ export interface UpdateChannelHealthProbePolicyInput {
   enabled: boolean;
   acceptableLatencyMs: number;
   extraChannels: number;
+  models: ActiveHealthProbeModelSetting[];
+}
+
+export interface ActiveHealthProbeModelSetting {
+  modelID: string;
+  enabled: boolean;
+  stream: boolean;
 }
 
 export interface ChannelHealthProbeHistoryInput {
@@ -122,6 +134,10 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
         modelID
         enabled
         stream
+        firstTokenMs
+        p95Ms
+        lastProbedAt
+        sampleCount
         latestRun {
           ${CHANNEL_HEALTH_PROBE_RUN_FIELDS}
         }
@@ -132,6 +148,11 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
       acceptableLatencyMs
       extraChannels
       apiKeyMaxFirstTokenLatencyMs
+      models {
+        modelID
+        enabled
+        stream
+      }
     }
   }
 `;
@@ -160,6 +181,10 @@ const UPDATE_CHANNEL_HEALTH_PROBE_SETTINGS_MUTATION = `
         modelID
         enabled
         stream
+        firstTokenMs
+        p95Ms
+        lastProbedAt
+        sampleCount
         latestRun {
           ${CHANNEL_HEALTH_PROBE_RUN_FIELDS}
         }
@@ -175,6 +200,11 @@ const UPDATE_CHANNEL_HEALTH_PROBE_POLICY_MUTATION = `
       acceptableLatencyMs
       extraChannels
       apiKeyMaxFirstTokenLatencyMs
+      models {
+        modelID
+        enabled
+        stream
+      }
     }
   }
 `;

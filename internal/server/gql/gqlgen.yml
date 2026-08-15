@@ -179,6 +179,12 @@ models:
   ChannelHealthProbeModelInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeModel
+  ActiveHealthProbeModelSetting:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.ActiveHealthProbeModelSetting
+  ActiveHealthProbeModelSettingInput:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.ActiveHealthProbeModelSetting
   ChannelRateLimit:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelRateLimit
