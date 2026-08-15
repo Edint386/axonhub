@@ -696,7 +696,7 @@ export function ChannelsModelPriceDialog() {
   const defaultProviderId = useMemo(() => normalizeProviderKeyFromChannelType(currentRow?.type), [currentRow?.type]);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModelId, setSelectedModelId] = useState<string>('');
-  const [multiplier, setMultiplier] = useState<number>(1);
+  const [multiplierInput, setMultiplierInput] = useState('1');
 
   useEffect(() => {
     if (!isOpen || !providersData) return;
@@ -722,14 +722,14 @@ export function ChannelsModelPriceDialog() {
   useEffect(() => {
     if (isOpen && currentPrices) {
       reset(mapServerPricesToFormData(currentPrices.prices));
-      setMultiplier(currentPrices.multiplier);
+      setMultiplierInput(String(currentPrices.multiplier));
     }
   }, [isOpen, currentPrices, reset]);
 
   const handleClose = useCallback(() => {
     setOpen(null);
     reset();
-    setMultiplier(1);
+    setMultiplierInput('1');
   }, [setOpen, reset]);
 
   const onSubmitError = useCallback(
@@ -770,6 +770,12 @@ export function ChannelsModelPriceDialog() {
   const onSubmit = useCallback(
     async (data: PriceFormData) => {
       if (!currentRow) return;
+
+      const multiplier = Number(multiplierInput);
+      if (!multiplierInput.trim() || !Number.isFinite(multiplier) || multiplier < 0) {
+        toast.error(t('price.apply.multiplierInvalid'));
+        return;
+      }
 
       try {
         const input = data.prices.map((p) => ({
@@ -854,7 +860,7 @@ export function ChannelsModelPriceDialog() {
         // Error handled by mutation
       }
     },
-    [currentRow, handleClose, multiplier, savePrices]
+    [currentRow, handleClose, multiplierInput, savePrices, t]
   );
 
   const addPrice = useCallback(() => {
@@ -1062,11 +1068,8 @@ export function ChannelsModelPriceDialog() {
                     <FormLabel className='text-sm'>{t('price.apply.multiplier')}</FormLabel>
                     <Input
                       type='number'
-                      value={multiplier}
-                      onChange={(e) => {
-                        const value = e.target.valueAsNumber;
-                        setMultiplier(Number.isFinite(value) ? Math.max(0, value) : 0);
-                      }}
+                      value={multiplierInput}
+                      onChange={(e) => setMultiplierInput(e.target.value)}
                       className='h-8'
                       step='0.01'
                       min='0'
