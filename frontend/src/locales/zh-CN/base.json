@@ -4,7 +4,7 @@
   "sidebar.groups.settings": "设置",
   "sidebar.items.dashboard": "仪表板",
   "sidebar.items.channels": "渠道",
-  "sidebar.items.channelHealth": "渠道探测",
+  "sidebar.items.channelHealth": "监控",
   "sidebar.items.models": "模型",
   "sidebar.items.promptProtectionRules": "提示保护",
   "sidebar.items.prompts": "提示词",

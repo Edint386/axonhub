@@ -3,12 +3,15 @@ import type { ReactNode } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Gauge,
   Loader2,
   Play,
   RefreshCw,
+  Settings2,
   SkipForward,
   XCircle,
 } from 'lucide-react';
@@ -18,6 +21,8 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,9 +34,9 @@ import { Header } from '@/components/layout/header';
 import { Main } from '@/components/layout/main';
 import {
   type ActiveChannelHealthProbeRun,
+  type ActiveHealthProbeModelSetting,
   type ChannelHealthProbeChannel,
   type ChannelHealthProbeHistoryInput,
-  type ChannelHealthProbeModelInput,
   type ChannelHealthProbePolicy,
   useChannelHealthProbeHistory,
   useChannelHealthProbeOverview,
@@ -117,28 +122,124 @@ function IconAction({
   );
 }
 
-function buildSettingsInput(
-  channel: ChannelHealthProbeChannel,
-  patch: Partial<Pick<ChannelHealthProbeChannel, 'enabled' | 'intervalMinutes'>> & {
-    models?: ChannelHealthProbeModelInput[];
+function effectiveModelSettings(channels: ChannelHealthProbeChannel[], policy: ChannelHealthProbePolicy) {
+  const configured = new Map(policy.models.map((model) => [model.modelID, model]));
+  const models = new Map<string, ActiveHealthProbeModelSetting>();
+  for (const channel of channels) {
+    for (const model of channel.models) {
+      if (configured.has(model.modelID)) {
+        continue;
+      }
+      models.set(model.modelID, { modelID: model.modelID, enabled: model.enabled, stream: model.stream });
+    }
   }
-) {
-  let models = patch.models ?? channel.models.map(({ modelID, enabled, stream }) => ({ modelID, enabled, stream }));
-  let enabled = patch.enabled ?? channel.enabled;
+  for (const model of policy.models) {
+    models.set(model.modelID, model);
+  }
+  return [...models.values()].sort((left, right) => left.modelID.localeCompare(right.modelID));
+}
 
-  if (enabled && !models.some((model) => model.enabled) && models.length > 0) {
-    models = models.map((model, index) => (index === 0 ? { ...model, enabled: true } : model));
-  }
-  if (!models.some((model) => model.enabled)) {
-    enabled = false;
-  }
+function GlobalModelControlPanel({
+  channels,
+  policy,
+  modelSettings,
+  canWrite,
+}: {
+  channels: ChannelHealthProbeChannel[];
+  policy: ChannelHealthProbePolicy;
+  modelSettings: ActiveHealthProbeModelSetting[];
+  canWrite: boolean;
+}) {
+  const { t } = useTranslation();
+  const updatePolicy = useUpdateChannelHealthProbePolicy();
 
-  return {
-    channelID: channel.channelID,
-    enabled,
-    intervalMinutes: patch.intervalMinutes ?? channel.intervalMinutes,
-    models,
+  const saveModels = useCallback(
+    (models: ActiveHealthProbeModelSetting[]) => {
+      updatePolicy.mutate(
+        {
+          enabled: policy.enabled,
+          acceptableLatencyMs: policy.acceptableLatencyMs,
+          extraChannels: policy.extraChannels,
+          models,
+        },
+        {
+          onSuccess: () => toast.success(t('channelHealth.messages.modelsUpdated')),
+          onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updatePolicyFailed')),
+        }
+      );
+    },
+    [policy.acceptableLatencyMs, policy.enabled, policy.extraChannels, t, updatePolicy]
+  );
+
+  const updateModel = (modelID: string, patch: Partial<ActiveHealthProbeModelSetting>) => {
+    saveModels(modelSettings.map((model) => (model.modelID === modelID ? { ...model, ...patch } : model)));
   };
+
+  return (
+    <Card>
+      <CardHeader className='gap-1 pb-3'>
+        <div className='flex items-start justify-between gap-4'>
+          <div>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <Gauge className='size-4' />
+              {t('channelHealth.models.title')}
+            </CardTitle>
+            <CardDescription>{t('channelHealth.models.description')}</CardDescription>
+          </div>
+          <Badge variant='outline'>
+            {t('channelHealth.models.enabledCount', {
+              enabled: modelSettings.filter((model) => model.enabled).length,
+              total: modelSettings.length,
+            })}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className='space-y-2'>
+        {modelSettings.length === 0 ? (
+          <div className='text-muted-foreground rounded-lg border border-dashed py-8 text-center text-sm'>
+            {t('channelHealth.models.empty')}
+          </div>
+        ) : (
+          modelSettings.map((model) => {
+            const channelCount = channels.filter((channel) => channel.models.some((item) => item.modelID === model.modelID)).length;
+            return (
+              <div
+                key={model.modelID}
+                className='flex flex-col gap-3 rounded-lg border px-3 py-3 sm:flex-row sm:items-center sm:justify-between'
+              >
+                <div className='min-w-0'>
+                  <div className='truncate font-mono text-sm'>{model.modelID}</div>
+                  <div className='text-muted-foreground mt-1 text-xs'>
+                    {t('channelHealth.models.channelCount', { count: channelCount })}
+                  </div>
+                </div>
+                <div className='flex items-center gap-4'>
+                  <label className='flex items-center gap-2 text-xs'>
+                    <span className='text-muted-foreground'>{t('channelHealth.models.probe')}</span>
+                    <Switch
+                      checked={model.enabled}
+                      onCheckedChange={(enabled) => updateModel(model.modelID, { enabled })}
+                      disabled={!canWrite || updatePolicy.isPending}
+                      aria-label={`${t('channelHealth.models.probe')} ${model.modelID}`}
+                    />
+                  </label>
+                  <label className='flex items-center gap-2 text-xs'>
+                    <span className='text-muted-foreground'>{t('channelHealth.columns.stream')}</span>
+                    <Switch
+                      checked={model.stream}
+                      onCheckedChange={(stream) => updateModel(model.modelID, { stream })}
+                      disabled={!canWrite || updatePolicy.isPending}
+                      aria-label={`${t('channelHealth.columns.stream')} ${model.modelID}`}
+                    />
+                  </label>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function PriorityProbePolicyPanel({
@@ -152,6 +253,7 @@ function PriorityProbePolicyPanel({
 }) {
   const { t } = useTranslation();
   const updatePolicy = useUpdateChannelHealthProbePolicy();
+  const [open, setOpen] = useState(false);
   const [enabled, setEnabled] = useState(policy.enabled);
   const [latencySeconds, setLatencySeconds] = useState(String(policy.acceptableLatencyMs / 1000));
   const [extraChannels, setExtraChannels] = useState(String(policy.extraChannels));
@@ -179,7 +281,12 @@ function PriorityProbePolicyPanel({
       return;
     }
     updatePolicy.mutate(
-      { enabled, acceptableLatencyMs, extraChannels: parsedExtraChannels },
+      {
+        enabled,
+        acceptableLatencyMs,
+        extraChannels: parsedExtraChannels,
+        models: policy.models,
+      },
       {
         onSuccess: () => toast.success(t('channelHealth.messages.policyUpdated')),
         onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updatePolicyFailed')),
@@ -188,111 +295,113 @@ function PriorityProbePolicyPanel({
   };
 
   return (
-    <section className='bg-card overflow-hidden rounded-md border'>
-      <div className='flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between'>
-        <div>
-          <div className='font-medium'>{t('channelHealth.policy.title')}</div>
-          <p className='text-muted-foreground mt-1 text-xs'>{t('channelHealth.policy.description')}</p>
-        </div>
+    <Collapsible open={open} onOpenChange={setOpen} className='rounded-xl border'>
+      <div className='flex items-center justify-between gap-3 px-4 py-3'>
         <div className='flex items-center gap-2'>
-          <span className='text-muted-foreground text-xs'>{t('channelHealth.policy.enabled')}</span>
-          <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!canWrite || updatePolicy.isPending} />
+          <Settings2 className='text-muted-foreground size-4' />
+          <div>
+            <div className='text-sm font-medium'>{t('channelHealth.policy.title')}</div>
+            <div className='text-muted-foreground text-xs'>{t('channelHealth.policy.description')}</div>
+          </div>
         </div>
+        <CollapsibleTrigger asChild>
+          <Button variant='ghost' size='sm' className='gap-1'>
+            {t('channelHealth.policy.configure')}
+            <ChevronDown className={open ? 'size-4 rotate-180 transition-transform' : 'size-4 transition-transform'} />
+          </Button>
+        </CollapsibleTrigger>
       </div>
-      <div className='grid gap-4 border-t px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-start'>
-        <div className='space-y-2'>
-          <label htmlFor='channel-health-acceptable-latency' className='text-sm font-medium'>
-            {t('channelHealth.policy.acceptableLatency')}
-          </label>
-          <div className='flex items-center gap-2'>
+      <CollapsibleContent className='border-t px-4 py-4'>
+        <div className='grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-start'>
+          <div className='space-y-2'>
+            <label htmlFor='channel-health-acceptable-latency' className='text-sm font-medium'>
+              {t('channelHealth.policy.acceptableLatency')}
+            </label>
+            <div className='flex items-center gap-2'>
+              <Input
+                id='channel-health-acceptable-latency'
+                type='number'
+                min='0.001'
+                max='600'
+                step='1'
+                value={latencySeconds}
+                onChange={(event) => setLatencySeconds(event.target.value)}
+                disabled={!canWrite || updatePolicy.isPending}
+              />
+              <span className='text-muted-foreground shrink-0 text-sm'>{t('channelHealth.seconds')}</span>
+            </div>
+            <p className='text-muted-foreground text-xs'>{t('channelHealth.policy.acceptableLatencyDescription')}</p>
+            {canReadAPIKeys && policy.apiKeyMaxFirstTokenLatencyMs != null ? (
+              <p
+                className={
+                  exceedsAPIKeyLimit
+                    ? 'flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400'
+                    : 'text-muted-foreground text-xs'
+                }
+              >
+                {exceedsAPIKeyLimit ? <AlertTriangle className='mt-0.5 size-3.5 shrink-0' /> : null}
+                <span>
+                  {exceedsAPIKeyLimit
+                    ? t('channelHealth.policy.apiKeyLatencyWarning', { latency: formatMilliseconds(policy.apiKeyMaxFirstTokenLatencyMs) })
+                    : t('channelHealth.policy.apiKeyLatencyHint', { latency: formatMilliseconds(policy.apiKeyMaxFirstTokenLatencyMs) })}
+                </span>
+              </p>
+            ) : canReadAPIKeys ? (
+              <p className='text-muted-foreground text-xs'>{t('channelHealth.policy.noAPIKeyLatencyHint')}</p>
+            ) : null}
+          </div>
+          <div className='space-y-2'>
+            <label htmlFor='channel-health-extra-channels' className='text-sm font-medium'>
+              {t('channelHealth.policy.extraChannels')}
+            </label>
             <Input
-              id='channel-health-acceptable-latency'
+              id='channel-health-extra-channels'
               type='number'
-              min='0.001'
-              max='600'
+              min='0'
+              max='20'
               step='1'
-              value={latencySeconds}
-              onChange={(event) => setLatencySeconds(event.target.value)}
+              value={extraChannels}
+              onChange={(event) => setExtraChannels(event.target.value)}
               disabled={!canWrite || updatePolicy.isPending}
             />
-            <span className='text-muted-foreground shrink-0 text-sm'>{t('channelHealth.seconds')}</span>
+            <p className='text-muted-foreground text-xs'>{t('channelHealth.policy.extraChannelsDescription')}</p>
           </div>
-          <p className='text-muted-foreground text-xs'>{t('channelHealth.policy.acceptableLatencyDescription')}</p>
-          {canReadAPIKeys && policy.apiKeyMaxFirstTokenLatencyMs != null ? (
-            <p
-              className={
-                exceedsAPIKeyLimit ? 'flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400' : 'text-muted-foreground text-xs'
-              }
-            >
-              {exceedsAPIKeyLimit ? <AlertTriangle className='mt-0.5 size-3.5 shrink-0' /> : null}
-              <span>
-                {exceedsAPIKeyLimit
-                  ? t('channelHealth.policy.apiKeyLatencyWarning', {
-                      latency: formatMilliseconds(policy.apiKeyMaxFirstTokenLatencyMs),
-                    })
-                  : t('channelHealth.policy.apiKeyLatencyHint', {
-                      latency: formatMilliseconds(policy.apiKeyMaxFirstTokenLatencyMs),
-                    })}
-              </span>
-            </p>
-          ) : canReadAPIKeys ? (
-            <p className='text-muted-foreground text-xs'>{t('channelHealth.policy.noAPIKeyLatencyHint')}</p>
-          ) : null}
+          <div className='flex items-center gap-3 md:mt-7'>
+            <label className='flex items-center gap-2 text-xs'>
+              <span className='text-muted-foreground'>{t('channelHealth.policy.enabled')}</span>
+              <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!canWrite || updatePolicy.isPending} />
+            </label>
+            <Button type='button' onClick={handleSave} disabled={!canWrite || !isValid || updatePolicy.isPending}>
+              {updatePolicy.isPending ? <Loader2 className='size-4 animate-spin' /> : null}
+              {t('channelHealth.actions.savePolicy')}
+            </Button>
+          </div>
         </div>
-        <div className='space-y-2'>
-          <label htmlFor='channel-health-extra-channels' className='text-sm font-medium'>
-            {t('channelHealth.policy.extraChannels')}
-          </label>
-          <Input
-            id='channel-health-extra-channels'
-            type='number'
-            min='0'
-            max='20'
-            step='1'
-            value={extraChannels}
-            onChange={(event) => setExtraChannels(event.target.value)}
-            disabled={!canWrite || updatePolicy.isPending}
-          />
-          <p className='text-muted-foreground text-xs'>{t('channelHealth.policy.extraChannelsDescription')}</p>
-        </div>
-        <Button type='button' className='md:mt-7' onClick={handleSave} disabled={!canWrite || !isValid || updatePolicy.isPending}>
-          {updatePolicy.isPending ? <Loader2 className='size-4 animate-spin' /> : null}
-          {t('channelHealth.actions.savePolicy')}
-        </Button>
-      </div>
-    </section>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
-function ProbeOverviewRow({ channel, canWrite }: { channel: ChannelHealthProbeChannel; canWrite: boolean }) {
+function ChannelMonitorCard({ channel, canWrite }: { channel: ChannelHealthProbeChannel; canWrite: boolean }) {
   const { t } = useTranslation();
-  const updateSettings = useUpdateChannelHealthProbeSettings();
+  const [open, setOpen] = useState(false);
   const runProbe = useRunChannelHealthProbe();
-
-  const saveSettings = useCallback(
-    (patch: Parameters<typeof buildSettingsInput>[1]) => {
-      updateSettings.mutate(buildSettingsInput(channel, patch), {
-        onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
-      });
-    },
-    [channel, t, updateSettings]
-  );
-
-  const updateModel = useCallback(
-    (modelID: string, patch: Partial<ChannelHealthProbeModelInput>) => {
-      const models = channel.models.map((model) =>
-        model.modelID === modelID ? { modelID: model.modelID, enabled: model.enabled, stream: model.stream, ...patch } : model
-      );
-      saveSettings({ models });
-    },
-    [channel.models, saveSettings]
-  );
+  const updateSettings = useUpdateChannelHealthProbeSettings();
+  const enabledModels = channel.models.filter((model) => model.enabled);
+  const healthyModels = enabledModels.filter((model) => model.latestRun?.status === 'healthy');
+  const latestRun = [...channel.models]
+    .map((model) => model.latestRun)
+    .filter((run): run is ActiveChannelHealthProbeRun => run != null)
+    .sort(
+      (left, right) => new Date(right.completedAt ?? right.startedAt).getTime() - new Date(left.completedAt ?? left.startedAt).getTime()
+    )[0];
 
   const handleRun = useCallback(
     (modelID: string, stream: boolean) => {
       runProbe.mutate(
         { channelID: channel.channelID, modelID, stream },
         {
+          onSuccess: () => toast.success(t('channelHealth.messages.runStarted')),
           onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.runFailed')),
         }
       );
@@ -300,108 +409,143 @@ function ProbeOverviewRow({ channel, canWrite }: { channel: ChannelHealthProbeCh
     [channel.channelID, runProbe, t]
   );
 
+  const handleIntervalChange = (value: string) => {
+    updateSettings.mutate(
+      {
+        channelID: channel.channelID,
+        enabled: channel.enabled,
+        intervalMinutes: Number(value),
+        models: channel.models.map(({ modelID, enabled, stream }) => ({ modelID, enabled, stream })),
+      },
+      {
+        onSuccess: () => toast.success(t('channelHealth.messages.intervalUpdated')),
+        onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
+      }
+    );
+  };
+
   return (
-    <section className='bg-card overflow-hidden rounded-md border' aria-label={channel.channelName}>
-      <div className='flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between'>
-        <div className='min-w-0'>
-          <div className='flex min-w-0 items-center gap-2'>
-            <span className='truncate font-medium'>{channel.channelName}</span>
-            <Badge variant={channel.channelStatus === 'enabled' ? 'secondary' : 'outline'}>{channel.channelStatus}</Badge>
-            <Badge variant='outline'>{t('channelHealth.priority', { priority: channel.priority })}</Badge>
-          </div>
-          <div className='text-muted-foreground mt-1 text-xs'>{t('channelHealth.modelCount', { count: channel.models.length })}</div>
-        </div>
-        <div className='flex flex-wrap items-center gap-3'>
-          <div className='flex items-center gap-2'>
-            <span className='text-muted-foreground text-xs'>{t('channelHealth.interval')}</span>
-            <Select
-              value={String(channel.intervalMinutes)}
-              onValueChange={(value) => saveSettings({ intervalMinutes: Number(value) })}
-              disabled={!canWrite || updateSettings.isPending}
-            >
-              <SelectTrigger size='sm' className='w-28'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {intervalOptions.map((minutes) => (
-                  <SelectItem key={minutes} value={String(minutes)}>
-                    {t('channelHealth.minutes', { count: minutes })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className='flex items-center gap-2'>
-            <span className='text-muted-foreground text-xs'>{t('channelHealth.enabled')}</span>
-            <Switch
-              checked={channel.enabled}
-              onCheckedChange={(enabled) => saveSettings({ enabled })}
-              disabled={!canWrite || updateSettings.isPending}
-              aria-label={t('channelHealth.enabled')}
-            />
-          </div>
+    <Collapsible open={open} onOpenChange={setOpen} className='bg-card overflow-hidden rounded-xl border shadow-sm'>
+      <div className='flex items-center gap-3 px-4 py-4'>
+        <CollapsibleTrigger asChild>
+          <button type='button' className='hover:bg-muted/30 flex min-w-0 flex-1 items-center gap-4 text-left transition-colors'>
+            <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
+              <Gauge className='size-4' />
+            </div>
+            <div className='min-w-0 flex-1'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <span className='truncate font-medium'>{channel.channelName}</span>
+                <Badge variant='outline'>{t('channelHealth.priority', { priority: channel.priority })}</Badge>
+                <Badge variant={channel.channelStatus === 'enabled' ? 'secondary' : 'outline'}>{channel.channelStatus}</Badge>
+              </div>
+              <div className='text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs'>
+                <span>{t('channelHealth.models.monitorCount', { enabled: enabledModels.length, total: channel.models.length })}</span>
+                <span>{t('channelHealth.intervalSummary', { minutes: channel.intervalMinutes })}</span>
+                <span>{latestRun ? formatDate(latestRun.completedAt ?? latestRun.startedAt) : t('channelHealth.status.never')}</span>
+              </div>
+            </div>
+            <div className='hidden items-center gap-2 text-xs sm:flex'>
+              <Badge variant={enabledModels.length > 0 ? 'secondary' : 'outline'}>
+                {healthyModels.length}/{enabledModels.length} {t('channelHealth.status.healthy')}
+              </Badge>
+            </div>
+            <ChevronDown className={open ? 'size-5 rotate-180 transition-transform' : 'size-5 transition-transform'} />
+          </button>
+        </CollapsibleTrigger>
+        <div className='flex shrink-0 items-center gap-2'>
+          <span className='text-muted-foreground hidden text-xs md:inline'>{t('channelHealth.interval')}</span>
+          <Select
+            value={String(channel.intervalMinutes)}
+            onValueChange={handleIntervalChange}
+            disabled={!canWrite || updateSettings.isPending}
+          >
+            <SelectTrigger size='sm' className='w-24'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {intervalOptions.map((minutes) => (
+                <SelectItem key={minutes} value={String(minutes)}>
+                  {t('channelHealth.minutes', { count: minutes })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
-      <div className='overflow-x-auto border-t'>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('channelHealth.columns.model')}</TableHead>
-              <TableHead>{t('channelHealth.columns.enabled')}</TableHead>
-              <TableHead>{t('channelHealth.columns.stream')}</TableHead>
-              <TableHead>{t('channelHealth.columns.status')}</TableHead>
-              <TableHead>{t('channelHealth.columns.latency')}</TableHead>
-              <TableHead>{t('channelHealth.columns.checkedAt')}</TableHead>
-              <TableHead className='w-12 text-right'>{t('channelHealth.columns.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {channel.models.map((model) => {
-              const run = model.latestRun;
-              return (
+      <CollapsibleContent className='border-t'>
+        <div className='overflow-x-auto'>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('channelHealth.columns.model')}</TableHead>
+                <TableHead>{t('channelHealth.columns.status')}</TableHead>
+                <TableHead>{t('channelHealth.columns.firstToken')}</TableHead>
+                <TableHead>{t('channelHealth.columns.p95')}</TableHead>
+                <TableHead>{t('channelHealth.columns.checkedAt')}</TableHead>
+                <TableHead>{t('channelHealth.columns.stream')}</TableHead>
+                <TableHead className='w-12 text-right'>{t('channelHealth.columns.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {channel.models.map((model) => (
                 <TableRow key={model.modelID}>
                   <TableCell className='max-w-72 truncate font-mono text-xs'>{model.modelID}</TableCell>
                   <TableCell>
-                    <Switch
-                      checked={model.enabled}
-                      onCheckedChange={(enabled) => updateModel(model.modelID, { enabled })}
-                      disabled={!canWrite || updateSettings.isPending}
-                      aria-label={`${t('channelHealth.columns.enabled')} ${model.modelID}`}
-                    />
+                    <div className='flex items-center gap-2'>
+                      <ProbeStatusBadge status={model.enabled ? model.latestRun?.status : 'skipped'} />
+                      {model.sampleCount > 0 ? <span className='text-muted-foreground text-xs'>n={model.sampleCount}</span> : null}
+                    </div>
                   </TableCell>
+                  <TableCell className='font-mono text-xs'>{formatMilliseconds(model.firstTokenMs)}</TableCell>
+                  <TableCell className='font-mono text-xs'>{formatMilliseconds(model.p95Ms)}</TableCell>
+                  <TableCell className='text-muted-foreground text-xs'>{formatDate(model.lastProbedAt)}</TableCell>
                   <TableCell>
-                    <Switch
-                      checked={model.stream}
-                      onCheckedChange={(stream) => updateModel(model.modelID, { stream })}
-                      disabled={!canWrite || updateSettings.isPending}
-                      aria-label={`${t('channelHealth.columns.stream')} ${model.modelID}`}
-                    />
+                    <Badge variant='outline'>{model.stream ? t('channelHealth.stream.on') : t('channelHealth.stream.off')}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <ProbeStatusBadge status={run?.status} />
-                  </TableCell>
-                  <TableCell className='text-muted-foreground text-xs'>
-                    {run
-                      ? `${formatMilliseconds(run.ttfbMs)} / ${formatMilliseconds(run.ttftMs)} / ${formatMilliseconds(run.totalMs)}`
-                      : '-'}
-                  </TableCell>
-                  <TableCell className='text-muted-foreground text-xs'>{formatDate(run?.completedAt ?? run?.startedAt)}</TableCell>
                   <TableCell className='text-right'>
                     <IconAction
                       label={t('channelHealth.actions.runNow')}
                       onClick={() => handleRun(model.modelID, model.stream)}
-                      disabled={!canWrite || runProbe.isPending}
+                      disabled={!canWrite || !model.enabled || runProbe.isPending}
                     >
                       {runProbe.isPending ? <Loader2 className='size-4 animate-spin' /> : <Play className='size-4' />}
                     </IconAction>
                   </TableCell>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </section>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function OverviewSummary({
+  channels,
+  modelSettings,
+}: {
+  channels: ChannelHealthProbeChannel[];
+  modelSettings: ActiveHealthProbeModelSetting[];
+}) {
+  const { t } = useTranslation();
+  const enabledModels = modelSettings.filter((model) => model.enabled);
+  const monitoredRows = channels.flatMap((channel) => channel.models.filter((model) => model.enabled));
+  const metrics = [
+    [t('channelHealth.summary.enabledModels'), enabledModels.length],
+    [t('channelHealth.summary.monitoredChannels'), channels.filter((channel) => channel.channelStatus === 'enabled').length],
+    [t('channelHealth.summary.healthy'), monitoredRows.filter((model) => model.latestRun?.status === 'healthy').length],
+    [t('channelHealth.summary.unhealthy'), monitoredRows.filter((model) => model.latestRun?.status === 'unhealthy').length],
+  ];
+  return (
+    <div className='grid border-y sm:grid-cols-4'>
+      {metrics.map(([label, value]) => (
+        <div key={String(label)} className='border-b px-4 py-3 last:border-b-0 sm:border-r sm:last:border-r-0'>
+          <div className='text-muted-foreground text-xs'>{label}</div>
+          <div className='mt-1 text-lg font-semibold'>{value}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -421,49 +565,40 @@ function OverviewPanel({
   canReadAPIKeys: boolean;
 }) {
   const { t } = useTranslation();
-  const summary = useMemo(() => {
-    const models = channels?.flatMap((channel) => channel.models) ?? [];
-    return {
-      channels: channels?.filter((channel) => channel.enabled).length ?? 0,
-      models: models.filter((model) => model.enabled).length,
-      healthy: models.filter((model) => model.latestRun?.status === 'healthy').length,
-      unhealthy: models.filter((model) => model.latestRun?.status === 'unhealthy').length,
-    };
-  }, [channels]);
+  const modelSettings = useMemo(
+    () => effectiveModelSettings(channels ?? [], policy ?? { enabled: false, acceptableLatencyMs: 60_000, extraChannels: 1, models: [] }),
+    [channels, policy]
+  );
 
   if (isLoading) {
     return (
       <div className='space-y-3'>
-        {Array.from({ length: 3 }).map((_, index) => (
-          <Skeleton key={index} className='h-40 w-full rounded-md' />
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className='h-24 w-full rounded-xl' />
         ))}
       </div>
     );
   }
-  if (error) {
-    return <div className='text-destructive text-sm'>{error.message}</div>;
+  if (error || !policy) {
+    return <div className='text-destructive text-sm'>{error?.message ?? t('channelHealth.messages.loadFailed')}</div>;
   }
 
   return (
     <div className='space-y-4'>
-      {policy ? <PriorityProbePolicyPanel policy={policy} canWrite={canWrite} canReadAPIKeys={canReadAPIKeys} /> : null}
-      <div className='grid border-y sm:grid-cols-4'>
-        {[
-          [t('channelHealth.summary.enabledChannels'), summary.channels],
-          [t('channelHealth.summary.enabledModels'), summary.models],
-          [t('channelHealth.summary.healthy'), summary.healthy],
-          [t('channelHealth.summary.unhealthy'), summary.unhealthy],
-        ].map(([label, value]) => (
-          <div key={String(label)} className='border-b px-4 py-3 last:border-b-0 sm:border-r sm:last:border-r-0'>
-            <div className='text-muted-foreground text-xs'>{label}</div>
-            <div className='mt-1 text-lg font-semibold'>{value}</div>
-          </div>
-        ))}
-      </div>
+      <GlobalModelControlPanel channels={channels ?? []} policy={policy} modelSettings={modelSettings} canWrite={canWrite} />
+      <OverviewSummary channels={channels ?? []} modelSettings={modelSettings} />
+      <PriorityProbePolicyPanel policy={policy} canWrite={canWrite} canReadAPIKeys={canReadAPIKeys} />
       {channels?.length ? (
         <div className='space-y-3'>
+          <div className='flex items-center justify-between'>
+            <div>
+              <h3 className='text-sm font-semibold'>{t('channelHealth.channels.title')}</h3>
+              <p className='text-muted-foreground text-xs'>{t('channelHealth.channels.description')}</p>
+            </div>
+            <Badge variant='outline'>{t('channelHealth.channels.sortedByPriority')}</Badge>
+          </div>
           {channels.map((channel) => (
-            <ProbeOverviewRow key={channel.channelID} channel={channel} canWrite={canWrite} />
+            <ChannelMonitorCard key={channel.channelID} channel={channel} canWrite={canWrite} />
           ))}
         </div>
       ) : (
@@ -657,12 +792,12 @@ export default function ChannelHealthPage() {
         </div>
       </Header>
       <Main fixed className='overflow-y-auto'>
-        <Tabs defaultValue='overview' className='min-h-0'>
+        <Tabs defaultValue='monitoring' className='min-h-0'>
           <TabsList>
-            <TabsTrigger value='overview'>{t('channelHealth.tabs.overview')}</TabsTrigger>
+            <TabsTrigger value='monitoring'>{t('channelHealth.tabs.monitoring')}</TabsTrigger>
             <TabsTrigger value='history'>{t('channelHealth.tabs.history')}</TabsTrigger>
           </TabsList>
-          <TabsContent value='overview' className='pt-2'>
+          <TabsContent value='monitoring' className='pt-2'>
             <OverviewPanel
               channels={channels}
               policy={overview.data?.policy}

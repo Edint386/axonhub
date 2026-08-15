@@ -4,7 +4,7 @@
   "sidebar.groups.settings": "Settings",
   "sidebar.items.dashboard": "Dashboard",
   "sidebar.items.channels": "Channels",
-  "sidebar.items.channelHealth": "Channel Health",
+  "sidebar.items.channelHealth": "Monitoring",
   "sidebar.items.models": "Models",
   "sidebar.items.promptProtectionRules": "Prompt Protection",
   "sidebar.items.prompts": "Prompts",

@@ -19,6 +19,10 @@ type ChannelHealthProbeModelOverview {
   modelID: String!
   enabled: Boolean!
   stream: Boolean!
+  firstTokenMs: Float
+  p95Ms: Float
+  lastProbedAt: Time
+  sampleCount: Int!
   latestRun: ActiveChannelHealthProbeRun
 }
 
@@ -37,6 +41,13 @@ type ChannelHealthProbePolicy {
   acceptableLatencyMs: Int!
   extraChannels: Int!
   apiKeyMaxFirstTokenLatencyMs: Float
+  models: [ActiveHealthProbeModelSetting!]!
+}
+
+type ActiveHealthProbeModelSetting {
+  modelID: String!
+  enabled: Boolean!
+  stream: Boolean!
 }
 
 type ChannelHealthProbeHistoryPage {
@@ -61,6 +72,13 @@ input UpdateChannelHealthProbePolicyInput {
   enabled: Boolean!
   acceptableLatencyMs: Int!
   extraChannels: Int!
+  models: [ActiveHealthProbeModelSettingInput!]
+}
+
+input ActiveHealthProbeModelSettingInput {
+  modelID: String!
+  enabled: Boolean!
+  stream: Boolean!
 }
 
 input RunChannelHealthProbeInput {

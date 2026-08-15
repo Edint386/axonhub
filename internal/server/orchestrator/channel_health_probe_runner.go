@@ -61,14 +61,14 @@ func (runner *ChannelHealthProbeRunner) runScheduled(ctx context.Context) {
 	ctx = authz.WithSystemBypass(ctx, "active-channel-health-probe")
 	ctx = contexts.WithSource(ctx, request.SourceTest)
 
-	targets, err := runner.service.DueTargets(ctx, time.Now().UTC())
-	if err != nil {
-		log.Error(ctx, "failed to list scheduled channel health probes", log.Cause(err))
-		return
-	}
 	policy, err := runner.service.ScanPolicy(ctx)
 	if err != nil {
 		log.Error(ctx, "failed to load scheduled channel health probe policy", log.Cause(err))
+		return
+	}
+	targets, err := runner.service.DueTargetsWithPolicy(ctx, time.Now().UTC(), policy)
+	if err != nil {
+		log.Error(ctx, "failed to list scheduled channel health probes", log.Cause(err))
 		return
 	}
 

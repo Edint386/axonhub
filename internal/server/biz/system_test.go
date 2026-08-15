@@ -363,6 +363,11 @@ func TestSystemService_UpdateChannelSetting_PersistsActiveProbePolicy(t *testing
 		Enabled:             true,
 		AcceptableLatencyMs: 20_000,
 		ExtraChannels:       2,
+		Models: []ActiveHealthProbeModelSetting{{
+			ModelID: "gpt-5.6-sol",
+			Enabled: true,
+			Stream:  true,
+		}},
 	}
 	require.NoError(t, service.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &policy}))
 

@@ -49,3 +49,20 @@ func TestValidateSystemChannelSettingsActiveProbePolicyLimits(t *testing.T) {
 	setting.ActiveHealthProbeScan.ExtraChannels = maxActiveHealthProbeExtraChannels + 1
 	require.ErrorContains(t, validateSystemChannelSettings(&setting), "extra channels")
 }
+
+func TestValidateSystemChannelSettingsGlobalProbeModels(t *testing.T) {
+	setting := SystemChannelSettings{
+		ActiveHealthProbeScan: &ActiveHealthProbeScanSetting{
+			AcceptableLatencyMs: 1,
+			Models: []ActiveHealthProbeModelSetting{
+				{ModelID: " gpt-5.6-sol ", Enabled: true, Stream: true},
+			},
+		},
+	}
+	normalizeSystemChannelSettings(&setting)
+	require.Equal(t, "gpt-5.6-sol", setting.ActiveHealthProbeScan.Models[0].ModelID)
+	require.NoError(t, validateSystemChannelSettings(&setting))
+
+	setting.ActiveHealthProbeScan.Models = append(setting.ActiveHealthProbeScan.Models, ActiveHealthProbeModelSetting{ModelID: "gpt-5.6-sol"})
+	require.ErrorContains(t, validateSystemChannelSettings(&setting), "configured more than once")
+}
