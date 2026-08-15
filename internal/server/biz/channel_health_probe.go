@@ -524,9 +524,7 @@ func (svc *ChannelHealthProbeService) metricsByChannelAndModel(
 		}
 		slices.Sort(accumulator.latencies)
 		index := int(math.Ceil(float64(len(accumulator.latencies))*0.95)) - 1
-		if index < 0 {
-			index = 0
-		}
+		index = max(index, 0)
 		p95 := accumulator.latencies[index]
 		metrics[key] = channelHealthProbeModelMetrics{P95Ms: &p95, SampleCount: len(accumulator.latencies)}
 	}
