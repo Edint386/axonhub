@@ -24,7 +24,7 @@ func TestImageEditRequestWritesModelBeforeImageFiles(t *testing.T) {
 		APIFormat:   llm.APIFormatOpenAIImageEdit,
 		Image: &llm.ImageRequest{
 			Prompt: "Make this image brighter",
-			Images: [][]byte{[]byte("image-data")},
+			Images: [][]byte{decodeImageSecurityTestPNG(t)},
 		},
 	}
 
