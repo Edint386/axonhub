@@ -14,10 +14,10 @@ function read(relativePath) {
 // markers) so assertions about the usage bars cannot bleed into Claude Code
 // or Cline, which legitimately keep duration-aware severity.
 function isolateCodexBlock(source) {
-  const start = source.indexOf("{channel.type === 'codex' &&");
-  const end = source.indexOf("{channel.type === 'cline' &&", start);
+  const start = source.indexOf("{quota && channel.type === 'codex' &&");
+  const end = source.indexOf("{quota && channel.type === 'cline' &&", start);
 
-  assert.ok(start !== -1, 'Codex render branch should exist in quota-badges source');
+  assert.ok(start !== -1, 'Codex render branch should retain the custom quota guard');
   assert.ok(end !== -1 && end > start, 'Cline render branch should follow the Codex branch');
 
   return source.slice(start, end);

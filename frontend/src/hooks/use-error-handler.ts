@@ -22,6 +22,17 @@ export interface ErrorHandlerOptions {
   showToast?: boolean;
 }
 
+const KNOWN_I18N_ERROR_CODES = new Set([
+  'DUPLICATE_NAME',
+  'ALREADY_EXISTS',
+  'NOT_FOUND',
+  'INVALID_INPUT',
+  'VALIDATION_FAILED',
+  'UNAUTHENTICATED',
+  'FORBIDDEN',
+  'INTERNAL_SERVER_ERROR',
+]);
+
 export function useErrorHandler() {
   const { t } = useTranslation();
 
@@ -81,6 +92,10 @@ export function useErrorHandler() {
         const i18nKey = getErrorI18nKey(code);
         const params = getErrorI18nParams(firstError);
 
+        if (code === 'INVALID_INPUT' || code === 'VALIDATION_FAILED') {
+          params.details = firstError.message;
+        }
+
         // Generic NOT_FOUND errors (e.g. relay node lookups) carry no
         // `resource` extension, so the "{{resource}}" placeholder in
         // `common.errors.notFound` would otherwise leak into the UI verbatim.
@@ -89,14 +104,15 @@ export function useErrorHandler() {
           params.resource = t('common.errors.resourceFallback');
         }
 
-        // 优先使用后端返回的具体消息，回退到 i18n 翻译
+        // Known error codes have stable localized messages. Only unknown
+        // extension codes surface the backend's raw message.
         let i18nMessage = '';
         try {
           i18nMessage = t(i18nKey, params);
         } catch {
           // ignore
         }
-        const message = firstError.message || i18nMessage;
+        const message = KNOWN_I18N_ERROR_CODES.has(code) ? i18nMessage || firstError.message : firstError.message || i18nMessage;
 
         if (showToast) {
           toast.error(message, { duration: 5000 });

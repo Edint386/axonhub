@@ -15,6 +15,13 @@ import i18n from './lib/i18n';
 // Generated Routes
 import { routeTree } from './routeTree.gen';
 
+function getErrorStatus(error: unknown): number {
+  return error instanceof Response
+    ? error.status
+    : error && typeof error === 'object' && 'status' in error
+      ? Number((error as { status: unknown }).status) || 0
+      : 0;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,15 +31,14 @@ const queryClient = new QueryClient({
         if (import.meta.env.DEV) console.log({ failureCount, error });
 
         if (import.meta.env.DEV) return false;
-        if (failureCount > 2) return false;
+        const status = getErrorStatus(error);
 
-        // For fetch API errors, we check if it's a Response object with status
-        const status =
-          error instanceof Response ? error.status : error && typeof error === 'object' && 'status' in error ? (error as any).status : 0;
-
-        // Don't retry auth errors or server errors (500 hammers a failing backend)
-        return ![401, 403, 422, 500].includes(status);
+        if ([401, 403, 422].includes(status)) return false;
+        if (status === 500) return failureCount < 1;
+        return failureCount < 3;
       },
+      retryDelay: (attemptIndex, error) =>
+        getErrorStatus(error) === 500 ? 500 : Math.min(1000 * 2 ** attemptIndex, 30_000),
       refetchOnWindowFocus: import.meta.env.PROD,
       staleTime: 10 * 1000, // 10s
     },
@@ -40,9 +46,7 @@ const queryClient = new QueryClient({
       onError: (error) => {
         handleServerError(error);
 
-        // For fetch API errors, we check if it's a Response object with status
-        const status =
-          error instanceof Response ? error.status : error && typeof error === 'object' && 'status' in error ? (error as any).status : 0;
+        const status = getErrorStatus(error);
 
         if (status === 304) {
           toast.error(i18n.t('common.errors.contentNotModified'));
@@ -52,9 +56,7 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error) => {
-      // For fetch API errors, we check if it's a Response object with status
-      const status =
-        error instanceof Response ? error.status : error && typeof error === 'object' && 'status' in error ? (error as any).status : 0;
+      const status = getErrorStatus(error);
 
       if (status === 401) {
         toast.error(i18n.t('common.errors.sessionExpired'));
