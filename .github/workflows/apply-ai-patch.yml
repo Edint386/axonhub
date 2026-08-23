@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+      - "!unstable"
     paths:
       - ".ai-patches/*.diff"
       - ".ai-patches/*.patch"
@@ -18,16 +19,17 @@ concurrency:
 
 jobs:
   apply-patch:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.ref_name != 'unstable'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout target branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
 
       - name: Find patch file
         id: patch
@@ -220,4 +222,8 @@ jobs:
         env:
           TARGET_BRANCH: ${{ github.ref_name }}
         run: |
+          if [ "$TARGET_BRANCH" = "unstable" ]; then
+            echo "Refusing to write the upstream sync branch: $TARGET_BRANCH"
+            exit 1
+          fi
           git push origin "HEAD:${TARGET_BRANCH}"
