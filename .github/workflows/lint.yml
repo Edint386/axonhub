@@ -5,13 +5,9 @@ on:
   push:
     branches:
       - 'custom'
-      - 'unstable'
-      - 'release/**'
   pull_request:
     branches:
       - 'custom'
-      - 'unstable'
-      - 'release/**'
 env:
   GO111MODULE: on
 jobs:

@@ -3,8 +3,7 @@ name: Apply AI Patch
 on:
   push:
     branches:
-      - "**"
-      - "!unstable"
+      - "custom"
     paths:
       - ".ai-patches/*.diff"
       - ".ai-patches/*.patch"
@@ -19,7 +18,7 @@ concurrency:
 
 jobs:
   apply-patch:
-    if: github.actor != 'github-actions[bot]' && github.ref_name != 'unstable'
+    if: github.actor != 'github-actions[bot]' && github.ref_name == 'custom'
     runs-on: ubuntu-latest
 
     steps:
@@ -222,8 +221,8 @@ jobs:
         env:
           TARGET_BRANCH: ${{ github.ref_name }}
         run: |
-          if [ "$TARGET_BRANCH" = "unstable" ]; then
-            echo "Refusing to write the upstream sync branch: $TARGET_BRANCH"
+          if [ "$TARGET_BRANCH" != "custom" ]; then
+            echo "Refusing to write any branch other than custom: $TARGET_BRANCH"
             exit 1
           fi
-          git push origin "HEAD:${TARGET_BRANCH}"
+          git push origin HEAD:custom

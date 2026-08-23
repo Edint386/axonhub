@@ -3,14 +3,10 @@ name: Build
 on:
   push:
     branches:
-      - unstable
-      - development
-      - 'release/**'
+      - custom
   pull_request:
     branches:
-      - unstable
-      - development
-      - 'release/**'
+      - custom
 
 env:
   GO111MODULE: on
