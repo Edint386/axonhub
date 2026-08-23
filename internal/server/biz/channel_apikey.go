@@ -14,7 +14,6 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
-	"github.com/looplj/axonhub/internal/pkg/xcontext"
 )
 
 const allKeysDisabledErrorPrefix = "All API keys disabled"
@@ -110,7 +109,12 @@ func (svc *ChannelService) DisableAPIKey(
 		if channelDisabled {
 			// Synchronously reload the local cache to immediately stop selecting this channel.
 			// This matches the behavior of markChannelUnavailable.
-			reloadCtx, cancel := xcontext.DetachWithTimeout(afterCommitCtx, 10*time.Second)
+			// Do not reuse the transaction-bearing callback context after commit:
+			// entFromContext would otherwise select the already-committed tx client.
+			reloadCtx, cancel := context.WithTimeout(
+				authz.WithSystemBypass(context.Background(), "channel-api-key-exhaustion-cache-reload"),
+				10*time.Second,
+			)
 			defer cancel()
 
 			if err := svc.enabledChannelsCache.Load(reloadCtx, true); err != nil {

@@ -639,6 +639,39 @@ func TestChannelService_DisableAPIKey_DefersReloadUntilCommit(t *testing.T) {
 	require.Equal(t, "key1", updated.DisabledAPIKeys[0].Key)
 }
 
+func TestChannelService_DisableLastAPIKey_ReloadsWithServiceClientAfterCommit(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	svc := newTestChannelService(client)
+	defer svc.enabledChannelsCache.Stop()
+
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "last-api-key-commit", []string{"key1"})
+	require.NoError(t, svc.enabledChannelsCache.Load(ctx, true))
+	require.NotNil(t, svc.GetEnabledChannel(ch.ID))
+
+	notifier := &channelSyncNotifierSpy{}
+	svc.channelNotifier = notifier
+	previousAsyncReloadDisabled := asyncReloadDisabled
+	asyncReloadDisabled = false
+	t.Cleanup(func() {
+		asyncReloadDisabled = previousAsyncReloadDisabled
+	})
+
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+	txCtx := ent.NewContext(ent.NewTxContext(ctx, tx), tx.Client())
+
+	require.NoError(t, svc.DisableAPIKey(txCtx, ch.ID, "key1", 401, "commit"))
+	require.NotNil(t, svc.GetEnabledChannel(ch.ID), "cache must not reload the uncommitted state")
+	require.Zero(t, notifier.notifyCount)
+
+	require.NoError(t, tx.Commit())
+	require.Nil(t, svc.GetEnabledChannel(ch.ID), "post-commit reload must use the service client, not the closed tx")
+	require.Equal(t, 1, notifier.notifyCount)
+}
+
 func TestChannelService_DisableAPIKeyNotFound(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
