@@ -993,6 +993,18 @@ func (svc *ChannelService) reloadChannelsAfterCommit(ctx context.Context) {
 	})
 }
 
+// forgetLimitersAndReloadAfterCommit keeps process-local limiter eviction and
+// cross-instance cache invalidation aligned with the database transaction. If
+// the mutation rolls back, both side effects must be skipped.
+func (svc *ChannelService) forgetLimitersAndReloadAfterCommit(ctx context.Context, channelIDs ...int) {
+	runAfterCommit(ctx, func(context.Context) {
+		for _, channelID := range channelIDs {
+			svc.forgetLimiter(channelID)
+		}
+		svc.asyncReloadChannels()
+	})
+}
+
 // SaveChannelEndpoints updates the endpoints field for a channel.
 // Validates user-configured endpoint overrides before storing them. Runtime
 // endpoint resolution merges matching api_format entries with defaults.
@@ -1024,8 +1036,7 @@ func (svc *ChannelService) DeleteChannel(ctx context.Context, id int) error {
 		return fmt.Errorf("failed to delete channel: %w", err)
 	}
 
-	svc.forgetLimiter(id)
-	svc.reloadChannelsAfterCommit(ctx)
+	svc.forgetLimitersAndReloadAfterCommit(ctx, id)
 
 	return nil
 }

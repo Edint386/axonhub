@@ -595,6 +595,50 @@ func TestChannelService_DisableAPIKeyIdempotent(t *testing.T) {
 	require.Len(t, updatedCh.DisabledAPIKeys, 1)
 }
 
+func TestChannelService_DisableAPIKey_DefersReloadUntilCommit(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	svc := newTestChannelService(client)
+	notifier := &channelSyncNotifierSpy{}
+	svc.channelNotifier = notifier
+	previousAsyncReloadDisabled := asyncReloadDisabled
+	asyncReloadDisabled = false
+	t.Cleanup(func() {
+		asyncReloadDisabled = previousAsyncReloadDisabled
+	})
+
+	rollbackChannel := createTestChannelWithAPIKeys(t, client, ctx, "api-key-rollback", []string{"key1", "key2"})
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+	txCtx := ent.NewContext(ent.NewTxContext(ctx, tx), tx.Client())
+
+	require.NoError(t, svc.DisableAPIKey(txCtx, rollbackChannel.ID, "key1", 401, "rollback"))
+	require.Zero(t, notifier.notifyCount, "API key mutation must not refresh before commit")
+	require.NoError(t, tx.Rollback())
+	require.Zero(t, notifier.notifyCount, "rolled-back API key mutation must not refresh")
+
+	unchanged, err := client.Channel.Get(ctx, rollbackChannel.ID)
+	require.NoError(t, err)
+	require.Empty(t, unchanged.DisabledAPIKeys)
+
+	commitChannel := createTestChannelWithAPIKeys(t, client, ctx, "api-key-commit", []string{"key1", "key2"})
+	tx, err = client.Tx(ctx)
+	require.NoError(t, err)
+	txCtx = ent.NewContext(ent.NewTxContext(ctx, tx), tx.Client())
+
+	require.NoError(t, svc.DisableAPIKey(txCtx, commitChannel.ID, "key1", 401, "commit"))
+	require.Zero(t, notifier.notifyCount)
+	require.NoError(t, tx.Commit())
+	require.Equal(t, 1, notifier.notifyCount)
+
+	updated, err := client.Channel.Get(ctx, commitChannel.ID)
+	require.NoError(t, err)
+	require.Len(t, updated.DisabledAPIKeys, 1)
+	require.Equal(t, "key1", updated.DisabledAPIKeys[0].Key)
+}
+
 func TestChannelService_DisableAPIKeyNotFound(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()

@@ -10,6 +10,8 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/llm"
+	"github.com/looplj/axonhub/llm/pipeline"
 	"github.com/looplj/axonhub/llm/transformer/openai/responses"
 	"github.com/looplj/axonhub/llm/transformer/xai"
 )
@@ -64,6 +66,33 @@ func TestXaiChannel_CreateResponsesTransformer(t *testing.T) {
 
 	_, ok := built.Outbound.(*responses.OutboundTransformer)
 	require.True(t, ok, "TypeXaiResponses should create responses.OutboundTransformer")
+}
+
+func TestXaiResponsesChannel_InheritsWebSocketTransport(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(context.Background())
+	entChannel := client.Channel.Create().
+		SetName("xAI Responses WebSocket Channel").
+		SetType(channel.TypeXaiResponses).
+		SetBaseURL("wss://api.x.ai/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "test-key"}).
+		SetSupportedModels([]string{"grok-4"}).
+		SetDefaultTestModel("grok-4").
+		SetEndpoints([]objects.ChannelEndpoint{{
+			APIFormat: llm.APIFormatOpenAIResponse.String(),
+			Path:      "/custom/responses",
+		}}).
+		SaveX(ctx)
+
+	built, err := NewChannelServiceForTest(client).buildChannelWithTransformer(entChannel)
+	require.NoError(t, err)
+
+	custom, ok := built.Outbound.(pipeline.ChannelCustomizedExecutor)
+	require.True(t, ok)
+	_, ok = custom.CustomizeExecutor(nil).(*responses.WebSocketExecutor)
+	require.True(t, ok, "xAI Responses should preserve the configured WebSocket transport")
 }
 
 func TestXaiChannel_VerifyAPIFormat(t *testing.T) {

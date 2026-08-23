@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/internal/authz"
@@ -370,6 +371,14 @@ func createBulkOrderingTestChannel(t *testing.T, ctx context.Context, client *en
 	return ch
 }
 
+type channelLimiterForgetterSpy struct {
+	channelIDs []int
+}
+
+func (s *channelLimiterForgetterSpy) Forget(channelID int) {
+	s.channelIDs = append(s.channelIDs, channelID)
+}
+
 // The GraphQL Transactioner wraps bulkUpdateChannelOrdering in a caller-owned
 // transaction. The cache refresh must be published only after that transaction
 // commits, otherwise the asynchronous reload can read a stale ordering_weight
@@ -397,8 +406,8 @@ func TestChannelService_BulkUpdateChannelOrdering_DefersReloadUntilCommit(t *tes
 	txCtx = ent.NewContext(txCtx, tx.Client())
 
 	updated, err := svc.BulkUpdateChannelOrdering(txCtx, []*ChannelOrderingItem{
-		{ID: ch1.ID, OrderingWeight: 100},
-		{ID: ch2.ID, OrderingWeight: 50},
+		{ID: ch1.ID, OrderingWeight: lo.ToPtr(100)},
+		{ID: ch2.ID, OrderingWeight: lo.ToPtr(50)},
 	})
 	require.NoError(t, err)
 	require.Len(t, updated, 2)
@@ -443,7 +452,7 @@ func TestChannelService_BulkUpdateChannelOrdering_NoReloadOnRollback(t *testing.
 	txCtx = ent.NewContext(txCtx, tx.Client())
 
 	_, err = svc.BulkUpdateChannelOrdering(txCtx, []*ChannelOrderingItem{
-		{ID: ch1.ID, OrderingWeight: 100},
+		{ID: ch1.ID, OrderingWeight: lo.ToPtr(100)},
 	})
 	require.NoError(t, err)
 	require.Zero(t, notifier.notifyCount)
@@ -469,6 +478,8 @@ func TestChannelService_BulkStatusAndDelete_DefersReloadUntilCommit(t *testing.T
 
 	notifier := &channelSyncNotifierSpy{}
 	svc.channelNotifier = notifier
+	forgetter := &channelLimiterForgetterSpy{}
+	svc.SetChannelLimiterForgetter(forgetter)
 	previousAsyncReloadDisabled := asyncReloadDisabled
 	asyncReloadDisabled = false
 	t.Cleanup(func() {
@@ -495,9 +506,42 @@ func TestChannelService_BulkStatusAndDelete_DefersReloadUntilCommit(t *testing.T
 
 	require.NoError(t, svc.BulkDeleteChannels(txCtx2, []int{ch2.ID}))
 	require.Equal(t, 1, notifier.notifyCount, "bulk delete must not refresh before commit")
+	require.Empty(t, forgetter.channelIDs, "bulk delete must not evict limiters before commit")
 
 	require.NoError(t, tx2.Commit())
 	require.Equal(t, 2, notifier.notifyCount)
+	require.Equal(t, []int{ch2.ID}, forgetter.channelIDs)
+}
+
+func TestChannelService_BulkDelete_RollbackKeepsLimiterAndCache(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	ch := createBulkOrderingTestChannel(t, ctx, client, "Delete Rollback", 10)
+
+	notifier := &channelSyncNotifierSpy{}
+	svc.channelNotifier = notifier
+	forgetter := &channelLimiterForgetterSpy{}
+	svc.SetChannelLimiterForgetter(forgetter)
+	previousAsyncReloadDisabled := asyncReloadDisabled
+	asyncReloadDisabled = false
+	t.Cleanup(func() {
+		asyncReloadDisabled = previousAsyncReloadDisabled
+	})
+
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+	txCtx := ent.NewContext(ent.NewTxContext(ctx, tx), tx.Client())
+
+	require.NoError(t, svc.BulkDeleteChannels(txCtx, []int{ch.ID}))
+	require.Zero(t, notifier.notifyCount)
+	require.Empty(t, forgetter.channelIDs)
+
+	require.NoError(t, tx.Rollback())
+	require.Zero(t, notifier.notifyCount)
+	require.Empty(t, forgetter.channelIDs)
+	require.True(t, client.Channel.Query().Where(channel.ID(ch.ID)).ExistX(ctx))
 }
 
 // After the ordering transaction commits, a cache reload must produce a
@@ -534,8 +578,8 @@ func TestChannelService_BulkUpdateChannelOrdering_CacheSnapshotUsesCommittedWeig
 	txCtx = ent.NewContext(txCtx, tx.Client())
 
 	_, err = svc.BulkUpdateChannelOrdering(txCtx, []*ChannelOrderingItem{
-		{ID: ch1.ID, OrderingWeight: 100},
-		{ID: ch2.ID, OrderingWeight: 50},
+		{ID: ch1.ID, OrderingWeight: lo.ToPtr(100)},
+		{ID: ch2.ID, OrderingWeight: lo.ToPtr(50)},
 	})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())

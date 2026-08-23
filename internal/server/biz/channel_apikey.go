@@ -103,22 +103,27 @@ func (svc *ChannelService) DisableAPIKey(
 		log.Int("error_code", errorCode),
 	)
 
-	if channelDisabled {
-		// Synchronously reload the local cache to immediately stop selecting this channel.
-		// This matches the behavior of markChannelUnavailable.
-		reloadCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
-		defer cancel()
+	// GraphQL mutations run inside a caller-owned transaction. Publishing either
+	// the local reload or the cross-instance notification before commit would
+	// reload the old disabled-key snapshot and retain it in cache.
+	runAfterCommit(ctx, func(afterCommitCtx context.Context) {
+		if channelDisabled {
+			// Synchronously reload the local cache to immediately stop selecting this channel.
+			// This matches the behavior of markChannelUnavailable.
+			reloadCtx, cancel := xcontext.DetachWithTimeout(afterCommitCtx, 10*time.Second)
+			defer cancel()
 
-		if err := svc.enabledChannelsCache.Load(reloadCtx, true); err != nil {
-			log.Warn(ctx, "Failed to synchronously reload channels after API key exhaustion",
-				log.Int("channel_id", channelID),
-				log.Cause(err),
-			)
+			if err := svc.enabledChannelsCache.Load(reloadCtx, true); err != nil {
+				log.Warn(afterCommitCtx, "Failed to synchronously reload channels after API key exhaustion",
+					log.Int("channel_id", channelID),
+					log.Cause(err),
+				)
+			}
 		}
-	}
 
-	// Also notify other instances via the watcher for cross-instance cache invalidation.
-	svc.asyncReloadChannels()
+		// Also notify other instances via the watcher for cross-instance cache invalidation.
+		svc.asyncReloadChannels()
+	})
 
 	return nil
 }
@@ -166,7 +171,7 @@ func (svc *ChannelService) EnableAPIKey(ctx context.Context, channelID int, key 
 		return fmt.Errorf("failed to enable api key: %w", err)
 	}
 
-	svc.asyncReloadChannels()
+	svc.reloadChannelsAfterCommit(ctx)
 
 	return nil
 }
@@ -200,7 +205,7 @@ func (svc *ChannelService) EnableAllAPIKeys(ctx context.Context, channelID int) 
 		log.Int("channel_id", channelID),
 	)
 
-	svc.asyncReloadChannels()
+	svc.reloadChannelsAfterCommit(ctx)
 
 	return nil
 }
@@ -252,7 +257,7 @@ func (svc *ChannelService) EnableSelectedAPIKeys(ctx context.Context, channelID 
 		log.Int("count", len(keys)),
 	)
 
-	svc.asyncReloadChannels()
+	svc.reloadChannelsAfterCommit(ctx)
 
 	return nil
 }
@@ -344,7 +349,7 @@ func (svc *ChannelService) DeleteDisabledAPIKeys(ctx context.Context, channelID 
 		result.Message = "ONE_KEY_PRESERVED"
 	}
 
-	svc.asyncReloadChannels()
+	svc.reloadChannelsAfterCommit(ctx)
 
 	return result, nil
 }
