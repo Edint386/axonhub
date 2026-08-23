@@ -62,7 +62,7 @@
         ⚡ Enterprise-grade high concurrency and stable scheduling: Prices as low as 10% of official rates, transparent model multipliers, and millisecond-level response times that fit AxonHub's intelligent routing and failover mechanisms perfectly. High-availability channels and redundant multi-node backups help eliminate rate limits, 429s, and disconnections;<br/>
         🧠 Comprehensive support for top models: Deeply adapted for ChatGPT, Claude, Gemini, Kimi, GLM, DeepSeek, and the full range of mainstream models, with native support for Claude Code, Codex, OpenCode, and other AI programming and Agent development tools.<br/>
         🎨 Multimodal and cutting-edge ecosystem access: Beyond text conversations and code generation, it provides one-stop access to mainstream image generation, video, Embedding, and Rerank models, allowing a single upstream channel to meet the gateway's multimodal distribution needs.<br/>
-        🎁 Exclusive benefits for AxonHub users: Register through the <a href="https://lj.s.gy/DUq59H" target="_blank">exclusive link</a> to receive [exclusive gifted credits / first recharge offer], ready to use immediately with zero-barrier gateway testing!
+        🎁 AxonHub users can register through the <a href="https://lj.s.gy/DUq59H" target="_blank">exclusive link</a> to get started and connect the service to their gateway for testing.
       </p>
     </td>
   </tr>

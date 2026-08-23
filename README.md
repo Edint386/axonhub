@@ -62,7 +62,7 @@
         ⚡ 企业级高并发与稳定调度：价格低至官方 1 折，模型倍率公开透明，毫秒级响应完美契合 AxonHub 智能路由与故障转移机制。提供高可用通道与多节点冗余备份，告别限流、429 与断连困扰；<br/>
         🧠 全系顶尖模型全面支持：深度适配 Chatgpt、Claude 、Gemini、Kimi、GLM、DeepSeek等全矩阵主流模型，原生支持 Claude Code、Codex、OpenCode 等 AI 编程与 Agent 开发工具。<br/>
         🎨 全模态与前沿生态接入：不仅覆盖文本对话与代码生成，更一站式接入主流生图、视频与 Embedding/Rerank 模型，一个上游渠道即可满足网关全模态分发需求。<br/>
-        🎁 AxonHub 用户专属福利：通过 <a href="https://lj.s.gy/DUq59H" target="_blank">专属链接</a> 注册即送 [专属赠送额度 / 首充特惠]，即开即用，零门槛接入网关测试！
+        🎁 AxonHub 用户可通过 <a href="https://lj.s.gy/DUq59H" target="_blank">专属链接</a> 注册并开始服务接入与网关测试。
       </p>
     </td>
   </tr>
