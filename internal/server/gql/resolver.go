@@ -15,6 +15,16 @@ import (
 	"github.com/looplj/axonhub/llm/httpclient"
 )
 
+func isProjectOwnerMembership(user *ent.User, projectID int) bool {
+	for _, membership := range user.Edges.ProjectUsers {
+		if membership.ProjectID == projectID && membership.IsOwner {
+			return true
+		}
+	}
+
+	return false
+}
+
 // This file will not be regenerated automatically.
 //
 // It serves as dependency injection for your app, add any dependencies you require here.

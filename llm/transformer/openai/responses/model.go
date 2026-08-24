@@ -209,6 +209,7 @@ type Prompt struct {
 // Reasoning represents configuration options for reasoning models.
 type Reasoning struct {
 	// The reasoning context scope requested by internal Responses features.
+	// Responses Lite requires "all_turns" when this field is emitted.
 	Context string `json:"context,omitempty"`
 	// The effort level for reasoning. Any of "low", "medium", "high".
 	Effort string `json:"effort,omitempty"`
@@ -620,7 +621,7 @@ type Item struct {
 	// Reasoning summary content - array of summary text items.
 	Summary []ReasoningSummary `json:"summary,omitempty"`
 	// Reasoning text content - array of reasoning text items.
-	ReasoningContent []ReasoningContent `json:"reasoning_content,omitempty"`
+	ReasoningContent *PolymorphicReasoningContent `json:"reasoning_content,omitempty"`
 	// The encrypted content of the reasoning item.
 	EncryptedContent *string `json:"encrypted_content,omitempty"`
 
@@ -804,6 +805,40 @@ type ReasoningSummary struct {
 	Text string `json:"text"`
 	// The type of the object. Always "summary_text".
 	Type string `json:"type"`
+}
+
+// PolymorphicReasoningContent handles reasoning_content fields that differ by item type:
+// - reasoning items use an array of {"type":"reasoning_text","text":"..."} objects.
+// - function_call items from Chat-compatible upstreams use a plain string.
+// The Input type (above) provides the same string-or-array pattern.
+type PolymorphicReasoningContent struct {
+	Text  *string
+	Items []ReasoningContent
+}
+
+func (p *PolymorphicReasoningContent) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		p.Text = &text
+		p.Items = nil
+		return nil
+	}
+
+	var items []ReasoningContent
+	if err := json.Unmarshal(data, &items); err == nil {
+		p.Text = nil
+		p.Items = items
+		return nil
+	}
+
+	return fmt.Errorf("invalid reasoning_content: %w", transformer.ErrInvalidRequest)
+}
+
+func (p PolymorphicReasoningContent) MarshalJSON() ([]byte, error) {
+	if p.Text != nil {
+		return json.Marshal(p.Text)
+	}
+	return json.Marshal(p.Items)
 }
 
 // ReasoningContent represents reasoning text from the model.

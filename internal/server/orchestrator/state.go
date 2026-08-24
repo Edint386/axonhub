@@ -83,4 +83,9 @@ type PersistenceState struct {
 
 	// PassThroughApplied records whether the inbound request body was substituted during pass-through.
 	PassThroughApplied bool
+
+	// PassThroughBodyBlocked records whether outbound semantic transforms changed
+	// the effective request for the current candidate attempt. In that case the
+	// serialized transformer body must win over the inbound raw body.
+	PassThroughBodyBlocked bool
 }

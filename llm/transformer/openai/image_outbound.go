@@ -101,12 +101,7 @@ func (t *OutboundTransformer) buildImageGenerateRequest(chatReq *llm.Request, ap
 	if len(img.Images) > 0 {
 		dataURLs := make([]string, len(img.Images))
 		for i, data := range img.Images {
-			dataURL, err := encodeImageBytesToDataURL(data)
-			if err != nil {
-				return nil, fmt.Errorf("invalid input image %d: %w", i+1, err)
-			}
-
-			dataURLs[i] = dataURL
+			dataURLs[i] = encodeImageBytesToDataURL(data)
 		}
 
 		if len(dataURLs) == 1 {
@@ -212,20 +207,11 @@ func (t *OutboundTransformer) buildImageEditRequest(chatReq *llm.Request, apiKey
 	// Convert raw image bytes to FormFiles
 
 	for i, data := range chatReq.Image.Images {
-		file, err := newImageFormFile(fmt.Sprintf("image_%d", i+1), data)
-		if err != nil {
-			return nil, fmt.Errorf("invalid input image %d: %w", i+1, err)
-		}
-
-		formFiles = append(formFiles, file)
+		formFiles = append(formFiles, newImageFormFile(fmt.Sprintf("image_%d", i+1), data))
 	}
 
 	if len(chatReq.Image.Mask) > 0 {
-		file, err := newImageFormFile("mask", chatReq.Image.Mask)
-		if err != nil {
-			return nil, fmt.Errorf("invalid image mask: %w", err)
-		}
-
+		file := newImageFormFile("mask", chatReq.Image.Mask)
 		maskFile = &file
 	}
 
@@ -431,12 +417,7 @@ func (t *OutboundTransformer) buildImageVariationRequest(chatReq *llm.Request, a
 
 	// Convert raw image bytes to FormFiles
 	for i, data := range chatReq.Image.Images {
-		file, err := newImageFormFile(fmt.Sprintf("image_%d", i+1), data)
-		if err != nil {
-			return nil, fmt.Errorf("invalid input image %d: %w", i+1, err)
-		}
-
-		formFiles = append(formFiles, file)
+		formFiles = append(formFiles, newImageFormFile(fmt.Sprintf("image_%d", i+1), data))
 	}
 
 	if len(formFiles) == 0 {
@@ -553,12 +534,8 @@ type FormFile struct {
 	Format      string `json:"format"` // image format like "png", "jpeg", etc.
 }
 
-func newImageFormFile(name string, data []byte) (FormFile, error) {
-	contentType, err := detectAllowedImageType(data)
-	if err != nil {
-		return FormFile{}, err
-	}
-
+func newImageFormFile(name string, data []byte) FormFile {
+	contentType := http.DetectContentType(data)
 	extension := "png"
 	format := "png"
 
@@ -574,7 +551,7 @@ func newImageFormFile(name string, data []byte) (FormFile, error) {
 		format = "webp"
 	case "image/png":
 	default:
-		return FormFile{}, fmt.Errorf("%w: unsupported image content", transformer.ErrInvalidRequest)
+		contentType = "image/png"
 	}
 
 	return FormFile{
@@ -582,7 +559,7 @@ func newImageFormFile(name string, data []byte) (FormFile, error) {
 		ContentType: contentType,
 		Data:        data,
 		Format:      format,
-	}, nil
+	}
 }
 
 // transformImageGenerationResponse transforms the OpenAI Image Generation/Edit API response
@@ -743,11 +720,11 @@ func extractFile(url string) (FormFile, error) {
 
 // encodeImageBytesToDataURL encodes raw image bytes to a base64 data URL
 // suitable for JSON API request bodies (e.g. the image field in images/generations).
-func encodeImageBytesToDataURL(data []byte) (string, error) {
-	contentType, err := detectAllowedImageType(data)
-	if err != nil {
-		return "", err
+func encodeImageBytesToDataURL(data []byte) string {
+	contentType := http.DetectContentType(data)
+	if !strings.HasPrefix(contentType, "image/") {
+		contentType = "image/png"
 	}
 
-	return xurl.BuildDataURL(contentType, base64.StdEncoding.EncodeToString(data), true), nil
+	return xurl.BuildDataURL(contentType, base64.StdEncoding.EncodeToString(data), true)
 }

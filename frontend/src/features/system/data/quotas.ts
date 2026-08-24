@@ -37,19 +37,12 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
               cost
               period {
                 type
-                pastDuration {
-                  value
-                  unit
-                }
-                calendarDuration {
-                  unit
-                }
+                pastDuration { value unit }
+                calendarDuration { unit }
               }
             }
             providerQuota {
-              opencodeGo {
-                workspaceId
-              }
+              opencodeGo { workspaceId }
             }
           }
         }
@@ -103,11 +96,17 @@ type ProviderQuotaDataCommon = {
   error?: string;
 };
 
-export type ProviderClaudeQuotaData = ProviderQuotaDataCommon & {
+type ProviderClaudeQuotaWindow = {
+  utilization?: number;
+  reset?: number;
+  status?: string;
+};
+
+type ProviderClaudeQuotaData = ProviderQuotaDataCommon & {
   windows?: {
-    '5h'?: { utilization?: number; reset?: number; status?: string };
-    '7d'?: { utilization?: number; reset?: number; status?: string };
-    overage?: { utilization?: number; reset?: number; status?: string };
+    '5h'?: ProviderClaudeQuotaWindow;
+    '7d'?: ProviderClaudeQuotaWindow;
+    overage?: ProviderClaudeQuotaWindow;
   };
   representative_claim?: string;
 };
@@ -129,7 +128,21 @@ export type ProviderCodexQuotaData = ProviderQuotaDataCommon & {
   };
 };
 
-export type CopilotQuotaSnapshot = {
+export type XAISubscriptionBillingWindow = {
+  readonly usage_percent?: number;
+  readonly reset_at?: string;
+  readonly limit_usd?: number;
+  readonly used_usd?: number;
+};
+
+export type ProviderXAISubscriptionQuotaData = ProviderQuotaDataCommon & {
+  readonly billing?: {
+    readonly weekly?: XAISubscriptionBillingWindow;
+    readonly monthly?: XAISubscriptionBillingWindow;
+  };
+};
+
+type CopilotQuotaSnapshot = {
   entitlement: number;
   has_quota: boolean;
   overage_count: number;
@@ -224,6 +237,10 @@ export type ProviderNeuralWattQuotaData = ProviderQuotaDataCommon & {
     plan?: string | null;
     kwh_reset_date?: string | null;
   } | null;
+};
+
+export type ProviderCharmHyperQuotaData = ProviderQuotaDataCommon & {
+  balance?: number | null;
 };
 
 export type ProviderApertisQuotaData = ProviderQuotaDataCommon & {
@@ -416,9 +433,129 @@ export function isClineUnavailablePassQuotaData(qd: ProviderClineQuotaData): qd 
   return 'pass_state' in qd && qd.pass_state === 'unavailable';
 }
 
+/**
+ * A single limit window as normalized by the backend and stashed under
+ * `quotaData._limits`. `periodCost` is what the channel cost in the current
+ * window according to AxonHub usage logs, and `periodQuota` is the money value
+ * the whole window is estimated to be worth; both are absent when the backend
+ * could not work them out.
+ */
+export type ProviderQuotaLimit = {
+  type: string;
+  status: string;
+  usageRatio: number;
+  ready: boolean;
+  window?: string;
+  nextResetAt?: string;
+  periodStart?: string;
+  periodCost?: number;
+  periodQuota?: number;
+};
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export function parseQuotaLimits(quotaData: unknown): ProviderQuotaLimit[] {
+  if (typeof quotaData !== 'object' || quotaData === null) return [];
+
+  const raw = (quotaData as { _limits?: unknown })._limits;
+  if (!Array.isArray(raw)) return [];
+
+  return raw.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const limit = entry as Record<string, unknown>;
+
+    return [
+      {
+        type: typeof limit.type === 'string' ? limit.type : '',
+        status: typeof limit.status === 'string' ? limit.status : 'unknown',
+        usageRatio: optionalNumber(limit.usageRatio) ?? 0,
+        ready: limit.ready === true,
+        window: optionalString(limit.window),
+        nextResetAt: optionalString(limit.nextResetAt),
+        periodStart: optionalString(limit.periodStart),
+        periodCost: optionalNumber(limit.periodCost),
+        periodQuota: optionalNumber(limit.periodQuota),
+      },
+    ];
+  });
+}
+
+const CLAUDE_WINDOW_KEYS = {
+  '5h': '5h',
+  '7d': '7d',
+  overage: 'overage',
+  primary: '5h',
+  secondary: '7d',
+} as const;
+
+type ClaudeWindowKey = (typeof CLAUDE_WINDOW_KEYS)[keyof typeof CLAUDE_WINDOW_KEYS];
+
+function getClaudeWindowKey(value: unknown): ClaudeWindowKey | undefined {
+  return typeof value === 'string' ? CLAUDE_WINDOW_KEYS[value as keyof typeof CLAUDE_WINDOW_KEYS] : undefined;
+}
+
+function parseClaudeReset(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp / 1000 : undefined;
+}
+
+/**
+ * Claude Code has used both `5h`/`7d` and primary/secondary names for its
+ * two quota periods. Keep the UI-facing shape stable and fill missing windows
+ * from the normalized `_limits` data when the raw provider payload omits one.
+ */
+function parseClaudeQuotaData(quotaData: unknown, limits: ProviderQuotaLimit[]): ProviderClaudeQuotaData {
+  if (typeof quotaData !== 'object' || quotaData === null) return {};
+
+  const source = quotaData as Record<string, unknown>;
+  const windows: Record<string, ProviderClaudeQuotaWindow> = {};
+  const addWindow = (name: string, value: unknown) => {
+    if (typeof value !== 'object' || value === null) return;
+    const key = getClaudeWindowKey(name);
+    if (key && (name === key || !windows[key])) {
+      windows[key] = value as ProviderClaudeQuotaWindow;
+    }
+  };
+
+  if (typeof source.windows === 'object' && source.windows !== null) {
+    for (const [name, value] of Object.entries(source.windows)) {
+      addWindow(name, value);
+    }
+  }
+
+  // Accept providers that expose the two periods directly instead of nesting
+  // them under `windows`.
+  addWindow('primary', source.primary);
+  addWindow('secondary', source.secondary);
+
+  for (const limit of limits) {
+    const key = getClaudeWindowKey(limit.window);
+    if (!key || windows[key]) continue;
+
+    windows[key] = {
+      utilization: limit.usageRatio,
+      reset: parseClaudeReset(limit.nextResetAt),
+      status: limit.status,
+    };
+  }
+
+  return {
+    ...source,
+    windows: windows as ProviderClaudeQuotaData['windows'],
+  } as ProviderClaudeQuotaData;
+}
+
 export type ProviderQuotaData =
   | ProviderClaudeQuotaData
   | ProviderCodexQuotaData
+  | ProviderXAISubscriptionQuotaData
   | ProviderClineQuotaData
   | ProviderGitHubCopilotQuotaData
   | ProviderNanoGPTQuotaData
@@ -429,6 +566,7 @@ export type ProviderQuotaData =
   | ProviderWaferQuotaData
   | ProviderSyntheticQuotaData
   | ProviderNeuralWattQuotaData
+  | ProviderCharmHyperQuotaData
   | ProviderApertisQuotaData
   | (ProviderQuotaDataCommon & Record<string, unknown>);
 
@@ -437,6 +575,7 @@ export type ProviderQuotaStatus = {
   nextResetAt: string | null;
   ready: boolean;
   quotaData: ProviderQuotaData;
+  limits?: ProviderQuotaLimit[];
   providerType?: string | null;
 };
 
@@ -483,8 +622,157 @@ type QueryChannelsResponse = {
   };
 };
 
+type QueryChannelNodeWithQuota = QueryChannelNode & {
+  providerQuotaStatus: ProviderQuotaStatusNode;
+};
+
 function hasQuotaStatusOrLocalQuota(node: QueryChannelNode | null | undefined): node is QueryChannelNode {
   return node != null && (node.providerQuotaStatus != null || node.settings?.quota != null);
+}
+
+function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel {
+  const quotaStatus = node.providerQuotaStatus;
+  const providerType = quotaStatus.providerType;
+
+  const base = {
+    id: node.id,
+    name: node.name,
+    quotaStatus: {
+      status: quotaStatus.status,
+      nextResetAt: quotaStatus.nextResetAt,
+      ready: quotaStatus.ready,
+      limits: parseQuotaLimits(quotaStatus.quotaData),
+    },
+  };
+
+  if (node.type === 'claudecode') {
+    return {
+      ...base,
+      type: 'claudecode' as const,
+      quotaStatus: {
+        ...base.quotaStatus,
+        quotaData: parseClaudeQuotaData(node.providerQuotaStatus.quotaData, base.quotaStatus.limits),
+      },
+    };
+  }
+  if (node.type === 'codex') {
+    return {
+      ...base,
+      type: 'codex' as const,
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderCodexQuotaData },
+    };
+  }
+  if (node.type === 'cline') {
+    return {
+      ...base,
+      type: 'cline' as const,
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderClineQuotaData },
+    };
+  }
+  if (node.type === 'github_copilot') {
+    return {
+      ...base,
+      type: 'github_copilot' as const,
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderGitHubCopilotQuotaData },
+    };
+  }
+  if (node.type === 'nanogpt') {
+    return {
+      ...base,
+      type: 'nanogpt' as const,
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderNanoGPTQuotaData },
+    };
+  }
+  if (node.type === 'nanogpt_responses') {
+    return {
+      ...base,
+      type: 'nanogpt_responses' as const,
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderNanoGPTQuotaData },
+    };
+  }
+  if (node.type === 'opencode_go' || node.type === 'opencode_go_anthropic') {
+    return {
+      ...base,
+      type: node.type as 'opencode_go' | 'opencode_go_anthropic',
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderOpenCodeGoQuotaData },
+    };
+  }
+  if (node.type === 'moonshot_coding') {
+    return {
+      ...base,
+      type: 'moonshot_coding' as const,
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderKimiCodeQuotaData },
+    };
+  }
+  if (node.type === 'minimax' || node.type === 'minimax_anthropic') {
+    return {
+      ...base,
+      type: node.type as 'minimax' | 'minimax_anthropic',
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderMinimaxQuotaData },
+    };
+  }
+  if (node.type === 'zhipu' || node.type === 'zhipu_anthropic') {
+    return {
+      ...base,
+      type: node.type as 'zhipu' | 'zhipu_anthropic',
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderZhipuQuotaData },
+    };
+  }
+  if (node.type === 'openai' || node.type === 'openai_responses') {
+    const typeVal = node.type as 'openai' | 'openai_responses';
+    if (providerType === 'wafer') {
+      return {
+        ...base,
+        type: typeVal,
+        providerType: 'wafer' as const,
+        quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderWaferQuotaData },
+      };
+    }
+    if (providerType === 'synthetic') {
+      return {
+        ...base,
+        type: typeVal,
+        providerType: 'synthetic' as const,
+        quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderSyntheticQuotaData },
+      };
+    }
+    if (providerType === 'neuralwatt') {
+      return {
+        ...base,
+        type: typeVal,
+        providerType: 'neuralwatt' as const,
+        quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderNeuralWattQuotaData },
+      };
+    }
+    if (providerType === 'apertis') {
+      return {
+        ...base,
+        type: typeVal,
+        providerType: 'apertis' as const,
+        quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderApertisQuotaData },
+      };
+    }
+    if (providerType === 'charm_hyper') {
+      return {
+        ...base,
+        type: typeVal,
+        providerType: 'charm_hyper' as const,
+        quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderCharmHyperQuotaData },
+      };
+    }
+    return {
+      ...base,
+      type: typeVal,
+      providerType: undefined,
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderQuotaDataCommon },
+    };
+  }
+
+  return {
+    ...base,
+    type: node.type as ProviderQuotaChannel['type'],
+    quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderQuotaDataCommon },
+  };
 }
 
 export function useProviderQuotaStatuses() {
@@ -555,6 +843,7 @@ export function useProviderQuotaStatuses() {
             nextResetAt: providerQuotaStatus.nextResetAt,
             ready: providerQuotaStatus.ready,
             quotaData: providerQuotaStatus.quotaData as ProviderQuotaData,
+            limits: parseQuotaLimits(providerQuotaStatus.quotaData),
             providerType: providerQuotaStatus.providerType,
           }
         : undefined,

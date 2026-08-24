@@ -99,6 +99,17 @@ func (s *QuotaAwareStrategy) score(ctx context.Context, channel *biz.Channel, de
 		details["mode"] = settings.Mode
 	}
 
+	// Allowed channels bypass provider-quota enforcement. Keep them out of
+	// both exhausted penalties and de-prioritization scoring; channel-local
+	// quotas are enforced independently by ChannelQuotaSelector.
+	if containsInt(settings.AllowedChannelIDs, channel.ID) {
+		if details != nil {
+			details["quota_status"] = "bypassed"
+			details["allowed_channel"] = true
+		}
+		return 0, "channel_allowed"
+	}
+
 	quotaStatus := s.provider.GetQuotaStatus(ctx, channel.ID)
 
 	if quotaStatus == nil {

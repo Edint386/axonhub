@@ -1,8 +1,7 @@
 name: Sync Model Developers
 
 on:
-  schedule:
-    - cron: '0 0 * * 0'
+  # External model-data synchronization is manual in the custom fork.
   workflow_dispatch:
 
 jobs:

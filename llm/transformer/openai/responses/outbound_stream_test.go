@@ -3,6 +3,7 @@ package responses
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -179,6 +180,218 @@ func TestOutboundTransformer_StreamTransformation_WithTestData(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOutboundTransformer_TransformStream_IncompleteResponseDoesNotEmitDone(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name   string
+		events []*httpclient.StreamEvent
+	}{
+		{name: "empty upstream stream"},
+		{
+			name: "with response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_incomplete","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+			},
+		},
+		{
+			name: "with empty response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+			},
+		},
+		{
+			name: "text delta without response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","item_id":"msg_partial","output_index":0,"content_index":0,"delta":"partial"}`)},
+			},
+		},
+		{
+			name: "reasoning delta without response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.reasoning_summary_text.delta", Data: []byte(`{"type":"response.reasoning_summary_text.delta","item_id":"rs_partial","output_index":0,"summary_index":0,"delta":"partial"}`)},
+			},
+		},
+		{
+			name: "function call without response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.output_item.added", Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_partial","type":"function_call","call_id":"call_partial","name":"write_file","arguments":""}}`)},
+				{Type: "response.function_call_arguments.delta", Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_partial","output_index":0,"delta":"{\"path\":\"/tmp/x\"}"}`)},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(tt.events))
+			require.NoError(t, err)
+
+			var responses []*llm.Response
+			for stream.Next() {
+				responses = append(responses, stream.Current())
+			}
+
+			require.ErrorIs(t, stream.Err(), ErrStreamIncomplete)
+			require.NotContains(t, responses, llm.DoneResponse)
+		})
+	}
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneRequiresSemanticTerminal(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.ErrorIs(t, err, ErrStreamIncomplete)
+	require.Equal(t, 0, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneBeforeSemanticTerminalPreservesLateSourceError(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	sourceErr := errors.New("late source failure after bare provider done")
+	events := []*httpclient.StreamEvent{
+		{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+	}
+	source := &responsesErrorAfterStream{items: events, err: sourceErr}
+	stream, err := trans.TransformStream(t.Context(), nil, source)
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.ErrorIs(t, err, sourceErr)
+	require.Equal(t, 0, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneAfterSemanticTerminal(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_DuplicateProviderDoneEmitsOnce(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+		{Data: []byte("[DONE]")},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneBeforeSourceErrorDoesNotEmitDone(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	sourceErr := errors.New("late source failure")
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+		{Data: []byte("[DONE]")},
+	}
+	source := &responsesErrorAfterStream{items: events, err: sourceErr}
+	stream, err := trans.TransformStream(t.Context(), nil, source)
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.ErrorIs(t, err, sourceErr)
+	require.Equal(t, 0, countDoneResponses(responses))
+}
+
+type responsesErrorAfterStream struct {
+	items   []*httpclient.StreamEvent
+	index   int
+	current *httpclient.StreamEvent
+	err     error
+}
+
+func (s *responsesErrorAfterStream) Next() bool {
+	if s.index >= len(s.items) {
+		return false
+	}
+	s.current = s.items[s.index]
+	s.index++
+	return true
+}
+
+func (s *responsesErrorAfterStream) Current() *httpclient.StreamEvent { return s.current }
+func (s *responsesErrorAfterStream) Err() error                       { return s.err }
+func (s *responsesErrorAfterStream) Close() error                     { return nil }
+
+func TestOutboundTransformer_TransformStream_DuplicateSemanticTerminalEmitsOnce(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+	finishResponses := 0
+	for _, response := range responses {
+		if response != nil && len(response.Choices) > 0 && response.Choices[0].FinishReason != nil {
+			finishResponses++
+		}
+	}
+	require.Equal(t, 1, finishResponses)
+}
+
+func TestOutboundTransformer_TransformStream_SemanticTerminalSynthesizesOneDone(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_complete","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+}
+
+func countDoneResponses(responses []*llm.Response) int {
+	count := 0
+	for _, response := range responses {
+		if response == llm.DoneResponse {
+			count++
+		}
+	}
+	return count
 }
 
 func TestOutboundTransformer_StreamTransformation_ErrorEvent(t *testing.T) {
@@ -1066,6 +1279,75 @@ func TestOutboundTransformer_TransformStream_PreservesPreviousResponseID(t *test
 	require.NotNil(t, actual[2].PreviousResponseID)
 	require.Equal(t, "resp_prev_123", *actual[2].PreviousResponseID)
 	require.Equal(t, llm.DoneResponse, actual[3])
+}
+
+// The Responses API signals truncation/failure through response.completed with
+// status "incomplete"/"failed" rather than a dedicated event; the Chat
+// Completions finish_reason must reflect that instead of defaulting to stop.
+func TestOutboundTransformer_TransformStream_MapsCompletedStatusToFinishReason(t *testing.T) {
+	tests := []struct {
+		name             string
+		status           string
+		incompleteReason string
+		expectedReason   string
+		withToolCalls    bool
+	}{
+		{name: "incomplete maps to length", status: "incomplete", expectedReason: "length"},
+		{name: "incomplete with content_filter reason maps to content_filter", status: "incomplete", incompleteReason: "content_filter", expectedReason: "content_filter"},
+		{name: "failed maps to error", status: "failed", expectedReason: "error"},
+		{name: "cancelled maps to cancelled", status: "cancelled", expectedReason: "cancelled"},
+		{name: "canceled (US spelling) maps to cancelled", status: "canceled", expectedReason: "cancelled"},
+		{name: "nil status falls back to stop", status: "", expectedReason: "stop"},
+		{name: "completed falls back to stop", status: "completed", expectedReason: "stop"},
+		{name: "completed with tool calls maps to tool_calls", status: "completed", expectedReason: "tool_calls", withToolCalls: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+			require.NoError(t, err)
+
+			events := []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+			}
+			if tt.withToolCalls {
+				events = append(events,
+					&httpclient.StreamEvent{Type: "response.output_item.added", Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_status_map","type":"function_call","call_id":"call_status_map","name":"get_weather","arguments":""}}`)},
+					&httpclient.StreamEvent{Type: "response.function_call_arguments.done", Data: []byte(`{"type":"response.function_call_arguments.done","item_id":"fc_status_map","output_index":0,"name":"get_weather","arguments":"{}"}`)},
+				)
+			}
+
+			// Build the response.completed payload. A nil status is expressed by
+			// omitting the field entirely.
+			completePayload := fmt.Sprintf(`{"type":"response.completed","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","status":%q,"output":[]}}`, tt.status)
+			if tt.status == "" {
+				completePayload = `{"type":"response.completed","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","output":[]}}`
+			}
+			if tt.incompleteReason != "" {
+				completePayload = fmt.Sprintf(`{"type":"response.completed","response":{"id":"resp_status_map","object":"response","created_at":1700000000,"model":"gpt-5","status":"incomplete","incomplete_details":{"reason":%q},"output":[]}}`, tt.incompleteReason)
+			}
+			events = append(events, &httpclient.StreamEvent{
+				Type: "response.completed",
+				Data: []byte(completePayload),
+			})
+
+			stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+			require.NoError(t, err)
+
+			responses, err := streams.All(stream)
+			require.NoError(t, err)
+
+			var finishReasons []string
+			for _, resp := range responses {
+				if resp == llm.DoneResponse || len(resp.Choices) == 0 || resp.Choices[0].FinishReason == nil {
+					continue
+				}
+				finishReasons = append(finishReasons, *resp.Choices[0].FinishReason)
+			}
+
+			require.Equal(t, []string{tt.expectedReason}, finishReasons)
+		})
+	}
 }
 
 func TestOutboundTransformer_TransformStream_CreatedAtCompatibility(t *testing.T) {

@@ -16,6 +16,15 @@ type UserInfo struct {
 	HasPassword    bool               `json:"hasPassword"`
 }
 
+// RequestCallerUser is the minimal identity projection exposed with request
+// caller metadata. It intentionally excludes email, status, scopes, roles and
+// other account fields that are not needed to identify the caller.
+type RequestCallerUser struct {
+	ID        GUID   `json:"id"`
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+}
+
 // OIDCIdentityInfo contains an identity provider association.
 type OIDCIdentityInfo struct {
 	ID      GUID   `json:"id"`

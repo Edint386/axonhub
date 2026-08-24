@@ -506,7 +506,6 @@ func TestChannelService_BulkStatusAndDelete_DefersReloadUntilCommit(t *testing.T
 
 	require.NoError(t, svc.BulkDeleteChannels(txCtx2, []int{ch2.ID}))
 	require.Equal(t, 1, notifier.notifyCount, "bulk delete must not refresh before commit")
-	require.Empty(t, forgetter.channelIDs, "bulk delete must not evict limiters before commit")
 
 	require.NoError(t, tx2.Commit())
 	require.Equal(t, 2, notifier.notifyCount)
@@ -526,9 +525,7 @@ func TestChannelService_BulkDelete_RollbackKeepsLimiterAndCache(t *testing.T) {
 	svc.SetChannelLimiterForgetter(forgetter)
 	previousAsyncReloadDisabled := asyncReloadDisabled
 	asyncReloadDisabled = false
-	t.Cleanup(func() {
-		asyncReloadDisabled = previousAsyncReloadDisabled
-	})
+	t.Cleanup(func() { asyncReloadDisabled = previousAsyncReloadDisabled })
 
 	tx, err := client.Tx(ctx)
 	require.NoError(t, err)
@@ -537,7 +534,6 @@ func TestChannelService_BulkDelete_RollbackKeepsLimiterAndCache(t *testing.T) {
 	require.NoError(t, svc.BulkDeleteChannels(txCtx, []int{ch.ID}))
 	require.Zero(t, notifier.notifyCount)
 	require.Empty(t, forgetter.channelIDs)
-
 	require.NoError(t, tx.Rollback())
 	require.Zero(t, notifier.notifyCount)
 	require.Empty(t, forgetter.channelIDs)

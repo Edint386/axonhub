@@ -62,7 +62,7 @@
         ⚡ Enterprise-grade high concurrency and stable scheduling: Prices as low as 10% of official rates, transparent model multipliers, and millisecond-level response times that fit AxonHub's intelligent routing and failover mechanisms perfectly. High-availability channels and redundant multi-node backups help eliminate rate limits, 429s, and disconnections;<br/>
         🧠 Comprehensive support for top models: Deeply adapted for ChatGPT, Claude, Gemini, Kimi, GLM, DeepSeek, and the full range of mainstream models, with native support for Claude Code, Codex, OpenCode, and other AI programming and Agent development tools.<br/>
         🎨 Multimodal and cutting-edge ecosystem access: Beyond text conversations and code generation, it provides one-stop access to mainstream image generation, video, Embedding, and Rerank models, allowing a single upstream channel to meet the gateway's multimodal distribution needs.<br/>
-        🎁 AxonHub users can register through the <a href="https://lj.s.gy/DUq59H" target="_blank">exclusive link</a> to get started and connect the service to their gateway for testing.
+        🎁 Exclusive benefits for AxonHub users: Register through the <a href="https://lj.s.gy/DUq59H" target="_blank">exclusive link</a> to receive [exclusive gifted credits / first recharge offer], ready to use immediately with zero-barrier gateway testing!
       </p>
     </td>
   </tr>
@@ -420,15 +420,19 @@ For detailed configuration instructions, please refer to [configuration document
 git clone https://github.com/looplj/axonhub.git
 cd axonhub
 
-# Set environment variables
-export AXONHUB_DB_DIALECT="tidb"
-export AXONHUB_DB_DSN="<USER>.root:<PASSWORD>@tcp(gateway01.us-west-2.prod.aws.tidbcloud.com:4000)/axonhub?tls=true&parseTime=true&multiStatements=true&charset=utf8mb4"
+# Create a local environment file (replace image digests and password)
+umask 077
+cat > .env <<'EOF'
+DB_PASSWORD=replace-with-a-long-random-password
+AXONHUB_IMAGE=looplj/axonhub@sha256:replace-with-axonhub-digest
+POSTGRES_IMAGE=postgres@sha256:replace-with-postgres-digest
+EOF
 
 # Start services
-docker-compose up -d
+docker compose --env-file .env up -d
 
 # Check status
-docker-compose ps
+docker compose ps
 ```
 
 #### Helm Kubernetes Deployment

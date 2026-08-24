@@ -594,9 +594,6 @@ func parseGenerationImageField(raw json.RawMessage) ([][]byte, error) {
 	if err := json.Unmarshal(raw, &many); err != nil {
 		return nil, fmt.Errorf("%w: image field must be a string or array of strings", transformer.ErrInvalidRequest)
 	}
-	if len(many) > maxImageCount {
-		return nil, fmt.Errorf("%w: too many images", transformer.ErrInvalidRequest)
-	}
 
 	images := make([][]byte, 0, len(many))
 	for _, url := range many {
@@ -617,41 +614,18 @@ func decodeDataURLToBytes(dataURL string) ([]byte, error) {
 		return nil, fmt.Errorf("%w: image must be a data URL", transformer.ErrInvalidRequest)
 	}
 
-	commaIndex := strings.IndexByte(dataURL, ',')
-	if commaIndex < 0 {
+	parsed := xurl.ParseDataURL(dataURL)
+	if parsed == nil {
 		return nil, fmt.Errorf("%w: invalid data URL format", transformer.ErrInvalidRequest)
 	}
 
-	header := strings.TrimSpace(dataURL[len("data:"):commaIndex])
-	base64Index := strings.LastIndexByte(header, ';')
-	if base64Index < 0 || !strings.EqualFold(strings.TrimSpace(header[base64Index+1:]), "base64") {
+	if !parsed.IsBase64 {
 		return nil, fmt.Errorf("%w: image data URL must be base64-encoded", transformer.ErrInvalidRequest)
 	}
 
-	declaredType, _, err := mime.ParseMediaType(strings.TrimSpace(header[:base64Index]))
-	if err != nil || !isAllowedImageType(declaredType) {
-		return nil, fmt.Errorf("%w: unsupported image type", transformer.ErrInvalidRequest)
-	}
-
-	encodedData := dataURL[commaIndex+1:]
-	if base64.StdEncoding.DecodedLen(len(encodedData)) > maxImageFileSize {
-		return nil, fmt.Errorf("%w: file too large", transformer.ErrInvalidRequest)
-	}
-
-	data, err := base64.StdEncoding.DecodeString(encodedData)
+	data, err := base64.StdEncoding.DecodeString(parsed.Data)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to decode base64 image data", transformer.ErrInvalidRequest)
-	}
-	if len(data) > maxImageFileSize {
-		return nil, fmt.Errorf("%w: file too large", transformer.ErrInvalidRequest)
-	}
-
-	detectedType, err := detectAllowedImageType(data)
-	if err != nil {
-		return nil, err
-	}
-	if !strings.EqualFold(declaredType, detectedType) {
-		return nil, fmt.Errorf("%w: declared image type does not match image content", transformer.ErrInvalidRequest)
 	}
 
 	return data, nil

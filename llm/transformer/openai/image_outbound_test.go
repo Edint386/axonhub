@@ -197,7 +197,7 @@ func TestBuildImageGenerateRequest_WithMultipleImages(t *testing.T) {
 	imageData1, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==")
 	require.NoError(t, err)
 
-	imageData2 := decodeImageSecurityTestPNG(t)
+	imageData2 := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
 
 	req := &llm.Request{
 		Model: "gpt-image-1",
@@ -224,54 +224,6 @@ func TestBuildImageGenerateRequest_WithMultipleImages(t *testing.T) {
 		require.True(t, ok)
 		assert.Contains(t, str, "data:image/")
 	}
-}
-
-func TestBuildImageGenerateRequest_UsesDetectedImageMIME(t *testing.T) {
-	tr, err := NewOutboundTransformer("https://api.openai.com/v1", "test-key")
-	require.NoError(t, err)
-
-	ot := tr.(*OutboundTransformer)
-	jpegData := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F'}
-	req := &llm.Request{
-		Model: "gpt-image-1",
-		Image: &llm.ImageRequest{
-			Prompt: "Use this image",
-			Images: [][]byte{jpegData},
-		},
-	}
-
-	httpReq, err := ot.buildImageGenerateRequest(req, "test-key")
-	require.NoError(t, err)
-
-	var body map[string]any
-	require.NoError(t, json.Unmarshal(httpReq.Body, &body))
-	imageField, ok := body["image"].(string)
-	require.True(t, ok)
-	assert.True(t, strings.HasPrefix(imageField, "data:image/jpeg;base64,"))
-}
-
-func TestBuildImageGenerateRequest_RejectsUnknownImageContent(t *testing.T) {
-	tr, err := NewOutboundTransformer("https://api.openai.com/v1", "test-key")
-	require.NoError(t, err)
-
-	ot := tr.(*OutboundTransformer)
-	req := &llm.Request{
-		Model: "gpt-image-1",
-		Image: &llm.ImageRequest{
-			Prompt: "Use this image",
-			Images: [][]byte{[]byte("not an image")},
-		},
-	}
-
-	_, err = ot.buildImageGenerateRequest(req, "test-key")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported image content")
-}
-
-func TestNewImageFormFile_RejectsUnknownImageContent(t *testing.T) {
-	_, err := newImageFormFile("image", []byte("not an image"))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported image content")
 }
 
 func TestBuildImageGenerateRequest_WithoutImage(t *testing.T) {

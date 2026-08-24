@@ -39,14 +39,22 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -tags=nomsgpack \
     -ldflags "-s -w -X 'github.com/looplj/axonhub/internal/build.Version=$(cat internal/build/VERSION 2>/dev/null || echo dev)' -X 'github.com/looplj/axonhub/internal/build.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
     -o axonhub \
-    ./cmd/axonhub
+    ./cmd/axonhub && \
+    ./scripts/verify-go-sse-dependency-test.sh && \
+    ./scripts/verify-go-sse-dependency.sh ./axonhub
 
 FROM alpine
 
 RUN apk add --no-cache ca-certificates tzdata
+RUN addgroup -S -g 65532 axonhub \
+    && adduser -S -D -H -u 65532 -G axonhub axonhub
 
 WORKDIR /app
-COPY --from=backend-builder /build/axonhub /app/axonhub
+COPY --from=backend-builder --chown=axonhub:axonhub /build/axonhub /app/axonhub
+
+# The service does not need root privileges at runtime. Keep this in the image
+# as well as in Compose so the protection is preserved for other deployments.
+USER 65532:65532
 
 EXPOSE 8090
 ENTRYPOINT ["/app/axonhub"]

@@ -437,6 +437,10 @@ type Channel implements Node {
   priority: Int!
   errorMessage: String
   """
+  Set when the channel was disabled automatically, and cleared when it recovers; distinguishes an automatic disable from an operator one.
+  """
+  autoDisabledAt: Time
+  """
   User-defined remark or note for the channel
   """
   remark: String
@@ -1601,6 +1605,7 @@ enum ChannelType @goModel(model: "github.com/looplj/axonhub/internal/ent/channel
   xiaomi_anthropic
   xai
   xai_responses
+  xai_subscription
   ppio
   siliconflow
   volcengine
@@ -1631,6 +1636,8 @@ enum ChannelType @goModel(model: "github.com/looplj/axonhub/internal/ent/channel
   evolink
   evolink_anthropic
   groq
+  qiniu_anthropic
+  fenno
 }
 """
 ChannelWhereInput is used for filtering Channel objects.
@@ -1811,6 +1818,19 @@ input ChannelWhereInput {
   errorMessageNotNil: Boolean
   errorMessageEqualFold: String
   errorMessageContainsFold: String
+  """
+  auto_disabled_at field predicates
+  """
+  autoDisabledAt: Time
+  autoDisabledAtNEQ: Time
+  autoDisabledAtIn: [Time!]
+  autoDisabledAtNotIn: [Time!]
+  autoDisabledAtGT: Time
+  autoDisabledAtGTE: Time
+  autoDisabledAtLT: Time
+  autoDisabledAtLTE: Time
+  autoDisabledAtIsNil: Boolean
+  autoDisabledAtNotNil: Boolean
   """
   remark field predicates
   """
@@ -4070,6 +4090,7 @@ ProviderQuotaStatusProviderType is enum for the field provider_type
 enum ProviderQuotaStatusProviderType @goModel(model: "github.com/looplj/axonhub/internal/ent/providerquotastatus.ProviderType") {
   claudecode
   codex
+  xai_subscription
   github_copilot
   nanogpt
   cline
@@ -4081,6 +4102,7 @@ enum ProviderQuotaStatusProviderType @goModel(model: "github.com/looplj/axonhub/
   kimi_code
   minimax
   zhipu
+  charm_hyper
 }
 """
 ProviderQuotaStatusStatus is enum for the field status

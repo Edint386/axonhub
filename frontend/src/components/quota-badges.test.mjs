@@ -14,10 +14,10 @@ function read(relativePath) {
 // markers) so assertions about the usage bars cannot bleed into Claude Code
 // or Cline, which legitimately keep duration-aware severity.
 function isolateCodexBlock(source) {
-  const start = source.indexOf("{quota && channel.type === 'codex' &&");
-  const end = source.indexOf("{quota && channel.type === 'cline' &&", start);
+  const start = source.indexOf("channel.type === 'codex' &&");
+  const end = source.indexOf("channel.type === 'cline' &&", start);
 
-  assert.ok(start !== -1, 'Codex render branch should retain the custom quota guard');
+  assert.ok(start !== -1, 'Codex render branch should exist in quota-badges source');
   assert.ok(end !== -1 && end > start, 'Cline render branch should follow the Codex branch');
 
   return source.slice(start, end);
@@ -53,5 +53,18 @@ test('Codex usage bar color tracks used percentage, not reset-window elapsed tim
     codexBlock,
     /durationPercentage/,
     'Codex usage bar color must not be severity-adjusted by reset-window elapsed time'
+  );
+});
+
+test('quota enforcement badges keep provider exemption separate from local quota enforcement', () => {
+  const quotaBadges = read('components/quota-badges.tsx');
+
+  assert.match(quotaBadges, /localQuotaStatus === 'exhausted'[^\n]*blocked/);
+  assert.match(quotaBadges, /providerStatus === 'exhausted'/);
+  assert.match(quotaBadges, /isAllowed && \(providerStatus === 'exhausted' \|\| providerStatus === 'warning'\)/);
+  assert.doesNotMatch(
+    quotaBadges,
+    /const enforcementEffect =\s*\n\s*enforcementMode[^\n]*status === 'exhausted'/,
+    'combined display status must not drive provider enforcement badges'
   );
 });

@@ -1,9 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Releases are manual in the custom fork.  Creating a tag must not publish
+  # binaries, packages, or write VERSION back to the custom branch implicitly.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -40,6 +40,11 @@ jobs:
         with:
           go-version: stable
           cache: true
+
+      - name: Verify production dependency graphs
+        run: |
+          ./scripts/verify-go-sse-dependency-test.sh
+          ./scripts/verify-go-sse-dependency.sh
 
       - name: Update VERSION file
         if: ${{ !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'rc') }}

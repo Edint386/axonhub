@@ -37,6 +37,23 @@ type OutboundTransformer struct {
 	APIKeyProvider auth.APIKeyProvider
 }
 
+var _ transformer.PassThroughBodyPolicy = (*OutboundTransformer)(nil)
+
+// AllowPassThroughBody prevents the inbound body from replacing OpenRouter's
+// image request body. Image requests are translated from the OpenAI image
+// shape to OpenRouter's /images input_references shape, so replaying the raw
+// body would silently undo that wire-format conversion.
+func (t *OutboundTransformer) AllowPassThroughBody(_ context.Context, llmReq *llm.Request, providerReq *httpclient.Request) bool {
+	if llmReq != nil && llmReq.RequestType == llm.RequestTypeImage {
+		return false
+	}
+	if providerReq != nil && providerReq.RequestType == llm.RequestTypeImage.String() {
+		return false
+	}
+
+	return true
+}
+
 // NewOutboundTransformer creates a new OpenRouter OutboundTransformer with legacy parameters.
 func NewOutboundTransformer(baseURL, apiKey string) (transformer.Outbound, error) {
 	config := &Config{

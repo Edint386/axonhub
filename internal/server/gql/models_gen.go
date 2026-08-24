@@ -73,6 +73,12 @@ type ActiveChannelHealthProbeRun struct {
 	CreatedAt    time.Time    `json:"createdAt"`
 }
 
+type ActiveHealthProbeModelSettingInput struct {
+	ModelID string `json:"modelID"`
+	Enabled bool   `json:"enabled"`
+	Stream  bool   `json:"stream"`
+}
+
 type AddUserToProjectInput struct {
 	ProjectID objects.GUID    `json:"projectId"`
 	UserID    objects.GUID    `json:"userId"`
@@ -666,8 +672,9 @@ type UpdateProviderQuotaCollectionSettingsInput struct {
 }
 
 type UpdateQuotaEnforcementSettingsInput struct {
-	Enabled *bool                     `json:"enabled,omitempty"`
-	Mode    *biz.QuotaEnforcementMode `json:"mode,omitempty"`
+	Enabled           *bool                     `json:"enabled,omitempty"`
+	Mode              *biz.QuotaEnforcementMode `json:"mode,omitempty"`
+	AllowedChannelIDs []*objects.GUID           `json:"allowedChannelIDs,omitempty"`
 }
 
 type UpdateSecuritySettingsInput struct {

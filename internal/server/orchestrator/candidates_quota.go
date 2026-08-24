@@ -23,6 +23,15 @@ type ProviderQuotaSelector struct {
 	FilteredCount int
 }
 
+func containsInt(values []int, target int) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func WithProviderQuotaSelector(wrapped CandidateSelector, provider ProviderQuotaStatusProvider, systemService QuotaEnforcementSettingsProvider) *ProviderQuotaSelector {
 	return &ProviderQuotaSelector{
 		wrapped:       wrapped,
@@ -54,6 +63,11 @@ func (s *ProviderQuotaSelector) Select(ctx context.Context, req *llm.Request) ([
 	limitType := provider_quota.RequestModality(req.Image != nil)
 
 	filtered := lo.Filter(candidates, func(c *ChannelModelsCandidate, _ int) bool {
+		// Allowed channels bypass quota filtering entirely.
+		if containsInt(settings.AllowedChannelIDs, c.Channel.ID) {
+			return true
+		}
+
 		quotaStatus := s.provider.GetQuotaStatus(ctx, c.Channel.ID)
 
 		if quotaStatus == nil {

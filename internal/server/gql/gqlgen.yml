@@ -104,6 +104,9 @@ models:
   ModelMappingInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ModelMapping
+  RequestCallerUser:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RequestCallerUser
   ReasoningEffortMapping:
     model:
       - github.com/looplj/axonhub/llm.ReasoningEffortMapping
@@ -179,12 +182,6 @@ models:
   ChannelHealthProbeModelInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeModel
-  ActiveHealthProbeModelSetting:
-    model:
-      - github.com/looplj/axonhub/internal/server/biz.ActiveHealthProbeModelSetting
-  ActiveHealthProbeModelSettingInput:
-    model:
-      - github.com/looplj/axonhub/internal/server/biz.ActiveHealthProbeModelSetting
   ChannelRateLimit:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelRateLimit

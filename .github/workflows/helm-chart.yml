@@ -1,9 +1,9 @@
 name: Publish Helm chart
 
 on:
-  push:
-    tags:
-      - "v*"
+  # Chart publication is manual in the custom fork; tag pushes alone do not
+  # publish to GHCR.
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -26,6 +26,35 @@ import (
 	"github.com/samber/lo"
 )
 
+// Caller is the minimal caller projection used by request auditing. It is
+// available only to a system owner or the owner of the active project.
+func (r *aPIKeyResolver) Caller(ctx context.Context, obj *ent.APIKey) (*objects.RequestCallerUser, error) {
+	currentUser, ok := contexts.GetUser(ctx)
+	if !ok || currentUser == nil {
+		return nil, nil
+	}
+	projectID, hasProjectID := contexts.GetProjectID(ctx)
+	if !hasProjectID || (!currentUser.IsOwner && !isProjectOwnerMembership(currentUser, projectID)) {
+		return nil, nil
+	}
+
+	user, err := getNilableUser(ctx, r.client, obj.UserID)
+	if err != nil || user == nil {
+		return nil, err
+	}
+
+	return &objects.RequestCallerUser{
+		ID:        objects.GUID{Type: ent.TypeUser, ID: user.ID},
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+	}, nil
+}
+
+// LinkedProfilesCount is the resolver for the linkedProfilesCount field.
+func (r *aPIKeyProfileTemplateResolver) LinkedProfilesCount(ctx context.Context, obj *ent.APIKeyProfileTemplate) (int, error) {
+	return r.apiKeyProfileTemplateService.CountLinkedProfiles(ctx, obj)
+}
+
 // DefaultEndpoints is the resolver for the defaultEndpoints field.
 func (r *channelResolver) DefaultEndpoints(ctx context.Context, obj *ent.Channel) ([]*objects.ChannelEndpoint, error) {
 	if obj == nil {

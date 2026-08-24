@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const dataDir = import.meta.dirname;
@@ -27,6 +27,36 @@ test('Cline is available as a channel type in frontend schemas and configs', () 
   assert.match(providersConfig, /cline:\s*{[\s\S]*channelTypes:\s*\[\s*'cline'\s*\]/, 'PROVIDER_CONFIGS should expose a Cline provider');
 });
 
+test('Qiniu exposes OpenAI and Anthropic channel variants after AtlasCloud', () => {
+  const schema = read('features/channels/data/schema.ts');
+  const channelsConfig = read('features/channels/data/config_channels.ts');
+  const providersConfig = read('features/channels/data/config_providers.ts');
+
+  assert.match(schema, /channelTypeSchema[\s\S]*'qiniu'[\s\S]*'qiniu_anthropic'/);
+  assert.match(channelsConfig, /qiniu:\s*{[\s\S]*baseURL:\s*'https:\/\/api\.qnaigc\.com\/v1'[\s\S]*apiFormat:\s*OPENAI_CHAT_COMPLETIONS/);
+  assert.match(channelsConfig, /qiniu_anthropic:\s*{[\s\S]*baseURL:\s*'https:\/\/api\.qnaigc\.com'[\s\S]*apiFormat:\s*ANTHROPIC_MESSAGES/);
+  assert.match(providersConfig, /qiniu:\s*{[\s\S]*channelTypes:\s*\[\s*'qiniu_anthropic',\s*'qiniu'\s*\]/);
+  assert.ok(channelsConfig.indexOf('atlascloud:') < channelsConfig.indexOf('qiniu:'));
+  assert.ok(providersConfig.indexOf('atlascloud:') < providersConfig.indexOf('qiniu:'));
+});
+
+test('Fenno exposes a third-party Codex channel', () => {
+  const schema = read('features/channels/data/schema.ts');
+  const channelsConfig = read('features/channels/data/config_channels.ts');
+  const providersConfig = read('features/channels/data/config_providers.ts');
+
+  assert.match(schema, /channelTypeSchema[\s\S]*'fenno'/);
+  assert.match(channelsConfig, /fenno:\s*{[\s\S]*baseURL:\s*'https:\/\/api\.fenno\.ai'[\s\S]*apiFormat:\s*OPENAI_RESPONSES[\s\S]*icon:\s*FennoIcon/);
+  assert.match(channelsConfig, /fenno:\s*{[\s\S]*color:\s*'bg-\[#EEF2FF\] text-\[#3155C6\] border-\[#C7D2FE\]'/);
+  assert.match(providersConfig, /fenno:\s*{[\s\S]*icon:\s*FennoIcon[\s\S]*channelTypes:\s*\[\s*'fenno'\s*\]/);
+  const fennoIcon = read('features/channels/components/fenno-icon.tsx');
+  assert.match(fennoIcon, /@\/assets\/fenno-icon\.webp/);
+  assert.doesNotMatch(fennoIcon, /https?:\/\//);
+  assert.ok(existsSync(join(srcRoot, 'assets/fenno-icon.webp')));
+  assert.ok(channelsConfig.indexOf('qiniu_anthropic:') < channelsConfig.indexOf('fenno:'));
+  assert.ok(providersConfig.indexOf('qiniu:') < providersConfig.indexOf('fenno:'));
+});
+
 
 test('Cline has localized channel and provider labels', () => {
   for (const locale of ['en', 'zh-CN']) {
@@ -35,6 +65,32 @@ test('Cline has localized channel and provider labels', () => {
     assert.equal(messages['channels.types.cline'], 'Cline');
     assert.equal(messages['channels.providers.cline'], 'Cline');
   }
+});
+
+test('xAI subscription is exposed as an OAuth Responses channel', () => {
+  const schema = read('features/channels/data/schema.ts');
+  const channelsConfig = read('features/channels/data/config_channels.ts');
+  const providersConfig = read('features/channels/data/config_providers.ts');
+  const channelColumns = read('features/channels/components/channels-columns.tsx');
+
+  assert.match(schema, /channelTypeSchema[\s\S]*'xai_subscription'/);
+  assert.equal((schema.match(/data\.type === 'xai_subscription'/g) ?? []).length, 1, 'create schema should validate xAI OAuth credentials');
+  assert.match(schema, /effectiveType === 'xai_subscription'/, 'update schema should validate xAI OAuth credentials');
+  assert.match(
+    schema,
+    /requiresJSON\s*=\s*isCopilot\s*\|\|\s*type\s*===\s*'xai_subscription'[\s\S]*if\s*\(requiresJSON\s*&&\s*!apiKey\.trim\(\)\.startsWith\('\{'\)\)/,
+    'xAI subscription should reject a plain API key before the generic JSON early return'
+  );
+  assert.match(
+    channelsConfig,
+    /xai_subscription:\s*{[\s\S]*baseURL:\s*'https:\/\/cli-chat-proxy\.grok\.com\/v1'[\s\S]*apiFormat:\s*OPENAI_RESPONSES/
+  );
+  assert.match(providersConfig, /xai_subscription:\s*{[\s\S]*channelTypes:\s*\[\s*'xai_subscription'\s*\]/);
+  assert.match(
+    channelColumns,
+    /channel\.type !== 'xai_subscription'\s*&&\s*\([\s\S]*setOpen\('endpoints'\)/,
+    'xAI subscription channels should not expose an endpoint editor that the server rejects'
+  );
 });
 
 test('channel proxy connection reuse setting is submitted, echoed, and localized', () => {

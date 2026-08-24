@@ -107,7 +107,7 @@ const CREATE_CHANNEL_MUTATION = `
       status
       policies {
         stream
-        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes disableUntilCron disableUntilTimezone }
       }
       supportedModels
       autoSyncSupportedModels
@@ -137,7 +137,6 @@ const CREATE_CHANNEL_MUTATION = `
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -147,17 +146,6 @@ const CREATE_CHANNEL_MUTATION = `
         retryableErrorPatterns {
           pattern
           regex
-        }
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookie
-          }
-        }
-        healthProbe {
-          enabled
-          intervalMinutes
-          models { modelID enabled stream }
         }
       }
       orderingWeight
@@ -191,7 +179,7 @@ const DUPLICATE_CHANNEL_MUTATION = `
       status
       policies {
         stream
-        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes disableUntilCron disableUntilTimezone }
       }
       supportedModels
       autoSyncSupportedModels
@@ -221,7 +209,6 @@ const DUPLICATE_CHANNEL_MUTATION = `
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -231,17 +218,6 @@ const DUPLICATE_CHANNEL_MUTATION = `
         retryableErrorPatterns {
           pattern
           regex
-        }
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookie
-          }
-        }
-        healthProbe {
-          enabled
-          intervalMinutes
-          models { modelID enabled stream }
         }
       }
       orderingWeight
@@ -275,7 +251,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
       status
       policies {
         stream
-        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes disableUntilCron disableUntilTimezone }
       }
       supportedModels
       autoSyncSupportedModels
@@ -305,7 +281,6 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -315,17 +290,6 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         retryableErrorPatterns {
           pattern
           regex
-        }
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookie
-          }
-        }
-        healthProbe {
-          enabled
-          intervalMinutes
-          models { modelID enabled stream }
         }
       }
       orderingWeight
@@ -359,7 +323,7 @@ const UPDATE_CHANNEL_MUTATION = `
       status
       policies {
         stream
-        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
+        apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes disableUntilCron disableUntilTimezone }
       }
       supportedModels
       autoSyncSupportedModels
@@ -389,7 +353,6 @@ const UPDATE_CHANNEL_MUTATION = `
           forceArrayInputs
           replaceDeveloperRoleWithSystem
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -399,17 +362,6 @@ const UPDATE_CHANNEL_MUTATION = `
         retryableErrorPatterns {
           pattern
           regex
-        }
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookie
-          }
-        }
-        healthProbe {
-          enabled
-          intervalMinutes
-          models { modelID enabled stream }
         }
       }
       orderingWeight
@@ -600,7 +552,6 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             forceArrayInputs
             replaceDeveloperRoleWithSystem
             reasoningEffortMapping { from to }
-            downgradeMidConversationSystem
           }
           passThroughUserAgent
           passThroughBody
@@ -610,17 +561,6 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           retryableErrorPatterns {
             pattern
             regex
-          }
-          providerQuota {
-            opencodeGo {
-              workspaceId
-              authCookie
-            }
-          }
-          healthProbe {
-            enabled
-            intervalMinutes
-            models { modelID enabled stream }
           }
         }
       }
@@ -841,7 +781,6 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             forceArrayInputs
             replaceDeveloperRoleWithSystem
             reasoningEffortMapping { from to }
-            downgradeMidConversationSystem
           }
           passThroughUserAgent
           passThroughBody
@@ -851,17 +790,6 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           retryableErrorPatterns {
             pattern
             regex
-          }
-          providerQuota {
-            opencodeGo {
-              workspaceId
-              authCookie
-            }
-          }
-          healthProbe {
-            enabled
-            intervalMinutes
-            models { modelID enabled stream }
           }
         }
       }
@@ -935,7 +863,7 @@ const QUERY_CHANNELS_QUERY = `
           status
           policies {
             stream
-            apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes }
+            apiKeyAutoDisableRules { statusCodes keywordPatterns times action disableDurationMinutes disableUntilCron disableUntilTimezone }
           }
           credentials {
             apiKey
@@ -1002,7 +930,6 @@ const QUERY_CHANNELS_QUERY = `
               forceArrayInputs
               replaceDeveloperRoleWithSystem
               reasoningEffortMapping { from to }
-              downgradeMidConversationSystem
             }
             passThroughUserAgent
             passThroughBody
@@ -1012,17 +939,6 @@ const QUERY_CHANNELS_QUERY = `
             retryableErrorPatterns {
               pattern
               regex
-            }
-            providerQuota {
-              opencodeGo {
-                workspaceId
-                authCookie
-              }
-            }
-            healthProbe {
-              enabled
-              intervalMinutes
-              models { modelID enabled stream }
             }
           }
           orderingWeight
@@ -1213,34 +1129,6 @@ export function useQueryChannels(
     // Keep showing the previous data while a refetch is in-flight or fails,
     // so the component never renders with data = undefined and crashes.
     placeholderData: keepPreviousData,
-  });
-}
-
-export function useChannelQuotaUsage(
-  channelID: string,
-  options?: {
-    enabled?: boolean;
-    refetchInterval?: number;
-  }
-) {
-  const { handleError } = useErrorHandler();
-  const { t } = useTranslation();
-
-  return useQuery({
-    queryKey: ['channelQuotaUsage', channelID],
-    queryFn: async () => {
-      try {
-        const data = await graphqlRequest<{ channelQuotaUsage: ChannelQuotaUsage | null }>(CHANNEL_QUOTA_USAGE_QUERY, {
-          channelID,
-        });
-        return channelQuotaUsageSchema.nullable().parse(data.channelQuotaUsage);
-      } catch (error) {
-        handleError(error, t('common.errors.internalServerError'));
-        throw error;
-      }
-    },
-    enabled: !!channelID && (options?.enabled ?? true),
-    refetchInterval: options?.refetchInterval,
   });
 }
 

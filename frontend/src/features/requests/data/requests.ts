@@ -14,12 +14,17 @@ import {
 } from './schema';
 
 // Dynamic GraphQL query builder
-function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean }) {
+function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean }) {
   const apiKeyFields = permissions.canViewApiKeys
     ? `
           apiKey {
             id
-            name
+            name${permissions.canViewCallerUser ? `
+            caller {
+              id
+              firstName
+              lastName
+            }` : ''}
           }`
     : '';
 
@@ -115,12 +120,17 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
   `;
 }
 
-function buildRequestDetailQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean }) {
+function buildRequestDetailQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean }) {
   const apiKeyFields = permissions.canViewApiKeys
     ? `
           apiKey {
             id
-            name
+            name${permissions.canViewCallerUser ? `
+            caller {
+              id
+              firstName
+              lastName
+            }` : ''}
         }`
     : '';
 
@@ -174,12 +184,17 @@ function buildRequestDetailQuery(permissions: { canViewApiKeys: boolean; canView
   `;
 }
 
-function buildRequestDetailPollingQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean }) {
+function buildRequestDetailPollingQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean }) {
   const apiKeyFields = permissions.canViewApiKeys
     ? `
           apiKey {
             id
-            name
+            name${permissions.canViewCallerUser ? `
+            caller {
+              id
+              firstName
+              lastName
+            }` : ''}
         }`
     : '';
 
@@ -416,7 +431,7 @@ export async function fetchAdjacentRequestPage(params: {
   direction: 'older' | 'newer';
   pageSize: number;
   where?: Record<string, any>;
-  permissions: { canViewApiKeys: boolean; canViewChannels: boolean };
+  permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean };
   projectId?: string | null;
 }): Promise<{ requests: Request[]; pageInfo: RequestConnection['pageInfo'] }> {
   const query = buildRequestsQuery(params.permissions);

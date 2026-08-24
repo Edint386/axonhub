@@ -68,6 +68,29 @@ func TestQuotaAwareStrategy_Score_Exhausted(t *testing.T) {
 	assert.Equal(t, float64(quotaExhaustedScore), strategy.Score(ctx, channel))
 }
 
+func TestQuotaAwareStrategy_Score_AllowedChannel_BypassesProviderQuota(t *testing.T) {
+	provider := &mockQuotaStatusProvider{
+		statuses: map[int]*biz.QuotaChannelStatus{
+			1: {Status: providerquotastatus.StatusExhausted, Ready: false},
+		},
+	}
+	settings := &mockQuotaEnforcementSettingsProvider{
+		settings: &biz.QuotaEnforcementSettings{
+			Enabled:           true,
+			Mode:              biz.QuotaEnforcementModeDePrioritize,
+			AllowedChannelIDs: []int{1},
+		},
+	}
+	strategy := NewQuotaAwareStrategy(provider, settings)
+
+	channel := &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "allowed"}}
+
+	score, debug := strategy.ScoreWithDebug(context.Background(), channel)
+	assert.Equal(t, 0.0, score)
+	assert.Equal(t, "bypassed", debug.Details["quota_status"])
+	assert.Equal(t, "channel_allowed", debug.Details["score_reason"])
+}
+
 func TestQuotaAwareStrategy_Score_Warning_DePrioritize(t *testing.T) {
 	provider := &mockQuotaStatusProvider{
 		statuses: map[int]*biz.QuotaChannelStatus{

@@ -124,6 +124,24 @@ func TestProviderQuotaSelector_AllExhausted(t *testing.T) {
 	require.Empty(t, got)
 }
 
+func TestAreAllChannelsExhausted_AllowedChannelKeepsProviderQuotaAvailable(t *testing.T) {
+	provider := &mockQuotaStatusProvider{
+		statuses: map[int]*biz.QuotaChannelStatus{
+			1: {Status: providerquotastatus.StatusExhausted, Ready: false},
+		},
+	}
+	candidates := []*ChannelModelsCandidate{
+		{Channel: &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "allowed"}}},
+	}
+	settings := &biz.QuotaEnforcementSettings{
+		Enabled:           true,
+		Mode:              biz.QuotaEnforcementModeDePrioritize,
+		AllowedChannelIDs: []int{1},
+	}
+
+	require.False(t, areAllChannelsExhausted(context.Background(), candidates, provider, &llm.Request{}, settings))
+}
+
 func TestProviderQuotaSelector_NoQuotaData(t *testing.T) {
 	provider := &mockQuotaStatusProvider{
 		statuses: map[int]*biz.QuotaChannelStatus{},
@@ -346,4 +364,129 @@ func TestProviderQuotaSelector_ChannelExhaustedOverridesPerLimitAvailable(t *tes
 	result, err := selector.Select(context.Background(), tokenReq)
 	require.NoError(t, err)
 	require.Empty(t, result, "channel with Exhausted channel-level status must be filtered even if per-limit token status is available")
+}
+
+func TestProviderQuotaSelector_AllowedChannelIDs_ExemptFromFiltering(t *testing.T) {
+	provider := &mockQuotaStatusProvider{
+		statuses: map[int]*biz.QuotaChannelStatus{
+			1: {Status: providerquotastatus.StatusExhausted, Ready: false},
+			2: {Status: providerquotastatus.StatusExhausted, Ready: false},
+			3: {Status: providerquotastatus.StatusAvailable, Ready: true},
+		},
+	}
+	settings := &mockQuotaEnforcementSettingsProvider{
+		settings: &biz.QuotaEnforcementSettings{
+			Enabled:           true,
+			Mode:              biz.QuotaEnforcementModeExhaustedOnly,
+			AllowedChannelIDs: []int{1},
+		},
+	}
+
+	inner := &mockSelector{
+		candidates: []*ChannelModelsCandidate{
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "exempt-exhausted"}}},
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 2, Name: "filtered-exhausted"}}},
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 3, Name: "available"}}},
+		},
+	}
+
+	selector := WithProviderQuotaSelector(inner, provider, settings)
+	got, err := selector.Select(context.Background(), &llm.Request{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 2, "exempt channel should be kept, non-exempt exhausted filtered, available kept")
+	require.Equal(t, 1, got[0].Channel.ID, "exempt channel must be preserved")
+	require.Equal(t, 3, got[1].Channel.ID, "available channel must be preserved")
+}
+
+func TestProviderQuotaSelector_AllowedChannelIDs_EmptyList(t *testing.T) {
+	provider := &mockQuotaStatusProvider{
+		statuses: map[int]*biz.QuotaChannelStatus{
+			1: {Status: providerquotastatus.StatusExhausted, Ready: false},
+		},
+	}
+	settings := &mockQuotaEnforcementSettingsProvider{
+		settings: &biz.QuotaEnforcementSettings{
+			Enabled:           true,
+			Mode:              biz.QuotaEnforcementModeExhaustedOnly,
+			AllowedChannelIDs: []int{},
+		},
+	}
+
+	inner := &mockSelector{
+		candidates: []*ChannelModelsCandidate{
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "exhausted"}}},
+		},
+	}
+
+	selector := WithProviderQuotaSelector(inner, provider, settings)
+	got, err := selector.Select(context.Background(), &llm.Request{})
+
+	require.NoError(t, err)
+	require.Empty(t, got, "empty allowed list should not exempt any channel")
+}
+
+func TestProviderQuotaSelector_AllowedChannelIDs_NilList(t *testing.T) {
+	provider := &mockQuotaStatusProvider{
+		statuses: map[int]*biz.QuotaChannelStatus{
+			1: {Status: providerquotastatus.StatusExhausted, Ready: false},
+		},
+	}
+	settings := &mockQuotaEnforcementSettingsProvider{
+		settings: &biz.QuotaEnforcementSettings{
+			Enabled: true,
+			Mode:    biz.QuotaEnforcementModeExhaustedOnly,
+		},
+	}
+
+	inner := &mockSelector{
+		candidates: []*ChannelModelsCandidate{
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "exhausted"}}},
+		},
+	}
+
+	selector := WithProviderQuotaSelector(inner, provider, settings)
+	got, err := selector.Select(context.Background(), &llm.Request{})
+
+	require.NoError(t, err)
+	require.Empty(t, got, "nil allowed list should not exempt any channel")
+}
+
+func TestProviderQuotaSelector_AllowedChannelIDs_MultipleExempt(t *testing.T) {
+	provider := &mockQuotaStatusProvider{
+		statuses: map[int]*biz.QuotaChannelStatus{
+			1: {Status: providerquotastatus.StatusExhausted, Ready: false},
+			2: {Status: providerquotastatus.StatusExhausted, Ready: false},
+			3: {Status: providerquotastatus.StatusExhausted, Ready: false},
+			4: {Status: providerquotastatus.StatusAvailable, Ready: true},
+		},
+	}
+	settings := &mockQuotaEnforcementSettingsProvider{
+		settings: &biz.QuotaEnforcementSettings{
+			Enabled:           true,
+			Mode:              biz.QuotaEnforcementModeExhaustedOnly,
+			AllowedChannelIDs: []int{1, 3},
+		},
+	}
+
+	inner := &mockSelector{
+		candidates: []*ChannelModelsCandidate{
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "exempt-1"}}},
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 2, Name: "filtered"}}},
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 3, Name: "exempt-2"}}},
+			{Channel: &biz.Channel{Channel: &ent.Channel{ID: 4, Name: "available"}}},
+		},
+	}
+
+	selector := WithProviderQuotaSelector(inner, provider, settings)
+	got, err := selector.Select(context.Background(), &llm.Request{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 3, "two exempt + one available should remain")
+
+	ids := make([]int, len(got))
+	for i, c := range got {
+		ids[i] = c.Channel.ID
+	}
+	require.ElementsMatch(t, []int{1, 3, 4}, ids)
 }

@@ -34,6 +34,8 @@ const queryClient = new QueryClient({
         const status = getErrorStatus(error);
 
         if ([401, 403, 422].includes(status)) return false;
+        // A single short retry gives transient backend failures a chance to
+        // recover without repeatedly hammering a failing service.
         if (status === 500) return failureCount < 1;
         return failureCount < 3;
       },
