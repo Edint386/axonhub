@@ -1016,6 +1016,34 @@ const CHANNEL_QUOTA_USAGE_QUERY = `
   }
 `;
 
+export function useChannelQuotaUsage(
+  channelID: string,
+  options?: {
+    enabled?: boolean;
+    refetchInterval?: number;
+  }
+) {
+  const { handleError } = useErrorHandler();
+  const { t } = useTranslation();
+
+  return useQuery({
+    queryKey: ['channelQuotaUsage', channelID],
+    queryFn: async () => {
+      try {
+        const data = await graphqlRequest<{ channelQuotaUsage: ChannelQuotaUsage | null }>(CHANNEL_QUOTA_USAGE_QUERY, {
+          channelID,
+        });
+        return channelQuotaUsageSchema.nullable().parse(data.channelQuotaUsage);
+      } catch (error) {
+        handleError(error, t('common.errors.internalServerError'));
+        throw error;
+      }
+    },
+    enabled: !!channelID && (options?.enabled ?? true),
+    refetchInterval: options?.refetchInterval,
+  });
+}
+
 export function useChannelModelPrices(channelId: string) {
   const { handleError } = useErrorHandler();
   const { t } = useTranslation();
