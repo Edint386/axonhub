@@ -9,12 +9,15 @@ const (
 	maxActiveHealthProbeAcceptableLatencyMs = 10 * 60 * 1000
 	minActiveHealthProbeExtraChannels       = 0
 	maxActiveHealthProbeExtraChannels       = 20
+	minActiveHealthProbeP95LookbackHours    = 1
+	maxActiveHealthProbeP95LookbackHours    = 30 * 24
 )
 
 var defaultActiveHealthProbeScanSetting = ActiveHealthProbeScanSetting{
 	Enabled:             false,
 	AcceptableLatencyMs: 60 * 1000,
 	ExtraChannels:       1,
+	P95LookbackHours:    24,
 }
 
 func defaultCleanupOptions() []CleanupOption {

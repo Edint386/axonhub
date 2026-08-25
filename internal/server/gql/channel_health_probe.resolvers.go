@@ -7,9 +7,7 @@ package gql
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 )
 
@@ -75,17 +73,12 @@ func (r *queryResolver) ChannelHealthProbeHistory(ctx context.Context, input biz
 
 // Models is the resolver for the models field.
 func (r *updateChannelHealthProbePolicyInputResolver) Models(ctx context.Context, obj *biz.UpdateChannelHealthProbePolicyInput, data []*ActiveHealthProbeModelSettingInput) error {
-	panic(fmt.Errorf("not implemented: Models - models"))
-}
-
-// Models is the resolver for the models field.
-func (r *updateChannelHealthProbeSettingsInputResolver) Models(ctx context.Context, obj *biz.UpdateChannelHealthProbeSettingsInput, data []*ActiveChannelHealthProbeModelInput) error {
-	obj.Models = make([]objects.ChannelHealthProbeModel, 0, len(data))
+	obj.Models = make([]biz.ActiveHealthProbeModelSetting, 0, len(data))
 	for _, item := range data {
 		if item == nil {
 			continue
 		}
-		obj.Models = append(obj.Models, objects.ChannelHealthProbeModel{
+		obj.Models = append(obj.Models, biz.ActiveHealthProbeModelSetting{
 			ModelID: item.ModelID,
 			Enabled: item.Enabled,
 			Stream:  item.Stream,
@@ -109,12 +102,6 @@ func (r *Resolver) UpdateChannelHealthProbePolicyInput() UpdateChannelHealthProb
 	return &updateChannelHealthProbePolicyInputResolver{r}
 }
 
-// UpdateChannelHealthProbeSettingsInput returns UpdateChannelHealthProbeSettingsInputResolver implementation.
-func (r *Resolver) UpdateChannelHealthProbeSettingsInput() UpdateChannelHealthProbeSettingsInputResolver {
-	return &updateChannelHealthProbeSettingsInputResolver{r}
-}
-
 type channelHealthProbeHistoryPageResolver struct{ *Resolver }
 type channelHealthProbeModelOverviewResolver struct{ *Resolver }
 type updateChannelHealthProbePolicyInputResolver struct{ *Resolver }
-type updateChannelHealthProbeSettingsInputResolver struct{ *Resolver }

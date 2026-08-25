@@ -33,6 +33,11 @@ type ChannelHealthProbeChannel {
   priority: Int!
   enabled: Boolean!
   intervalMinutes: Int!
+  primaryModelID: String
+  """Multiplier applied to this channel's base model prices. Defaults to 1 when unset."""
+  modelPriceMultiplier: Float!
+  """Recent probe runs for this channel's primary model, oldest first, for the recent-probe strip."""
+  recentRuns: [ActiveChannelHealthProbeRun!]!
   models: [ChannelHealthProbeModelOverview!]!
 }
 
@@ -40,7 +45,9 @@ type ChannelHealthProbePolicy {
   enabled: Boolean!
   acceptableLatencyMs: Int!
   extraChannels: Int!
+  p95LookbackHours: Int!
   apiKeyMaxFirstTokenLatencyMs: Float
+  availableModels: [String!]!
   models: [ActiveHealthProbeModelSetting!]!
 }
 
@@ -55,23 +62,16 @@ type ChannelHealthProbeHistoryPage {
   totalCount: Int!
 }
 
-input ActiveChannelHealthProbeModelInput {
-  modelID: String!
-  enabled: Boolean!
-  stream: Boolean!
-}
-
 input UpdateChannelHealthProbeSettingsInput {
   channelID: ID!
-  enabled: Boolean!
   intervalMinutes: Int!
-  models: [ActiveChannelHealthProbeModelInput!]!
 }
 
 input UpdateChannelHealthProbePolicyInput {
   enabled: Boolean!
   acceptableLatencyMs: Int!
   extraChannels: Int!
+  p95LookbackHours: Int!
   models: [ActiveHealthProbeModelSettingInput!]
 }
 

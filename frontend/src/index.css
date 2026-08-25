@@ -53,6 +53,17 @@
   --table-background: var(--card);
   --table-border: oklch(0.985 0.003 90);
   --table-header: var(--muted);
+
+  /* Channel health probe grades: health / fluent / degraded / abnormal / error */
+  --grade-health: oklch(0.55 0.13 150);
+  --grade-health-bg: oklch(0.55 0.13 150 / 0.13);
+  --grade-fluent: oklch(0.55 0.1 210);
+  --grade-fluent-bg: oklch(0.55 0.1 210 / 0.13);
+  --grade-degraded: oklch(0.68 0.14 75);
+  --grade-degraded-bg: oklch(0.68 0.14 75 / 0.15);
+  --grade-abnormal: oklch(0.62 0.17 45);
+  --grade-abnormal-bg: oklch(0.62 0.17 45 / 0.14);
+  --grade-error: var(--destructive);
 }
 
 .dark {
@@ -85,6 +96,17 @@
   --table-background: var(--card);
   --table-border: oklch(1 0 0 / 8%);
   --table-header: var(--muted);
+
+  /* Channel health probe grades: health / fluent / degraded / abnormal / error */
+  --grade-health: oklch(0.72 0.14 160);
+  --grade-health-bg: oklch(0.72 0.14 160 / 0.15);
+  --grade-fluent: oklch(0.72 0.12 200);
+  --grade-fluent-bg: oklch(0.72 0.12 200 / 0.15);
+  --grade-degraded: oklch(0.8 0.14 80);
+  --grade-degraded-bg: oklch(0.8 0.14 80 / 0.16);
+  --grade-abnormal: oklch(0.75 0.15 45);
+  --grade-abnormal-bg: oklch(0.75 0.15 45 / 0.16);
+  --grade-error: var(--destructive);
 }
 
 /* ===== COLOR SCHEMES ===== */

@@ -226,24 +226,16 @@ type ChannelSettings struct {
 	HealthProbe *ChannelHealthProbeSettings `json:"healthProbe,omitempty"`
 }
 
-// ChannelHealthProbeSettings controls scheduled generation probes for one channel.
-// An empty/nil setting means active probing is disabled.
+// ChannelHealthProbeSettings controls the cadence of scheduled generation probes
+// for one channel. The global active-probe policy owns the model list and master
+// switch; channel settings only provide the per-channel interval.
 type ChannelHealthProbeSettings struct {
-	Enabled         bool                      `json:"enabled"`
-	IntervalMinutes int                       `json:"intervalMinutes"`
-	Models          []ChannelHealthProbeModel `json:"models,omitempty"`
-}
-
-// ChannelHealthProbeModel selects one model and request mode for active probing.
-type ChannelHealthProbeModel struct {
-	ModelID string `json:"modelID"`
-	Enabled bool   `json:"enabled"`
-	Stream  bool   `json:"stream"`
+	IntervalMinutes int `json:"intervalMinutes"`
 }
 
 const DefaultChannelHealthProbeIntervalMinutes = 5
 
-// Normalize fills defaults and removes whitespace from an active probe policy.
+// Normalize fills the default cadence for a channel probe setting.
 func (s *ChannelHealthProbeSettings) Normalize() {
 	if s == nil {
 		return
@@ -253,9 +245,6 @@ func (s *ChannelHealthProbeSettings) Normalize() {
 		s.IntervalMinutes = DefaultChannelHealthProbeIntervalMinutes
 	}
 
-	for i := range s.Models {
-		s.Models[i].ModelID = strings.TrimSpace(s.Models[i].ModelID)
-	}
 }
 
 type RetryableErrorPattern struct {

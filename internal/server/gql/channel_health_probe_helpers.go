@@ -27,13 +27,20 @@ func activeChannelHealthProbeChannel(item *biz.ChannelHealthProbeChannelOverview
 	if item == nil {
 		return nil
 	}
+	recentRuns := make([]*ActiveChannelHealthProbeRun, 0, len(item.RecentRuns))
+	for _, run := range item.RecentRuns {
+		recentRuns = append(recentRuns, activeChannelHealthProbeRun(run))
+	}
 	return &ChannelHealthProbeChannel{
-		ChannelID:       item.ChannelID,
-		ChannelName:     item.ChannelName,
-		ChannelStatus:   item.ChannelStatus,
-		Priority:        item.Priority,
-		Enabled:         item.Enabled,
-		IntervalMinutes: item.IntervalMinutes,
-		Models:          item.Models,
+		ChannelID:            item.ChannelID,
+		ChannelName:          item.ChannelName,
+		ChannelStatus:        item.ChannelStatus,
+		Priority:             item.Priority,
+		Enabled:              item.Enabled,
+		IntervalMinutes:      item.IntervalMinutes,
+		PrimaryModelID:       item.PrimaryModelID,
+		ModelPriceMultiplier: item.ModelPriceMultiplier,
+		RecentRuns:           recentRuns,
+		Models:               item.Models,
 	}
 }

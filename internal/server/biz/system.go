@@ -579,14 +579,14 @@ type ActiveHealthProbeModelSetting struct {
 	Stream  bool   `json:"stream"`
 }
 
-// ActiveHealthProbeScanSetting controls the global model switches and the
-// priority-aware window for scheduled synthetic probes. Per-channel intervals
-// remain the cadence source; legacy per-channel model switches are used only
-// when Models is absent.
+// ActiveHealthProbeScanSetting controls the global model switches, the P95
+// lookback window, and the priority-aware window for scheduled synthetic
+// probes. Per-channel settings only provide the cadence interval.
 type ActiveHealthProbeScanSetting struct {
 	Enabled             bool                            `json:"enabled"`
 	AcceptableLatencyMs int                             `json:"acceptable_latency_ms"`
 	ExtraChannels       int                             `json:"extra_channels"`
+	P95LookbackHours    int                             `json:"p95_lookback_hours"`
 	Models              []ActiveHealthProbeModelSetting `json:"models,omitempty"`
 }
 
@@ -1381,8 +1381,13 @@ func normalizeSystemChannelSettings(setting *SystemChannelSettings) {
 	if setting.ActiveHealthProbeScan == nil {
 		policy := defaultActiveHealthProbeScanSetting
 		setting.ActiveHealthProbeScan = &policy
-	} else if setting.ActiveHealthProbeScan.AcceptableLatencyMs == 0 {
-		setting.ActiveHealthProbeScan.AcceptableLatencyMs = defaultActiveHealthProbeScanSetting.AcceptableLatencyMs
+	} else {
+		if setting.ActiveHealthProbeScan.AcceptableLatencyMs == 0 {
+			setting.ActiveHealthProbeScan.AcceptableLatencyMs = defaultActiveHealthProbeScanSetting.AcceptableLatencyMs
+		}
+		if setting.ActiveHealthProbeScan.P95LookbackHours == 0 {
+			setting.ActiveHealthProbeScan.P95LookbackHours = defaultActiveHealthProbeScanSetting.P95LookbackHours
+		}
 	}
 	if setting.ActiveHealthProbeScan != nil {
 		for index := range setting.ActiveHealthProbeScan.Models {
@@ -1415,6 +1420,14 @@ func validateSystemChannelSettings(setting *SystemChannelSettings) error {
 			"active health probe extra channels must be between %d and %d",
 			minActiveHealthProbeExtraChannels,
 			maxActiveHealthProbeExtraChannels,
+		)
+	}
+	if setting.ActiveHealthProbeScan.P95LookbackHours < minActiveHealthProbeP95LookbackHours ||
+		setting.ActiveHealthProbeScan.P95LookbackHours > maxActiveHealthProbeP95LookbackHours {
+		return fmt.Errorf(
+			"active health probe P95 lookback must be between %d and %d hours",
+			minActiveHealthProbeP95LookbackHours,
+			maxActiveHealthProbeP95LookbackHours,
 		)
 	}
 	seenModels := make(map[string]struct{}, len(setting.ActiveHealthProbeScan.Models))

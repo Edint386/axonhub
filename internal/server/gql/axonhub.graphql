@@ -162,28 +162,12 @@ input ChannelProviderQuotaSettingsInput {
   opencodeGo: OpenCodeGoQuotaSettingsInput
 }
 
-type ChannelHealthProbeModel {
-  modelID: String!
-  enabled: Boolean!
-  stream: Boolean!
-}
-
-input ChannelHealthProbeModelInput {
-  modelID: String!
-  enabled: Boolean!
-  stream: Boolean!
-}
-
 type ChannelHealthProbeSettings {
-  enabled: Boolean!
   intervalMinutes: Int!
-  models: [ChannelHealthProbeModel!]!
 }
 
 input ChannelHealthProbeSettingsInput {
-  enabled: Boolean!
   intervalMinutes: Int!
-  models: [ChannelHealthProbeModelInput!]!
 }
 
 type ChannelSettings {

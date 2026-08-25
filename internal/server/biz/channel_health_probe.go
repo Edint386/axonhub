@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	entsql "entgo.io/ent/dialect/sql"
@@ -28,9 +30,16 @@ const (
 	DefaultChannelHealthProbeHistoryLimit = 50
 	MaxChannelHealthProbeHistoryLimit     = 200
 	channelHealthProbeSettingsMaxRetries  = 3
-	channelHealthProbeMetricsLookback     = 30 * 24 * time.Hour
 	channelHealthProbeMetricsSampleLimit  = 10_000
+	channelHealthProbeRecentRunsLimit     = 15
+	channelHealthProbeMetricsCacheTTL     = 30 * time.Second
 )
+
+func channelHealthProbeDescColumn(column string) entsql.Querier {
+	return entsql.ExprFunc(func(builder *entsql.Builder) {
+		builder.Ident(column).WriteString(" DESC")
+	})
+}
 
 type ChannelHealthProbeServiceParams struct {
 	fx.In
@@ -47,6 +56,8 @@ type ChannelHealthProbeService struct {
 
 	channelService *ChannelService
 	systemService  *SystemService
+	metricsCacheMu sync.RWMutex
+	metricsCache   *channelHealthProbeMetricsCache
 }
 
 func NewChannelHealthProbeService(params ChannelHealthProbeServiceParams) *ChannelHealthProbeService {
@@ -59,9 +70,7 @@ func NewChannelHealthProbeService(params ChannelHealthProbeServiceParams) *Chann
 
 type UpdateChannelHealthProbeSettingsInput struct {
 	ChannelID       objects.GUID
-	Enabled         bool
 	IntervalMinutes int
-	Models          []objects.ChannelHealthProbeModel
 }
 
 type RunChannelHealthProbeInput struct {
@@ -74,6 +83,7 @@ type UpdateChannelHealthProbePolicyInput struct {
 	Enabled             bool
 	AcceptableLatencyMs int
 	ExtraChannels       int
+	P95LookbackHours    int
 	Models              []ActiveHealthProbeModelSetting
 }
 
@@ -81,7 +91,9 @@ type ChannelHealthProbePolicy struct {
 	Enabled                      bool
 	AcceptableLatencyMs          int
 	ExtraChannels                int
+	P95LookbackHours             int
 	APIKeyMaxFirstTokenLatencyMs *float64
+	AvailableModels              []string
 	Models                       []ActiveHealthProbeModelSetting
 }
 
@@ -122,13 +134,16 @@ type ChannelHealthProbeModelOverview struct {
 }
 
 type ChannelHealthProbeChannelOverview struct {
-	ChannelID       objects.GUID
-	ChannelName     string
-	ChannelStatus   string
-	Priority        int
-	Enabled         bool
-	IntervalMinutes int
-	Models          []*ChannelHealthProbeModelOverview
+	ChannelID            objects.GUID
+	ChannelName          string
+	ChannelStatus        string
+	Priority             int
+	Enabled              bool
+	IntervalMinutes      int
+	ModelPriceMultiplier float64
+	PrimaryModelID       *string
+	RecentRuns           []*ChannelHealthProbeRunRecord
+	Models               []*ChannelHealthProbeModelOverview
 }
 
 type ChannelHealthProbeHistoryPage struct {
@@ -144,6 +159,12 @@ type ChannelHealthProbeTarget struct {
 	OrderingWeight  int
 	IntervalMinutes int
 	ScheduleKey     string
+}
+
+type channelHealthProbeMetricsCache struct {
+	key       string
+	expiresAt time.Time
+	metrics   map[string]channelHealthProbeModelMetrics
 }
 
 func (svc *ChannelHealthProbeService) ScanPolicy(ctx context.Context) (ActiveHealthProbeScanSetting, error) {
@@ -173,6 +194,10 @@ func (svc *ChannelHealthProbeService) Policy(ctx context.Context) (*ChannelHealt
 	if err != nil {
 		return nil, err
 	}
+	availableModels, err := svc.availableRealModelIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
 	models := slices.Clone(policy.Models)
 	if models == nil {
 		models = []ActiveHealthProbeModelSetting{}
@@ -181,6 +206,8 @@ func (svc *ChannelHealthProbeService) Policy(ctx context.Context) (*ChannelHealt
 		Enabled:             policy.Enabled,
 		AcceptableLatencyMs: policy.AcceptableLatencyMs,
 		ExtraChannels:       policy.ExtraChannels,
+		P95LookbackHours:    policy.P95LookbackHours,
+		AvailableModels:     availableModels,
 		Models:              models,
 	}
 
@@ -207,6 +234,35 @@ func (svc *ChannelHealthProbeService) Policy(ctx context.Context) (*ChannelHealt
 	return overview, nil
 }
 
+func (svc *ChannelHealthProbeService) availableRealModelIDs(ctx context.Context) ([]string, error) {
+	channels, err := svc.entFromContext(ctx).Channel.Query().
+		Where(channel.StatusNEQ(channel.StatusArchived)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query real channel model IDs: %w", err)
+	}
+
+	seen := make(map[string]struct{})
+	for _, ch := range channels {
+		for _, modelID := range ch.SupportedModels {
+			modelID = strings.TrimSpace(modelID)
+			if modelID != "" {
+				seen[modelID] = struct{}{}
+			}
+		}
+		if modelID := strings.TrimSpace(ch.DefaultTestModel); modelID != "" {
+			seen[modelID] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(seen))
+	for modelID := range seen {
+		result = append(result, modelID)
+	}
+	slices.Sort(result)
+	return result, nil
+}
+
 func (svc *ChannelHealthProbeService) UpdatePolicy(
 	ctx context.Context,
 	input UpdateChannelHealthProbePolicyInput,
@@ -230,6 +286,7 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 		Enabled:             input.Enabled,
 		AcceptableLatencyMs: input.AcceptableLatencyMs,
 		ExtraChannels:       input.ExtraChannels,
+		P95LookbackHours:    input.P95LookbackHours,
 		Models:              slices.Clone(models),
 	}
 	err = authz.RunWithSystemBypassVoid(ctx, "update-active-channel-health-probe-policy", func(bypassCtx context.Context) error {
@@ -244,7 +301,6 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 
 func normalizeAndValidateChannelHealthProbeSettings(
 	settings *objects.ChannelHealthProbeSettings,
-	isModelSupported func(string) bool,
 ) error {
 	if settings == nil {
 		return fmt.Errorf("health probe settings must not be nil")
@@ -260,31 +316,6 @@ func normalizeAndValidateChannelHealthProbeSettings(
 		)
 	}
 
-	models := make([]objects.ChannelHealthProbeModel, 0, len(settings.Models))
-	seen := make(map[string]struct{}, len(settings.Models))
-	hasEnabledModel := false
-	for _, model := range settings.Models {
-		model.ModelID = strings.TrimSpace(model.ModelID)
-		if model.ModelID == "" {
-			return fmt.Errorf("health probe model ID must not be empty")
-		}
-		if _, ok := seen[model.ModelID]; ok {
-			return fmt.Errorf("health probe model %q is configured more than once", model.ModelID)
-		}
-		if isModelSupported != nil && !isModelSupported(model.ModelID) {
-			return fmt.Errorf("model %q is not supported by this channel", model.ModelID)
-		}
-
-		seen[model.ModelID] = struct{}{}
-		hasEnabledModel = hasEnabledModel || model.Enabled
-		models = append(models, model)
-	}
-	settings.Models = models
-
-	if settings.Enabled && !hasEnabledModel {
-		return fmt.Errorf("enable at least one model before enabling health probes")
-	}
-
 	return nil
 }
 
@@ -295,17 +326,18 @@ func (svc *ChannelHealthProbeService) UpdateSettings(
 	ctx context.Context,
 	input UpdateChannelHealthProbeSettingsInput,
 ) (*ChannelHealthProbeChannelOverview, error) {
+	if err := authz.RequireScope(ctx, scopes.ScopeWriteChannels); err != nil {
+		return nil, err
+	}
 	probeSettings := &objects.ChannelHealthProbeSettings{
-		Enabled:         input.Enabled,
 		IntervalMinutes: input.IntervalMinutes,
-		Models:          slices.Clone(input.Models),
 	}
 
-	runtimeChannel, err := svc.channelService.GetChannel(ctx, input.ChannelID.ID)
+	_, err := svc.channelService.GetChannel(ctx, input.ChannelID.ID)
 	if err != nil {
 		return nil, err
 	}
-	if err := normalizeAndValidateChannelHealthProbeSettings(probeSettings, runtimeChannel.IsModelSupported); err != nil {
+	if err := normalizeAndValidateChannelHealthProbeSettings(probeSettings); err != nil {
 		return nil, err
 	}
 
@@ -342,6 +374,9 @@ func (svc *ChannelHealthProbeService) UpdateSettings(
 }
 
 func (svc *ChannelHealthProbeService) Overview(ctx context.Context) ([]*ChannelHealthProbeChannelOverview, error) {
+	if err := authz.RequireScope(ctx, scopes.ScopeReadChannels); err != nil {
+		return nil, err
+	}
 	policy, err := svc.ScanPolicy(ctx)
 	if err != nil {
 		return nil, err
@@ -369,15 +404,17 @@ func (svc *ChannelHealthProbeService) Overview(ctx context.Context) ([]*ChannelH
 	if err != nil {
 		return nil, err
 	}
-	metrics, err := svc.metricsByChannelAndModel(ctx, channelIDs)
+	metrics, err := svc.metricsByChannelAndModel(ctx, channelIDs, time.Duration(policy.P95LookbackHours)*time.Hour)
 	if err != nil {
 		return nil, err
 	}
-	globalModels := activeHealthProbeModelMap(policy.Models)
-
+	recentRuns, err := svc.recentRunsByChannel(ctx, channels, policy.Models)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]*ChannelHealthProbeChannelOverview, 0, len(channels))
 	for _, ch := range channels {
-		result = append(result, buildChannelHealthProbeOverview(ch, latestRuns, metrics, globalModels))
+		result = append(result, buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models))
 	}
 	return result, nil
 }
@@ -394,11 +431,63 @@ func (svc *ChannelHealthProbeService) overviewForChannel(
 	if err != nil {
 		return nil, err
 	}
-	metrics, err := svc.metricsByChannelAndModel(ctx, []int{ch.ID})
+	metrics, err := svc.metricsByChannelAndModel(ctx, []int{ch.ID}, time.Duration(policy.P95LookbackHours)*time.Hour)
 	if err != nil {
 		return nil, err
 	}
-	return buildChannelHealthProbeOverview(ch, latestRuns, metrics, activeHealthProbeModelMap(policy.Models)), nil
+	recentRuns, err := svc.recentRunsByChannel(ctx, []*ent.Channel{ch}, policy.Models)
+	if err != nil {
+		return nil, err
+	}
+	return buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models), nil
+}
+
+// recentRunsByChannel returns the latest channelHealthProbeRecentRunsLimit runs
+// for each channel/model pair, ordered oldest first so the primary model can
+// render a complete recent-probe strip.
+func (svc *ChannelHealthProbeService) recentRunsByChannel(
+	ctx context.Context,
+	channels []*ent.Channel,
+	globalModels []ActiveHealthProbeModelSetting,
+) (map[int][]*ChannelHealthProbeRunRecord, error) {
+	if len(channels) == 0 {
+		return map[int][]*ChannelHealthProbeRunRecord{}, nil
+	}
+
+	pairs := make([]predicate.ChannelHealthProbeRun, 0, len(channels))
+	for _, ch := range channels {
+		if modelID := primaryRealProbeModelID(ch, globalModels); modelID != nil {
+			pairs = append(pairs, channelhealthproberun.And(
+				channelhealthproberun.ChannelIDEQ(ch.ID),
+				channelhealthproberun.ModelIDEQ(*modelID),
+			))
+		}
+	}
+	if len(pairs) == 0 {
+		return map[int][]*ChannelHealthProbeRunRecord{}, nil
+	}
+	runs, err := svc.entFromContext(ctx).ChannelHealthProbeRun.Query().
+		Where(channelhealthproberun.Or(pairs...)).
+		Modify(limitChannelHealthProbeMetricsPerModel(channelHealthProbeRecentRunsLimit)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent channel health probe runs: %w", err)
+	}
+
+	grouped := make(map[int][]*ChannelHealthProbeRunRecord, len(channels))
+	for _, run := range runs {
+		grouped[run.ChannelID] = append(grouped[run.ChannelID], channelHealthProbeRunRecord(run))
+	}
+	for channelID, bucket := range grouped {
+		sort.SliceStable(bucket, func(left, right int) bool {
+			if bucket[left].StartedAt.Equal(bucket[right].StartedAt) {
+				return bucket[left].ID.ID < bucket[right].ID.ID
+			}
+			return bucket[left].StartedAt.Before(bucket[right].StartedAt)
+		})
+		grouped[channelID] = bucket
+	}
+	return grouped, nil
 }
 
 type latestChannelHealthProbeRunID struct {
@@ -481,22 +570,76 @@ type channelHealthProbeModelMetrics struct {
 	SampleCount int
 }
 
+func channelHealthProbeMetricsKey(channelIDs []int, lookback time.Duration) string {
+	sortedIDs := slices.Clone(channelIDs)
+	slices.Sort(sortedIDs)
+	return fmt.Sprintf("%s|%d", strings.Trim(strings.ReplaceAll(fmt.Sprint(sortedIDs), " ", ","), "[]"), lookback/time.Hour)
+}
+
+func (svc *ChannelHealthProbeService) invalidateMetricsCache() {
+	svc.metricsCacheMu.Lock()
+	svc.metricsCache = nil
+	svc.metricsCacheMu.Unlock()
+}
+
+// limitChannelHealthProbeMetricsPerModel keeps the metrics cap independent for
+// every channel/model pair. A single busy channel must not consume the sample
+// budget of all other channels.
+func limitChannelHealthProbeMetricsPerModel(limit int) func(*entsql.Selector) {
+	return func(selector *entsql.Selector) {
+		dialect := entsql.Dialect(selector.Dialect())
+		rowNumber := entsql.RowNumber().
+			PartitionBy(channelhealthproberun.FieldChannelID, channelhealthproberun.FieldModelID).
+			OrderExpr(
+				channelHealthProbeDescColumn(channelhealthproberun.FieldStartedAt),
+				channelHealthProbeDescColumn(channelhealthproberun.FieldID),
+			)
+		with := dialect.With("channel_health_probe_source").
+			As(selector.Clone()).
+			With("channel_health_probe_limited").
+			As(
+				dialect.Select("*").
+					AppendSelectExprAs(rowNumber, "channel_health_probe_row_number").
+					From(dialect.Table("channel_health_probe_source")),
+			)
+		limited := dialect.Table("channel_health_probe_limited").As(selector.TableName())
+		*selector = *dialect.Select(selector.UnqualifiedColumns()...).
+			From(limited).
+			Where(entsql.LTE(limited.C("channel_health_probe_row_number"), limit)).
+			Prefix(with)
+	}
+}
+
 func (svc *ChannelHealthProbeService) metricsByChannelAndModel(
 	ctx context.Context,
 	channelIDs []int,
+	lookback time.Duration,
 ) (map[string]channelHealthProbeModelMetrics, error) {
 	if len(channelIDs) == 0 {
 		return map[string]channelHealthProbeModelMetrics{}, nil
 	}
 
+	if lookback <= 0 {
+		lookback = 24 * time.Hour
+	}
+	cacheKey := channelHealthProbeMetricsKey(channelIDs, lookback)
+	now := time.Now().UTC()
+	svc.metricsCacheMu.RLock()
+	cache := svc.metricsCache
+	if cache != nil && cache.key == cacheKey && now.Before(cache.expiresAt) {
+		metrics := cache.metrics
+		svc.metricsCacheMu.RUnlock()
+		return metrics, nil
+	}
+	svc.metricsCacheMu.RUnlock()
+
 	runs, err := svc.entFromContext(ctx).ChannelHealthProbeRun.Query().
 		Where(
 			channelhealthproberun.ChannelIDIn(channelIDs...),
 			channelhealthproberun.StatusEQ(channelhealthproberun.StatusHealthy),
-			channelhealthproberun.StartedAtGTE(time.Now().UTC().Add(-channelHealthProbeMetricsLookback)),
+			channelhealthproberun.StartedAtGTE(time.Now().UTC().Add(-lookback)),
 		).
-		Order(ent.Desc(channelhealthproberun.FieldStartedAt), ent.Desc(channelhealthproberun.FieldID)).
-		Limit(channelHealthProbeMetricsSampleLimit).
+		Modify(limitChannelHealthProbeMetricsPerModel(channelHealthProbeMetricsSampleLimit)).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channel health probe metrics: %w", err)
@@ -528,6 +671,13 @@ func (svc *ChannelHealthProbeService) metricsByChannelAndModel(
 		p95 := accumulator.latencies[index]
 		metrics[key] = channelHealthProbeModelMetrics{P95Ms: &p95, SampleCount: len(accumulator.latencies)}
 	}
+	svc.metricsCacheMu.Lock()
+	svc.metricsCache = &channelHealthProbeMetricsCache{
+		key:       cacheKey,
+		expiresAt: now.Add(channelHealthProbeMetricsCacheTTL),
+		metrics:   metrics,
+	}
+	svc.metricsCacheMu.Unlock()
 	return metrics, nil
 }
 
@@ -616,56 +766,72 @@ func (svc *ChannelHealthProbeService) latestRealRequestActivityByChannelAndModel
 	return result, nil
 }
 
+func isRealProbeModelSupported(ch *ent.Channel, modelID string) bool {
+	if strings.TrimSpace(ch.DefaultTestModel) == modelID {
+		return true
+	}
+	for _, supportedModelID := range ch.SupportedModels {
+		if strings.TrimSpace(supportedModelID) == modelID {
+			return true
+		}
+	}
+	return false
+}
+
+func primaryRealProbeModelID(ch *ent.Channel, globalModels []ActiveHealthProbeModelSetting) *string {
+	for _, setting := range globalModels {
+		modelID := strings.TrimSpace(setting.ModelID)
+		if setting.Enabled && modelID != "" && isRealProbeModelSupported(ch, modelID) {
+			return &modelID
+		}
+	}
+	return nil
+}
+
 func buildChannelHealthProbeOverview(
 	ch *ent.Channel,
 	latestRuns map[string]*ChannelHealthProbeRunRecord,
 	metrics map[string]channelHealthProbeModelMetrics,
-	globalModels map[string]ActiveHealthProbeModelSetting,
+	recentRuns []*ChannelHealthProbeRunRecord,
+	globalModels []ActiveHealthProbeModelSetting,
 ) *ChannelHealthProbeChannelOverview {
-	configured := map[string]objects.ChannelHealthProbeModel{}
-	enabled := false
+	enabled := ch.Status == channel.StatusEnabled
 	interval := objects.DefaultChannelHealthProbeIntervalMinutes
 	if ch.Settings != nil && ch.Settings.HealthProbe != nil {
 		settings := *ch.Settings.HealthProbe
 		settings.Normalize()
-		enabled = settings.Enabled
 		interval = settings.IntervalMinutes
-		for _, model := range settings.Models {
-			configured[model.ModelID] = model
-		}
 	}
 
-	modelIDs := make([]string, 0, len(ch.SupportedModels)+len(configured)+1)
-	seen := make(map[string]struct{}, len(ch.SupportedModels)+len(configured)+1)
-	appendModel := func(modelID string) {
+	modelIDs := make([]string, 0, len(globalModels))
+	seenModels := make(map[string]struct{}, len(globalModels))
+	for _, setting := range globalModels {
+		modelID := strings.TrimSpace(setting.ModelID)
 		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
-			return
+			continue
 		}
-		if _, ok := seen[modelID]; ok {
-			return
+		if _, ok := seenModels[modelID]; ok {
+			continue
 		}
-		seen[modelID] = struct{}{}
+		if !isRealProbeModelSupported(ch, modelID) {
+			continue
+		}
+		seenModels[modelID] = struct{}{}
 		modelIDs = append(modelIDs, modelID)
-	}
-	appendModel(ch.DefaultTestModel)
-	for _, modelID := range ch.SupportedModels {
-		appendModel(modelID)
-	}
-	for modelID := range configured {
-		appendModel(modelID)
 	}
 
 	models := make([]*ChannelHealthProbeModelOverview, 0, len(modelIDs))
 	for _, modelID := range modelIDs {
-		setting := configured[modelID]
-		enabledModel := setting.Enabled
-		stream := setting.Stream
-		if globalSetting, ok := globalModels[modelID]; ok {
-			enabledModel = globalSetting.Enabled
-			stream = globalSetting.Stream
-			enabled = enabled || enabledModel
+		globalSetting := ActiveHealthProbeModelSetting{ModelID: modelID}
+		for _, setting := range globalModels {
+			if strings.TrimSpace(setting.ModelID) == modelID {
+				globalSetting = setting
+				break
+			}
 		}
+		enabledModel := globalSetting.Enabled
+		stream := globalSetting.Stream
 		latestRun := latestRuns[channelHealthProbeModelKey(ch.ID, modelID)]
 		metric := metrics[channelHealthProbeModelKey(ch.ID, modelID)]
 		var firstTokenMs *float64
@@ -692,14 +858,33 @@ func buildChannelHealthProbeOverview(
 		})
 	}
 
+	primaryModelID := primaryRealProbeModelID(ch, globalModels)
+	if primaryModelID != nil {
+		primaryRuns := make([]*ChannelHealthProbeRunRecord, 0, len(recentRuns))
+		for _, run := range recentRuns {
+			if run != nil && run.ModelID == *primaryModelID {
+				primaryRuns = append(primaryRuns, run)
+			}
+		}
+		recentRuns = primaryRuns
+	} else {
+		recentRuns = []*ChannelHealthProbeRunRecord{}
+	}
+
+	if recentRuns == nil {
+		recentRuns = []*ChannelHealthProbeRunRecord{}
+	}
 	return &ChannelHealthProbeChannelOverview{
-		ChannelID:       objects.GUID{Type: "Channel", ID: ch.ID},
-		ChannelName:     ch.Name,
-		ChannelStatus:   ch.Status.String(),
-		Priority:        ch.Priority,
-		Enabled:         enabled,
-		IntervalMinutes: interval,
-		Models:          models,
+		ChannelID:            objects.GUID{Type: "Channel", ID: ch.ID},
+		ChannelName:          ch.Name,
+		ChannelStatus:        ch.Status.String(),
+		Priority:             ch.Priority,
+		Enabled:              enabled,
+		IntervalMinutes:      interval,
+		ModelPriceMultiplier: ch.ModelPriceMultiplier,
+		PrimaryModelID:       primaryModelID,
+		RecentRuns:           recentRuns,
+		Models:               models,
 	}
 }
 
@@ -707,6 +892,9 @@ func (svc *ChannelHealthProbeService) History(
 	ctx context.Context,
 	input ChannelHealthProbeHistoryInput,
 ) (*ChannelHealthProbeHistoryPage, error) {
+	if err := authz.RequireScope(ctx, scopes.ScopeReadChannels); err != nil {
+		return nil, err
+	}
 	if input.Offset < 0 {
 		return nil, fmt.Errorf("history offset must not be negative")
 	}
@@ -777,6 +965,9 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 	policy ActiveHealthProbeScanSetting,
 ) ([]ChannelHealthProbeTarget, error) {
 	now = now.UTC()
+	if !policy.Enabled {
+		return []ChannelHealthProbeTarget{}, nil
+	}
 	channels, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusEQ(channel.StatusEnabled)).
 		Order(
@@ -793,14 +984,16 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 	candidates := make([]ChannelHealthProbeTarget, 0)
 	maxInterval := time.Duration(0)
 	globalModels := activeHealthProbeModelMap(policy.Models)
-	useGlobalModels := len(globalModels) > 0
+	if len(globalModels) == 0 {
+		return []ChannelHealthProbeTarget{}, nil
+	}
 	for _, ch := range channels {
 		settings := objects.ChannelHealthProbeSettings{IntervalMinutes: objects.DefaultChannelHealthProbeIntervalMinutes}
 		if ch.Settings != nil && ch.Settings.HealthProbe != nil {
 			settings = *ch.Settings.HealthProbe
 			settings.Normalize()
 		}
-		if (!useGlobalModels && !settings.Enabled) || settings.IntervalMinutes < MinChannelHealthProbeIntervalMinutes ||
+		if settings.IntervalMinutes < MinChannelHealthProbeIntervalMinutes ||
 			settings.IntervalMinutes > MaxChannelHealthProbeIntervalMinutes {
 			continue
 		}
@@ -808,36 +1001,19 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 		interval := time.Duration(settings.IntervalMinutes) * time.Minute
 		bucket := now.Truncate(interval)
 		channelIncluded := false
-		models := make([]ActiveHealthProbeModelSetting, 0, len(settings.Models))
-		if useGlobalModels {
-			for _, model := range globalModels {
-				if model.Enabled {
-					models = append(models, model)
-				}
-			}
-			slices.SortFunc(models, func(left, right ActiveHealthProbeModelSetting) int {
-				return strings.Compare(left.ModelID, right.ModelID)
-			})
-		} else {
-			for _, model := range settings.Models {
-				if model.Enabled && strings.TrimSpace(model.ModelID) != "" {
-					models = append(models, ActiveHealthProbeModelSetting{ModelID: strings.TrimSpace(model.ModelID), Stream: model.Stream, Enabled: true})
-				}
+		models := make([]ActiveHealthProbeModelSetting, 0, len(globalModels))
+		for _, model := range globalModels {
+			if model.Enabled {
+				models = append(models, model)
 			}
 		}
+		slices.SortFunc(models, func(left, right ActiveHealthProbeModelSetting) int {
+			return strings.Compare(left.ModelID, right.ModelID)
+		})
 		for _, model := range models {
 			modelID := strings.TrimSpace(model.ModelID)
-			if useGlobalModels {
-				supported := slices.Contains(ch.SupportedModels, modelID) || ch.DefaultTestModel == modelID
-				if svc.channelService != nil {
-					runtimeChannel := svc.channelService.GetEnabledChannel(ch.ID)
-					if runtimeChannel != nil {
-						supported = runtimeChannel.IsModelSupported(modelID)
-					}
-				}
-				if !supported {
-					continue
-				}
+			if !isRealProbeModelSupported(ch, modelID) {
+				continue
 			}
 			candidates = append(candidates, ChannelHealthProbeTarget{
 				ChannelID:       ch.ID,
@@ -946,6 +1122,9 @@ func (svc *ChannelHealthProbeService) CreateManualRun(
 	input RunChannelHealthProbeInput,
 	startedAt time.Time,
 ) (*ent.ChannelHealthProbeRun, error) {
+	if err := authz.RequireScope(ctx, scopes.ScopeWriteChannels); err != nil {
+		return nil, err
+	}
 	modelID := strings.TrimSpace(input.ModelID)
 	if modelID == "" {
 		return nil, fmt.Errorf("health probe model ID must not be empty")
@@ -954,7 +1133,7 @@ func (svc *ChannelHealthProbeService) CreateManualRun(
 	if err != nil {
 		return nil, err
 	}
-	if !ch.IsModelSupported(modelID) {
+	if !isRealProbeModelSupported(ch.Channel, modelID) {
 		return nil, fmt.Errorf("model %q is not supported by this channel", modelID)
 	}
 
@@ -1000,6 +1179,7 @@ func (svc *ChannelHealthProbeService) CompleteRun(
 	if err != nil {
 		return nil, fmt.Errorf("failed to complete channel health probe: %w", err)
 	}
+	svc.invalidateMetricsCache()
 	return channelHealthProbeRunRecord(run), nil
 }
 

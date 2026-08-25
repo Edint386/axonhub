@@ -33,6 +33,7 @@ func TestNormalizeSystemChannelSettingsBackfillsActiveProbePolicy(t *testing.T) 
 	require.False(t, setting.ActiveHealthProbeScan.Enabled)
 	require.Equal(t, 60_000, setting.ActiveHealthProbeScan.AcceptableLatencyMs)
 	require.Equal(t, 1, setting.ActiveHealthProbeScan.ExtraChannels)
+	require.Equal(t, 24, setting.ActiveHealthProbeScan.P95LookbackHours)
 	require.NoError(t, validateSystemChannelSettings(&setting))
 }
 
@@ -48,6 +49,9 @@ func TestValidateSystemChannelSettingsActiveProbePolicyLimits(t *testing.T) {
 	setting.ActiveHealthProbeScan.AcceptableLatencyMs = 1
 	setting.ActiveHealthProbeScan.ExtraChannels = maxActiveHealthProbeExtraChannels + 1
 	require.ErrorContains(t, validateSystemChannelSettings(&setting), "extra channels")
+	setting.ActiveHealthProbeScan.ExtraChannels = 0
+	setting.ActiveHealthProbeScan.P95LookbackHours = maxActiveHealthProbeP95LookbackHours + 1
+	require.ErrorContains(t, validateSystemChannelSettings(&setting), "P95 lookback")
 }
 
 func TestValidateSystemChannelSettingsGlobalProbeModels(t *testing.T) {

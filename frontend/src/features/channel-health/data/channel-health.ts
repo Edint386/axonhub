@@ -36,6 +36,9 @@ const channelHealthProbeChannelSchema = z.object({
   priority: z.number(),
   enabled: z.boolean(),
   intervalMinutes: z.number(),
+  primaryModelID: z.string().nullable().optional(),
+  modelPriceMultiplier: z.number(),
+  recentRuns: z.array(activeChannelHealthProbeRunSchema),
   models: z.array(channelHealthProbeModelOverviewSchema),
 });
 
@@ -43,7 +46,9 @@ const channelHealthProbePolicySchema = z.object({
   enabled: z.boolean(),
   acceptableLatencyMs: z.number(),
   extraChannels: z.number(),
+  p95LookbackHours: z.number(),
   apiKeyMaxFirstTokenLatencyMs: z.number().nullable().optional(),
+  availableModels: z.array(z.string()),
   models: z.array(z.object({ modelID: z.string(), enabled: z.boolean(), stream: z.boolean() })),
 });
 
@@ -64,17 +69,9 @@ export type ChannelHealthProbePolicy = z.infer<typeof channelHealthProbePolicySc
 export type ChannelHealthProbeOverview = z.infer<typeof channelHealthProbeOverviewSchema>;
 export type ChannelHealthProbeHistoryPage = z.infer<typeof channelHealthProbeHistoryPageSchema>;
 
-export interface ChannelHealthProbeModelInput {
-  modelID: string;
-  enabled: boolean;
-  stream: boolean;
-}
-
 export interface UpdateChannelHealthProbeSettingsInput {
   channelID: string;
-  enabled: boolean;
   intervalMinutes: number;
-  models: ChannelHealthProbeModelInput[];
 }
 
 export interface RunChannelHealthProbeInput {
@@ -87,6 +84,7 @@ export interface UpdateChannelHealthProbePolicyInput {
   enabled: boolean;
   acceptableLatencyMs: number;
   extraChannels: number;
+  p95LookbackHours: number;
   models: ActiveHealthProbeModelSetting[];
 }
 
@@ -130,6 +128,11 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
       priority
       enabled
       intervalMinutes
+      primaryModelID
+      modelPriceMultiplier
+      recentRuns {
+        ${CHANNEL_HEALTH_PROBE_RUN_FIELDS}
+      }
       models {
         modelID
         enabled
@@ -147,7 +150,9 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
       enabled
       acceptableLatencyMs
       extraChannels
+      p95LookbackHours
       apiKeyMaxFirstTokenLatencyMs
+      availableModels
       models {
         modelID
         enabled
@@ -177,6 +182,11 @@ const UPDATE_CHANNEL_HEALTH_PROBE_SETTINGS_MUTATION = `
       priority
       enabled
       intervalMinutes
+      primaryModelID
+      modelPriceMultiplier
+      recentRuns {
+        ${CHANNEL_HEALTH_PROBE_RUN_FIELDS}
+      }
       models {
         modelID
         enabled
@@ -199,7 +209,9 @@ const UPDATE_CHANNEL_HEALTH_PROBE_POLICY_MUTATION = `
       enabled
       acceptableLatencyMs
       extraChannels
+      p95LookbackHours
       apiKeyMaxFirstTokenLatencyMs
+      availableModels
       models {
         modelID
         enabled

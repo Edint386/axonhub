@@ -363,6 +363,7 @@ func TestSystemService_UpdateChannelSetting_PersistsActiveProbePolicy(t *testing
 		Enabled:             true,
 		AcceptableLatencyMs: 20_000,
 		ExtraChannels:       2,
+		P95LookbackHours:    24,
 		Models: []ActiveHealthProbeModelSetting{{
 			ModelID: "gpt-5.6-sol",
 			Enabled: true,
