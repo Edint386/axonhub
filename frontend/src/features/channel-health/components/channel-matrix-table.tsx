@@ -14,6 +14,7 @@ import {
   channelP95,
   formatMultiplier,
   gradeOfChannel,
+  gradeOfRun,
   primaryModelOf,
 } from '../probe-grade';
 import { useProbeActions } from '../use-probe-actions';
@@ -167,7 +168,7 @@ export function ChannelMatrixTable({
                   <TableCell>
                     <div className='space-y-1'>
                       <span className='block max-w-40 truncate font-mono text-[11px]'>{primaryModel?.modelID ?? '-'}</span>
-                      <ProbeStatusChip status={primaryModel?.latestRun?.status ?? grade} />
+                      <ProbeStatusChip status={primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun, thresholdMs) : grade} />
                     </div>
                   </TableCell>
                   <TableCell>
@@ -220,7 +221,11 @@ export function ChannelMatrixTable({
                                     </span>
                                   </TableCell>
                                   <TableCell className='w-[14%]'>
-                                    <ProbeStatusChip status={model.enabled ? (model.latestRun?.status ?? 'never') : 'disabled'} />
+                                    <ProbeStatusChip
+                                      status={
+                                        model.enabled ? (model.latestRun ? gradeOfRun(model.latestRun, thresholdMs) : 'never') : 'disabled'
+                                      }
+                                    />
                                   </TableCell>
                                   <TableCell className='w-[14%] font-mono text-xs tabular-nums'>
                                     {model.firstTokenMs != null ? formatDuration(model.firstTokenMs) : '-'}

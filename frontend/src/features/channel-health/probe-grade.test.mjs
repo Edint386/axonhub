@@ -10,6 +10,7 @@ const grade = read('probe-grade.ts');
 const page = read('index.tsx');
 const actions = read('use-probe-actions.ts');
 const settings = read('components/probe-settings-sheet.tsx');
+const matrix = read('components/channel-matrix-table.tsx');
 
 test('primary model metrics use the ordered enabled model', () => {
   assert.match(grade, /channel\.primaryModelID/);
@@ -42,4 +43,16 @@ test('settings uses the real-model catalog and preserves drag order', () => {
   assert.match(settings, /policy\.availableModels\.filter/);
   assert.match(settings, /arrayMove\(current, oldIndex, newIndex\)/);
   assert.doesNotMatch(settings, /\.sort\(\)/);
+});
+
+test('model rows grade the run instead of showing its raw status', () => {
+  assert.match(matrix, /gradeOfRun\(primaryModel\.latestRun, thresholdMs\)/);
+  assert.match(matrix, /gradeOfRun\(model\.latestRun, thresholdMs\)/);
+  assert.doesNotMatch(matrix, /latestRun\?\.status/);
+});
+
+test('latest first-token latency never falls back to an older run', () => {
+  assert.match(grade, /const latest = probes\[probes\.length - 1\]/);
+  assert.match(grade, /latest\?\.status === 'healthy' \? firstTokenMsOf\(latest\) : null/);
+  assert.doesNotMatch(grade, /for \(let i = runs\.length - 1/);
 });

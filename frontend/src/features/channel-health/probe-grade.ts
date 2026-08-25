@@ -111,18 +111,15 @@ export function channelP50(channel: ChannelHealthProbeChannel): number | null {
   return median(values);
 }
 
-/** First-token latency of the most recent successful probe. */
+/**
+ * First-token latency of the latest actual probe. Returns null when that probe
+ * has no first-token metric, so the UI renders "-" instead of passing an older
+ * run's latency off as the latest one.
+ */
 export function channelLatestFirst(channel: ChannelHealthProbeChannel): number | null {
-  const runs = primaryRunsOf(channel);
-  for (let i = runs.length - 1; i >= 0; i--) {
-    if (runs[i].status === 'healthy') {
-      const value = firstTokenMsOf(runs[i]);
-      if (value != null) {
-        return value;
-      }
-    }
-  }
-  return null;
+  const probes = primaryRunsOf(channel).filter((run) => run.status === 'healthy' || run.status === 'unhealthy');
+  const latest = probes[probes.length - 1];
+  return latest?.status === 'healthy' ? firstTokenMsOf(latest) : null;
 }
 
 /** P95 for the channel's primary model. */
