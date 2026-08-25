@@ -232,6 +232,7 @@ export function ProbeSettingsSheet({
                 </button>
               ))}
             </div>
+            <p className='text-muted-foreground text-xs'>{t('channelHealth.settings.latencyMetricNote')}</p>
           </div>
 
           <div className='space-y-2'>
