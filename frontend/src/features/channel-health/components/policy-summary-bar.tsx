@@ -1,9 +1,9 @@
 import { Activity, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { formatDuration } from '@/utils/format-duration';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ActiveHealthProbeModelSetting, ChannelHealthProbePolicy } from '../data/channel-health';
+import { formatThresholdSeconds } from '../format-threshold';
 
 export function PolicySummaryBar({
   policy,
@@ -28,7 +28,7 @@ export function PolicySummaryBar({
         </span>
       </span>
       <Badge variant='secondary'>{t('channelHealth.policyBar.modelCount', { count: enabledModels })}</Badge>
-      <Badge variant='secondary'>{t('channelHealth.policyBar.threshold', { latency: formatDuration(policy.acceptableLatencyMs) })}</Badge>
+      <Badge variant='secondary'>{t('channelHealth.policyBar.threshold', { latency: formatThresholdSeconds(policy.acceptableLatencyMs) })}</Badge>
       <Badge variant='secondary'>{t('channelHealth.policyBar.p95Window', { hours: policy.p95LookbackHours })}</Badge>
       <Badge variant='secondary'>{t('channelHealth.policyBar.extraChannels', { count: policy.extraChannels })}</Badge>
       <span className='flex-1' />

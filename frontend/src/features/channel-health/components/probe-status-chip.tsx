@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Clock3, Loader2, PowerOff, SkipForward, TrendingDown, XCircle, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleDashed, Clock3, Loader2, PowerOff, SkipForward, TrendingDown, XCircle, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +14,7 @@ const CHIP_STYLE: Record<string, string> = {
   pending: 'bg-primary/10 text-primary',
   skipped: 'bg-muted text-muted-foreground',
   never: 'text-muted-foreground border border-dashed border-border',
+  unconfigured: 'text-muted-foreground border border-dashed border-border',
   disabled: 'bg-muted text-muted-foreground',
 };
 
@@ -40,6 +41,8 @@ function StatusIcon({ status }: { status: string }) {
       return <SkipForward className={className} />;
     case 'disabled':
       return <PowerOff className={className} />;
+    case 'unconfigured':
+      return <CircleDashed className={className} />;
     default:
       return <Clock3 className={className} />;
   }

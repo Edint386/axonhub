@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { AlertTriangle, ExternalLink, Eye, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Eye, RefreshCw, Search, Settings2, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useDebounce } from '@/hooks/use-debounce';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,7 @@ function effectiveModelSettings(policy: ChannelHealthProbePolicy) {
   return policy.models.map((model) => ({ ...model }));
 }
 
-function useLastUpdated(dataUpdatedAt: number) {
+function LastUpdated({ dataUpdatedAt }: { dataUpdatedAt: number }) {
   const { t } = useTranslation();
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -37,38 +37,16 @@ function useLastUpdated(dataUpdatedAt: number) {
     return () => clearInterval(timer);
   }, []);
   if (!dataUpdatedAt) {
-    return '';
+    return null;
   }
   const seconds = Math.max(0, Math.floor((Date.now() - dataUpdatedAt) / 1000));
-  if (seconds < 10) {
-    return t('channelHealth.lastUpdated.now');
-  }
-  if (seconds < 60) {
-    return t('channelHealth.lastUpdated.seconds', { seconds });
-  }
-  return t('channelHealth.lastUpdated.minutes', { minutes: Math.floor(seconds / 60) });
-}
-
-function GradeLegend() {
-  const { t } = useTranslation();
-  const items: { key: ChannelGrade | 'skipped'; color: string }[] = [
-    { key: 'health', color: 'var(--grade-health)' },
-    { key: 'fluent', color: 'var(--grade-fluent)' },
-    { key: 'degraded', color: 'var(--grade-degraded)' },
-    { key: 'abnormal', color: 'var(--grade-abnormal)' },
-    { key: 'error', color: 'var(--grade-error)' },
-    { key: 'skipped', color: 'var(--muted)' },
-  ];
-  return (
-    <div className='text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs'>
-      {items.map((item) => (
-        <span key={item.key} className='inline-flex items-center gap-1.5'>
-          <span className='size-2 rounded-[3px]' style={{ background: item.color }} />
-          {t(`channelHealth.status.${item.key}`)}
-        </span>
-      ))}
-    </div>
-  );
+  const text =
+    seconds < 10
+      ? t('channelHealth.lastUpdated.now')
+      : seconds < 60
+        ? t('channelHealth.lastUpdated.seconds', { seconds })
+        : t('channelHealth.lastUpdated.minutes', { minutes: Math.floor(seconds / 60) });
+  return <span className='text-muted-foreground text-xs'>{text}</span>;
 }
 
 export default function ChannelHealthPage() {
@@ -93,9 +71,8 @@ export default function ChannelHealthPage() {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<KpiFilter>('all');
   const [modelFilter, setModelFilter] = useState('all');
-  const [probeEnabledFilter, setProbeEnabledFilter] = useState<'enabled' | 'all' | 'disabled'>('enabled');
+  const [channelStatusFilter, setChannelStatusFilter] = useState<'enabled' | 'all' | 'disabled'>('enabled');
   const debouncedQuery = useDebounce(query, 300);
-  const lastUpdatedText = useLastUpdated(overview.dataUpdatedAt);
 
   const detailChannel = useMemo(
     () => channels.find((channel) => channel.channelID === detailChannelID) ?? null,
@@ -119,10 +96,10 @@ export default function ChannelHealthPage() {
     const keyword = debouncedQuery.trim().toLowerCase();
     return channels.filter((channel) => {
       const grade = gradeOfChannel(channel, thresholdMs);
-      if (probeEnabledFilter === 'enabled' && !channel.enabled) {
+      if (channelStatusFilter === 'enabled' && !channel.enabled) {
         return false;
       }
-      if (probeEnabledFilter === 'disabled' && channel.enabled) {
+      if (channelStatusFilter === 'disabled' && channel.enabled) {
         return false;
       }
       if (statusFilter !== 'all') {
@@ -150,7 +127,7 @@ export default function ChannelHealthPage() {
       }
       return true;
     });
-  }, [channels, thresholdMs, probeEnabledFilter, statusFilter, modelFilter, debouncedQuery]);
+  }, [channels, thresholdMs, channelStatusFilter, statusFilter, modelFilter, debouncedQuery]);
 
   const allModels = useMemo(
     () =>
@@ -185,7 +162,7 @@ export default function ChannelHealthPage() {
                 {t('channelHealth.readOnly')}
               </Badge>
             )}
-            {lastUpdatedText ? <span className='text-muted-foreground text-xs'>{lastUpdatedText}</span> : null}
+            <LastUpdated dataUpdatedAt={overview.dataUpdatedAt} />
             <Button variant='ghost' size='icon-sm' onClick={() => void overview.refetch()} disabled={overview.isFetching}>
               <RefreshCw className={overview.isFetching ? 'size-4 animate-spin' : 'size-4'} />
             </Button>
@@ -215,6 +192,20 @@ export default function ChannelHealthPage() {
           </Alert>
         ) : (
           <div className='space-y-4'>
+            {!policy.enabled ? (
+              <Alert className='border-primary/30 bg-primary/5 [&>svg]:text-primary'>
+                <Sparkles className='size-4' />
+                <AlertTitle>{t('channelHealth.emptyState.title')}</AlertTitle>
+                <AlertDescription className='flex flex-wrap items-center gap-3'>
+                  <span>{t('channelHealth.emptyState.description')}</span>
+                  <Button size='sm' className='ml-auto' onClick={() => setSettingsOpen(true)} disabled={!canWrite}>
+                    <Settings2 className='size-3.5' />
+                    {t('channelHealth.emptyState.action')}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
             {problemCounts.abnormal + problemCounts.error > 0 ? (
               <Alert variant='destructive'>
                 <AlertTriangle className='size-4' />
@@ -288,8 +279,8 @@ export default function ChannelHealthPage() {
                     </SelectContent>
                   </Select>
                   <Select
-                    value={probeEnabledFilter}
-                    onValueChange={(value) => setProbeEnabledFilter(value as 'enabled' | 'all' | 'disabled')}
+                    value={channelStatusFilter}
+                    onValueChange={(value) => setChannelStatusFilter(value as 'enabled' | 'all' | 'disabled')}
                   >
                     <SelectTrigger className='w-36'>
                       <SelectValue />
@@ -304,8 +295,6 @@ export default function ChannelHealthPage() {
                     {t('channelHealth.filters.resultCount', { shown: filteredChannels.length, total: channels.length })}
                   </span>
                 </div>
-
-                <GradeLegend />
 
                 <ChannelMatrixTable
                   channels={filteredChannels}

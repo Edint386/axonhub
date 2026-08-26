@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/format-duration';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -60,7 +61,7 @@ export function ChannelDetailSheet({
       return;
     }
     updateSettings.mutate(
-      { channelID: channel.channelID, intervalMinutes: parsedIntervalMinutes },
+      { channelID: channel.channelID, intervalMinutes: parsedIntervalMinutes, probeEnabled: channel.probeEnabled },
       {
         onSuccess: () => toast.success(t('channelHealth.detail.intervalSaved')),
         onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
@@ -159,6 +160,23 @@ export function ChannelDetailSheet({
               </div>
             </div>
             {!intervalValid ? <p className='text-destructive mt-2 text-xs'>{t('channelHealth.detail.intervalInvalid')}</p> : null}
+            <div className='mt-3 flex items-center justify-between gap-3 border-t pt-3'>
+              <span className='text-sm font-medium'>{t('channelHealth.detail.probeEnabled')}</span>
+              <Switch
+                checked={channel.probeEnabled}
+                onCheckedChange={(checked) =>
+                  updateSettings.mutate(
+                    { channelID: channel.channelID, intervalMinutes: channel.intervalMinutes, probeEnabled: checked },
+                    {
+                      onError: (error) =>
+                        toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
+                    }
+                  )
+                }
+                disabled={!canWrite || updateSettings.isPending}
+                aria-label={t('channelHealth.detail.probeEnabled')}
+              />
+            </div>
           </section>
 
           {chartData.length > 1 ? (
@@ -232,7 +250,9 @@ export function ChannelDetailSheet({
                         <span className='font-mono text-xs'>{model.modelID}</span>
                       </td>
                       <td className='px-3 py-2'>
-                        <ProbeStatusChip status={model.enabled ? (model.latestRun?.status ?? 'never') : 'disabled'} />
+                        <ProbeStatusChip
+                          status={model.enabled ? (model.latestRun ? gradeOfRun(model.latestRun, thresholdMs) : 'never') : 'disabled'}
+                        />
                       </td>
                       <td className='px-3 py-2 font-mono text-xs tabular-nums'>
                         {model.firstTokenMs != null ? formatDuration(model.firstTokenMs) : '-'}{' '}

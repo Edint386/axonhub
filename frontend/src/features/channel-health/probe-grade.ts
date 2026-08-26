@@ -19,6 +19,7 @@ export type ChannelGrade =
   | 'pending'
   | 'skipped'
   | 'never'
+  | 'unconfigured'
   | 'disabled';
 
 export type ProbeBarStatus = 'health' | 'fluent' | 'degraded' | 'error' | 'unknown' | 'skipped' | 'pending';
@@ -30,17 +31,18 @@ export const CHANNEL_GRADE_ORDER: Record<ChannelGrade, number> = {
   unknown: 3,
   pending: 4,
   never: 5,
-  skipped: 6,
-  fluent: 7,
-  health: 8,
-  disabled: 9,
+  unconfigured: 6,
+  skipped: 7,
+  fluent: 8,
+  health: 9,
+  disabled: 10,
 };
 
 /** Grades that count as problem channels for the alert and status filter. */
 export const PROBLEM_GRADES: ChannelGrade[] = ['abnormal', 'error'];
 
 /** Auxiliary states grouped under the "other" KPI card / filter option. */
-export const OTHER_GRADES: ChannelGrade[] = ['unknown', 'pending', 'skipped', 'never', 'disabled'];
+export const OTHER_GRADES: ChannelGrade[] = ['unknown', 'pending', 'skipped', 'never', 'unconfigured', 'disabled'];
 
 /** First-token latency of a run: TTFT for streaming, TTFB otherwise (mirrors backend rule). */
 export function firstTokenMsOf(run: ActiveChannelHealthProbeRun | null | undefined): number | null {
@@ -131,6 +133,9 @@ export function channelP95(channel: ChannelHealthProbeChannel): number | null {
 export function gradeOfChannel(channel: ChannelHealthProbeChannel, thresholdMs: number): ChannelGrade {
   if (!channel.enabled) {
     return 'disabled';
+  }
+  if (primaryModelOf(channel) == null) {
+    return 'unconfigured';
   }
   const runs = primaryRunsOf(channel);
   if (runs.length === 0) {

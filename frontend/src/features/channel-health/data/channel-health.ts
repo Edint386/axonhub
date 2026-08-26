@@ -32,9 +32,12 @@ const channelHealthProbeModelOverviewSchema = z.object({
 const channelHealthProbeChannelSchema = z.object({
   channelID: z.string(),
   channelName: z.string(),
-  channelStatus: z.string(),
   priority: z.number(),
   enabled: z.boolean(),
+  // Whether scheduled probing is enabled for this channel. Distinct from
+  // `enabled` (the channel's own runtime status). Tolerant of the backend
+  // field landing slightly later so the page does not hard-fail.
+  probeEnabled: z.boolean().optional().default(true),
   intervalMinutes: z.number(),
   primaryModelID: z.string().nullable().optional(),
   modelPriceMultiplier: z.number(),
@@ -72,6 +75,7 @@ export type ChannelHealthProbeHistoryPage = z.infer<typeof channelHealthProbeHis
 export interface UpdateChannelHealthProbeSettingsInput {
   channelID: string;
   intervalMinutes: number;
+  probeEnabled: boolean;
 }
 
 export interface RunChannelHealthProbeInput {
@@ -124,9 +128,9 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
     channelHealthProbeOverview {
       channelID
       channelName
-      channelStatus
       priority
       enabled
+      probeEnabled
       intervalMinutes
       primaryModelID
       modelPriceMultiplier
@@ -178,9 +182,9 @@ const UPDATE_CHANNEL_HEALTH_PROBE_SETTINGS_MUTATION = `
     updateChannelHealthProbeSettings(input: $input) {
       channelID
       channelName
-      channelStatus
       priority
       enabled
+      probeEnabled
       intervalMinutes
       primaryModelID
       modelPriceMultiplier

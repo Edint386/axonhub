@@ -11,6 +11,7 @@ const page = read('index.tsx');
 const actions = read('use-probe-actions.ts');
 const settings = read('components/probe-settings-sheet.tsx');
 const matrix = read('components/channel-matrix-table.tsx');
+const detail = read('components/channel-detail-sheet.tsx');
 
 test('primary model metrics use the ordered enabled model', () => {
   assert.match(grade, /channel\.primaryModelID/);
@@ -49,6 +50,10 @@ test('model rows grade the run instead of showing its raw status', () => {
   assert.match(matrix, /gradeOfRun\(primaryModel\.latestRun, thresholdMs\)/);
   assert.match(matrix, /gradeOfRun\(model\.latestRun, thresholdMs\)/);
   assert.doesNotMatch(matrix, /latestRun\?\.status/);
+  // The detail sheet must grade its model-compare rows the same way — the
+  // omission of this check is exactly why the raw-status regression slipped in.
+  assert.match(detail, /gradeOfRun\(model\.latestRun, thresholdMs\)/);
+  assert.doesNotMatch(detail, /latestRun\?\.status/);
 });
 
 test('latest first-token latency never falls back to an older run', () => {
