@@ -60,7 +60,16 @@ export default function ChannelHealthPage() {
   const modelSettings = useMemo(
     () =>
       effectiveModelSettings(
-        policy ?? { enabled: false, acceptableLatencyMs: 60_000, extraChannels: 1, p95LookbackHours: 24, availableModels: [], models: [] }
+        policy ?? {
+          enabled: false,
+          intervalMinutes: 5,
+          stream: false,
+          acceptableLatencyMs: 60_000,
+          extraChannels: 1,
+          p95LookbackHours: 24,
+          availableModels: [],
+          models: [],
+        }
       ),
     [policy]
   );
@@ -96,10 +105,14 @@ export default function ChannelHealthPage() {
     const keyword = debouncedQuery.trim().toLowerCase();
     return channels.filter((channel) => {
       const grade = gradeOfChannel(channel, thresholdMs);
-      if (channelStatusFilter === 'enabled' && !channel.enabled) {
+      // On this page "enabled" means "actually being probed", which needs BOTH the
+      // channel's own status and its per-channel probe opt-in. Without probeEnabled
+      // here, a channel you switch off stays on screen under every filter option.
+      const probed = channel.enabled && channel.probeEnabled;
+      if (channelStatusFilter === 'enabled' && !probed) {
         return false;
       }
-      if (channelStatusFilter === 'disabled' && channel.enabled) {
+      if (channelStatusFilter === 'disabled' && probed) {
         return false;
       }
       if (statusFilter !== 'all') {

@@ -86,10 +86,7 @@ export function KpiCards({
                 onSelect(selected ? 'all' : card.key);
               }
             }}
-            className={cn(
-              'hover-card cursor-pointer gap-0 px-4 py-3',
-              selected && 'border-primary ring-primary ring-1'
-            )}
+            className={cn('hover-card cursor-pointer gap-0 px-4 py-3', selected && 'border-primary ring-primary ring-1')}
           >
             <span className='text-muted-foreground flex items-center gap-2 text-xs'>
               <span className={cn('rounded-lg p-1.5', card.chip)}>

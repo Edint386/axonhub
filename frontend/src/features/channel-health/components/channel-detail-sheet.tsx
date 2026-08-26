@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Clock3, ExternalLink, Play, TrendingDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -7,9 +7,9 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/format-duration';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useUpdateChannelHealthProbeSettings, type ChannelHealthProbeChannel } from '../data/channel-health';
 import { firstTokenMsOf, formatMultiplier, gradeOfRun } from '../probe-grade';
@@ -45,29 +45,6 @@ export function ChannelDetailSheet({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const updateSettings = useUpdateChannelHealthProbeSettings();
-  const [intervalMinutes, setIntervalMinutes] = useState(String(channel?.intervalMinutes ?? 5));
-
-  useEffect(() => {
-    if (channel) {
-      setIntervalMinutes(String(channel.intervalMinutes));
-    }
-  }, [channel]);
-
-  const parsedIntervalMinutes = Number(intervalMinutes);
-  const intervalValid = Number.isInteger(parsedIntervalMinutes) && parsedIntervalMinutes >= 1 && parsedIntervalMinutes <= 24 * 60;
-
-  const saveInterval = () => {
-    if (!channel || !intervalValid || updateSettings.isPending) {
-      return;
-    }
-    updateSettings.mutate(
-      { channelID: channel.channelID, intervalMinutes: parsedIntervalMinutes, probeEnabled: channel.probeEnabled },
-      {
-        onSuccess: () => toast.success(t('channelHealth.detail.intervalSaved')),
-        onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
-      }
-    );
-  };
 
   const chartData = useMemo(() => {
     if (!channel) {
@@ -91,8 +68,7 @@ export function ChannelDetailSheet({
           <SheetTitle>{channel.channelName}</SheetTitle>
           <SheetDescription>
             {t('channelHealth.priority', { priority: channel.priority })} ·{' '}
-            {t('channelHealth.detail.multiplier', { value: formatMultiplier(channel.modelPriceMultiplier) })} ·{' '}
-            {t('channelHealth.intervalSummary', { minutes: channel.intervalMinutes })}
+            {t('channelHealth.detail.multiplier', { value: formatMultiplier(channel.modelPriceMultiplier) })}
           </SheetDescription>
         </SheetHeader>
         <div className='flex-1 space-y-6 overflow-y-auto px-4 pb-4'>
@@ -131,49 +107,21 @@ export function ChannelDetailSheet({
           </section>
 
           <section className='rounded-lg border p-3'>
-            <div className='flex flex-wrap items-start justify-between gap-3'>
-              <div>
-                <h3 className='text-sm font-semibold'>{t('channelHealth.detail.intervalTitle')}</h3>
-              </div>
-              <div className='flex items-center gap-2'>
-                <input
-                  aria-label={t('channelHealth.detail.intervalTitle')}
-                  type='number'
-                  min='1'
-                  max='1440'
-                  step='1'
-                  value={intervalMinutes}
-                  onChange={(event) => setIntervalMinutes(event.target.value)}
-                  disabled={!canWrite || updateSettings.isPending}
-                  className='border-input bg-background h-8 w-24 rounded-md border px-2 text-right text-sm tabular-nums'
-                />
-                <span className='text-muted-foreground text-xs'>{t('channelHealth.detail.intervalUnit')}</span>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant='outline'
-                  onClick={saveInterval}
-                  disabled={!canWrite || !intervalValid || updateSettings.isPending || parsedIntervalMinutes === channel.intervalMinutes}
-                >
-                  {t('channelHealth.detail.intervalSave')}
-                </Button>
-              </div>
-            </div>
-            {!intervalValid ? <p className='text-destructive mt-2 text-xs'>{t('channelHealth.detail.intervalInvalid')}</p> : null}
-            <div className='mt-3 flex items-center justify-between gap-3 border-t pt-3'>
+            <div className='flex items-center justify-between gap-3'>
               <span className='text-sm font-medium'>{t('channelHealth.detail.probeEnabled')}</span>
               <Switch
-                checked={channel.probeEnabled}
+                // Same rule as the matrix: a channel disabled at the channel level cannot be
+                // probed, so show the effective state rather than an on-switch that does nothing.
+                checked={channel.enabled && channel.probeEnabled}
                 onCheckedChange={(checked) =>
                   updateSettings.mutate(
-                    { channelID: channel.channelID, intervalMinutes: channel.intervalMinutes, probeEnabled: checked },
+                    { channelID: channel.channelID, probeEnabled: checked },
                     {
-                      onError: (error) =>
-                        toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
+                      onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
                     }
                   )
                 }
-                disabled={!canWrite || updateSettings.isPending}
+                disabled={!canWrite || !channel.enabled || updateSettings.isPending}
                 aria-label={t('channelHealth.detail.probeEnabled')}
               />
             </div>

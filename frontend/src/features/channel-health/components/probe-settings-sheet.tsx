@@ -53,14 +53,7 @@ function SortableModelRow({
           aria-label={t('channelHealth.settings.enableModel', { model: model.modelID })}
         />
       </span>
-      <span className='flex w-10 justify-center'>
-        <Switch
-          checked={model.stream}
-          onCheckedChange={(checked) => onUpdate({ stream: checked })}
-          disabled={disabled}
-          aria-label={t('channelHealth.settings.streamModel', { model: model.modelID })}
-        />
-      </span>
+      <span className='flex w-10 justify-center'></span>
     </div>
   );
 }
@@ -68,14 +61,12 @@ function SortableModelRow({
 /**
  * Union of the saved model list (in saved order, first) followed by every
  * remaining available model appended. A model not yet saved defaults to
- * probe=OFF and stream=OFF — probing costs money, so a newly-appeared upstream
+ * probe=OFF — probing costs money, so a newly-appeared upstream
  * model must not start spending on its own.
  */
 function syncedModels(policy: ChannelHealthProbePolicy): ActiveHealthProbeModelSetting[] {
-  const appended = policy.availableModels.filter(
-    (modelID) => !policy.models.some((model) => model.modelID === modelID)
-  );
-  return [...policy.models, ...appended.map((modelID) => ({ modelID, enabled: false, stream: false }))];
+  const appended = policy.availableModels.filter((modelID) => !policy.models.some((model) => model.modelID === modelID));
+  return [...policy.models, ...appended.map((modelID) => ({ modelID, enabled: false }))];
 }
 
 export function ProbeSettingsSheet({
@@ -90,6 +81,8 @@ export function ProbeSettingsSheet({
   const { t } = useTranslation();
   const updatePolicy = useUpdateChannelHealthProbePolicy();
   const [enabled, setEnabled] = useState(policy.enabled);
+  const [intervalMinutes, setIntervalMinutes] = useState(String(policy.intervalMinutes));
+  const [stream, setStream] = useState(policy.stream);
   const [latencySeconds, setLatencySeconds] = useState(String(policy.acceptableLatencyMs / 1000));
   const [extraChannels, setExtraChannels] = useState(String(policy.extraChannels));
   const [p95LookbackHours, setP95LookbackHours] = useState(String(policy.p95LookbackHours));
@@ -102,18 +95,24 @@ export function ProbeSettingsSheet({
       return;
     }
     setEnabled(policy.enabled);
+    setIntervalMinutes(String(policy.intervalMinutes));
+    setStream(policy.stream);
     setLatencySeconds(String(policy.acceptableLatencyMs / 1000));
     setExtraChannels(String(policy.extraChannels));
     setP95LookbackHours(String(policy.p95LookbackHours));
     setModels(initialModels);
   }, [open, policy, initialModels]);
 
+  const parsedIntervalMinutes = Number(intervalMinutes);
   const parsedLatencySeconds = Number(latencySeconds);
   const parsedExtraChannels = Number(extraChannels);
   const parsedP95LookbackHours = Number(p95LookbackHours);
   const acceptableLatencyMs = Math.round(parsedLatencySeconds * 1000);
   const hasDuplicateModels = new Set(models.map((model) => model.modelID)).size !== models.length;
   const isValid =
+    Number.isInteger(parsedIntervalMinutes) &&
+    parsedIntervalMinutes >= 1 &&
+    parsedIntervalMinutes <= 1440 &&
     Number.isFinite(parsedLatencySeconds) &&
     parsedLatencySeconds > 0 &&
     acceptableLatencyMs >= 1 &&
@@ -148,7 +147,15 @@ export function ProbeSettingsSheet({
       return;
     }
     updatePolicy.mutate(
-      { enabled, acceptableLatencyMs, extraChannels: parsedExtraChannels, p95LookbackHours: parsedP95LookbackHours, models },
+      {
+        enabled,
+        intervalMinutes: parsedIntervalMinutes,
+        stream,
+        acceptableLatencyMs,
+        extraChannels: parsedExtraChannels,
+        p95LookbackHours: parsedP95LookbackHours,
+        models,
+      },
       {
         onSuccess: () => {
           toast.success(t('channelHealth.messages.policyUpdated'));
@@ -169,6 +176,31 @@ export function ProbeSettingsSheet({
           <div className='flex items-center justify-between gap-3'>
             <span className='text-sm font-medium'>{t('channelHealth.settings.masterSwitch')}</span>
             <Switch checked={enabled} onCheckedChange={setEnabled} disabled={updatePolicy.isPending} />
+          </div>
+
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-sm font-medium'>{t('channelHealth.settings.stream')}</span>
+            <Switch checked={stream} onCheckedChange={setStream} disabled={updatePolicy.isPending} />
+          </div>
+
+          <div className='space-y-2'>
+            <label htmlFor='probe-interval' className='text-sm font-medium'>
+              {t('channelHealth.settings.interval')}
+            </label>
+            <div className='flex items-center gap-2'>
+              <Input
+                id='probe-interval'
+                type='number'
+                min='1'
+                max='1440'
+                step='1'
+                className='w-36'
+                value={intervalMinutes}
+                onChange={(event) => setIntervalMinutes(event.target.value)}
+                disabled={updatePolicy.isPending}
+              />
+              <span className='text-muted-foreground text-sm'>{t('channelHealth.settings.intervalUnit')}</span>
+            </div>
           </div>
 
           <div className='space-y-2'>
@@ -239,7 +271,6 @@ export function ProbeSettingsSheet({
                   <span className='w-6' />
                   <span className='min-w-0 flex-1'>{t('channelHealth.settings.modelColumn')}</span>
                   <span className='w-10 text-center'>{t('channelHealth.settings.probeColumn')}</span>
-                  <span className='w-10 text-center'>{t('channelHealth.settings.streamColumn')}</span>
                 </div>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={models.map((model) => model.modelID)} strategy={verticalListSortingStrategy}>

@@ -28,7 +28,11 @@ export function PolicySummaryBar({
         </span>
       </span>
       <Badge variant='secondary'>{t('channelHealth.policyBar.modelCount', { count: enabledModels })}</Badge>
-      <Badge variant='secondary'>{t('channelHealth.policyBar.threshold', { latency: formatThresholdSeconds(policy.acceptableLatencyMs) })}</Badge>
+      <Badge variant='secondary'>{t('channelHealth.policyBar.interval', { minutes: policy.intervalMinutes })}</Badge>
+      <Badge variant='secondary'>{policy.stream ? t('channelHealth.stream.on') : t('channelHealth.stream.off')}</Badge>
+      <Badge variant='secondary'>
+        {t('channelHealth.policyBar.threshold', { latency: formatThresholdSeconds(policy.acceptableLatencyMs) })}
+      </Badge>
       <Badge variant='secondary'>{t('channelHealth.policyBar.p95Window', { hours: policy.p95LookbackHours })}</Badge>
       <Badge variant='secondary'>{t('channelHealth.policyBar.extraChannels', { count: policy.extraChannels })}</Badge>
       <span className='flex-1' />

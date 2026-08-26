@@ -1,4 +1,15 @@
-import { AlertTriangle, CheckCircle2, CircleDashed, Clock3, Loader2, PowerOff, SkipForward, TrendingDown, XCircle, Zap } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  Clock3,
+  Loader2,
+  PowerOff,
+  SkipForward,
+  TrendingDown,
+  XCircle,
+  Zap,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 

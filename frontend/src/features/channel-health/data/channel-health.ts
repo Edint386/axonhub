@@ -38,7 +38,6 @@ const channelHealthProbeChannelSchema = z.object({
   // `enabled` (the channel's own runtime status). Tolerant of the backend
   // field landing slightly later so the page does not hard-fail.
   probeEnabled: z.boolean().optional().default(true),
-  intervalMinutes: z.number(),
   primaryModelID: z.string().nullable().optional(),
   modelPriceMultiplier: z.number(),
   recentRuns: z.array(activeChannelHealthProbeRunSchema),
@@ -47,12 +46,14 @@ const channelHealthProbeChannelSchema = z.object({
 
 const channelHealthProbePolicySchema = z.object({
   enabled: z.boolean(),
+  intervalMinutes: z.number(),
+  stream: z.boolean(),
   acceptableLatencyMs: z.number(),
   extraChannels: z.number(),
   p95LookbackHours: z.number(),
   apiKeyMaxFirstTokenLatencyMs: z.number().nullable().optional(),
   availableModels: z.array(z.string()),
-  models: z.array(z.object({ modelID: z.string(), enabled: z.boolean(), stream: z.boolean() })),
+  models: z.array(z.object({ modelID: z.string(), enabled: z.boolean() })),
 });
 
 const channelHealthProbeOverviewSchema = z.object({
@@ -74,7 +75,6 @@ export type ChannelHealthProbeHistoryPage = z.infer<typeof channelHealthProbeHis
 
 export interface UpdateChannelHealthProbeSettingsInput {
   channelID: string;
-  intervalMinutes: number;
   probeEnabled: boolean;
 }
 
@@ -86,6 +86,8 @@ export interface RunChannelHealthProbeInput {
 
 export interface UpdateChannelHealthProbePolicyInput {
   enabled: boolean;
+  intervalMinutes: number;
+  stream: boolean;
   acceptableLatencyMs: number;
   extraChannels: number;
   p95LookbackHours: number;
@@ -95,7 +97,6 @@ export interface UpdateChannelHealthProbePolicyInput {
 export interface ActiveHealthProbeModelSetting {
   modelID: string;
   enabled: boolean;
-  stream: boolean;
 }
 
 export interface ChannelHealthProbeHistoryInput {
@@ -131,7 +132,6 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
       priority
       enabled
       probeEnabled
-      intervalMinutes
       primaryModelID
       modelPriceMultiplier
       recentRuns {
@@ -152,6 +152,8 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
     }
     channelHealthProbePolicy {
       enabled
+      intervalMinutes
+      stream
       acceptableLatencyMs
       extraChannels
       p95LookbackHours
@@ -160,7 +162,6 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
       models {
         modelID
         enabled
-        stream
       }
     }
   }
@@ -185,7 +186,6 @@ const UPDATE_CHANNEL_HEALTH_PROBE_SETTINGS_MUTATION = `
       priority
       enabled
       probeEnabled
-      intervalMinutes
       primaryModelID
       modelPriceMultiplier
       recentRuns {
@@ -211,6 +211,8 @@ const UPDATE_CHANNEL_HEALTH_PROBE_POLICY_MUTATION = `
   mutation UpdateChannelHealthProbePolicy($input: UpdateChannelHealthProbePolicyInput!) {
     updateChannelHealthProbePolicy(input: $input) {
       enabled
+      intervalMinutes
+      stream
       acceptableLatencyMs
       extraChannels
       p95LookbackHours
@@ -219,7 +221,6 @@ const UPDATE_CHANNEL_HEALTH_PROBE_POLICY_MUTATION = `
       models {
         modelID
         enabled
-        stream
       }
     }
   }

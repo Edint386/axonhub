@@ -56,7 +56,7 @@ export function ProbeRecentStrip({ channel, thresholdMs }: { channel: ChannelHea
   }
   const dateLocale = i18n.language.startsWith('zh') ? zhCN : enUS;
   return (
-    <div className='flex h-9 items-end gap-[2px]'>
+    <div className='flex h-9 items-end justify-center gap-[2px]'>
       {runs.map((run) => (
         <ProbeBar key={run.id} run={run} status={gradeOfRun(run, thresholdMs)} dateLocale={dateLocale} />
       ))}

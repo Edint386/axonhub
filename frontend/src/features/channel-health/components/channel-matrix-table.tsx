@@ -22,7 +22,7 @@ import { useProbeActions } from '../use-probe-actions';
 import { ProbeRecentStrip } from './probe-recent-strip';
 import { ProbeStatusChip } from './probe-status-chip';
 
-type SortKey = 'name' | 'mult' | 'status' | 'first';
+type SortKey = 'priority' | 'mult' | 'status' | 'first';
 
 function SortableHead({
   label,
@@ -42,7 +42,7 @@ function SortableHead({
   return (
     <TableHead
       className={cn(
-        'text-muted-foreground cursor-pointer border-0 px-4 py-3 text-xs font-semibold tracking-wider uppercase select-none',
+        'text-muted-foreground cursor-pointer border-0 px-4 py-3 text-center text-xs font-semibold tracking-wider uppercase select-none',
         className
       )}
       onClick={() => onSort(sortKey)}
@@ -53,8 +53,8 @@ function SortableHead({
   );
 }
 
-const HEAD_CELL = 'text-muted-foreground border-0 px-4 py-3 text-xs font-semibold tracking-wider uppercase';
-const BODY_CELL = 'border-0 bg-inherit px-4 py-3';
+const HEAD_CELL = 'text-muted-foreground border-0 px-4 py-3 text-center text-xs font-semibold tracking-wider uppercase';
+const BODY_CELL = 'border-0 bg-inherit px-4 py-3 text-center';
 
 export function ChannelMatrixTable({
   channels,
@@ -70,15 +70,17 @@ export function ChannelMatrixTable({
   probeActions: ReturnType<typeof useProbeActions>;
 }) {
   const { t } = useTranslation();
-  const [sortKey, setSortKey] = useState<SortKey>('status');
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>('priority');
+  const [sortAsc, setSortAsc] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { probing, probeChannel, probeModel } = probeActions;
   const updateSettings = useUpdateChannelHealthProbeSettings();
 
   const sorted = useMemo(() => {
     const comparators: Record<SortKey, (a: ChannelHealthProbeChannel, b: ChannelHealthProbeChannel) => number> = {
-      name: (a, b) => a.channelName.localeCompare(b.channelName, 'zh'),
+      // The scheduler probes high priority first, so this column mirrors that order.
+      // Ties fall back to the channel name so the list stays stable.
+      priority: (a, b) => a.priority - b.priority || a.channelName.localeCompare(b.channelName, 'zh'),
       mult: (a, b) => a.modelPriceMultiplier - b.modelPriceMultiplier,
       status: (a, b) => CHANNEL_GRADE_ORDER[gradeOfChannel(a, thresholdMs)] - CHANNEL_GRADE_ORDER[gradeOfChannel(b, thresholdMs)],
       first: (a, b) => (channelP50(a) ?? Number.MAX_VALUE) - (channelP50(b) ?? Number.MAX_VALUE),
@@ -95,7 +97,7 @@ export function ChannelMatrixTable({
       setSortAsc((value) => !value);
     } else {
       setSortKey(key);
-      setSortAsc(key === 'name' || key === 'mult');
+      setSortAsc(key === 'mult');
     }
   };
 
@@ -113,7 +115,7 @@ export function ChannelMatrixTable({
 
   const toggleProbeEnabled = (channel: ChannelHealthProbeChannel, probeEnabled: boolean) => {
     updateSettings.mutate(
-      { channelID: channel.channelID, intervalMinutes: channel.intervalMinutes, probeEnabled },
+      { channelID: channel.channelID, probeEnabled },
       {
         onError: (error) => toast.error(error instanceof Error ? error.message : t('channelHealth.messages.updateFailed')),
       }
@@ -137,7 +139,13 @@ export function ChannelMatrixTable({
         <TableHeader className='sticky top-0 z-20 bg-[var(--table-header)] shadow-sm'>
           <TableRow className='border-0'>
             <TableHead className={cn(HEAD_CELL, 'w-8')} />
-            <SortableHead label={t('channelHealth.columns.channel')} sortKey='name' current={sortKey} asc={sortAsc} onSort={handleSort} />
+            <SortableHead
+              label={t('channelHealth.columns.channel')}
+              sortKey='priority'
+              current={sortKey}
+              asc={sortAsc}
+              onSort={handleSort}
+            />
             <TableHead className={HEAD_CELL}>{t('channelHealth.columns.probeEnabled')}</TableHead>
             <SortableHead
               label={t('channelHealth.columns.multiplier')}
@@ -156,7 +164,7 @@ export function ChannelMatrixTable({
               onSort={handleSort}
             />
             <TableHead className={HEAD_CELL}>{t('channelHealth.columns.recentProbes')}</TableHead>
-            <TableHead className={cn(HEAD_CELL, 'text-right')}>{t('channelHealth.columns.actions')}</TableHead>
+            <TableHead className={HEAD_CELL}>{t('channelHealth.columns.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody className='!bg-[var(--table-background)]'>
@@ -192,14 +200,23 @@ export function ChannelMatrixTable({
                   </TableCell>
                   <TableCell className={BODY_CELL} onClick={(event) => event.stopPropagation()}>
                     <Switch
-                      checked={channel.probeEnabled}
+                      // A channel disabled at the channel level cannot be probed whatever this
+                      // flag says, so show the EFFECTIVE state and lock the control. Showing the
+                      // stored `true` here would put a row of on-switches under the "not probed"
+                      // filter, which reads as a contradiction. The reason is already on the row:
+                      // the name and the status column both say the channel is disabled.
+                      checked={channel.enabled && channel.probeEnabled}
                       onCheckedChange={(checked) => toggleProbeEnabled(channel, checked)}
-                      disabled={!canWrite || updateSettings.isPending}
+                      disabled={!canWrite || !channel.enabled || updateSettings.isPending}
                       aria-label={t('channelHealth.columns.probeEnabled')}
                     />
                   </TableCell>
                   <TableCell
-                    className={cn(BODY_CELL, 'font-mono text-xs tabular-nums', channel.modelPriceMultiplier === 1 && 'text-muted-foreground')}
+                    className={cn(
+                      BODY_CELL,
+                      'font-mono text-xs tabular-nums',
+                      channel.modelPriceMultiplier === 1 && 'text-muted-foreground'
+                    )}
                   >
                     {formatMultiplier(channel.modelPriceMultiplier)}
                   </TableCell>
@@ -208,7 +225,7 @@ export function ChannelMatrixTable({
                   </TableCell>
                   <TableCell className={BODY_CELL}>
                     <div className='space-y-1'>
-                      <span className='block max-w-40 truncate font-mono text-[11px]'>{primaryModel?.modelID ?? '-'}</span>
+                      <span className='mx-auto block max-w-40 truncate font-mono text-[11px]'>{primaryModel?.modelID ?? '-'}</span>
                       <ProbeStatusChip status={primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun, thresholdMs) : grade} />
                     </div>
                   </TableCell>
@@ -232,7 +249,7 @@ export function ChannelMatrixTable({
                   <TableCell className={BODY_CELL}>
                     <ProbeRecentStrip channel={channel} thresholdMs={thresholdMs} />
                   </TableCell>
-                  <TableCell className={cn(BODY_CELL, 'text-right')} onClick={(event) => event.stopPropagation()}>
+                  <TableCell className={BODY_CELL} onClick={(event) => event.stopPropagation()}>
                     <Button
                       variant='outline'
                       size='sm'
@@ -245,7 +262,7 @@ export function ChannelMatrixTable({
                   </TableCell>
                 </TableRow>
                 {isExpanded ? (
-                  <TableRow key={`${channel.channelID}-sub`} className='border-0 bg-muted/30 hover:bg-muted/30'>
+                  <TableRow key={`${channel.channelID}-sub`} className='bg-muted/30 hover:bg-muted/30 border-0'>
                     <TableCell colSpan={9} className='border-0 p-0'>
                       <div className='px-14 pt-1 pb-3'>
                         <Table>
@@ -255,26 +272,23 @@ export function ChannelMatrixTable({
                               const modelProbing = probing.has(modelKey);
                               return (
                                 <TableRow key={model.modelID} className='border-b-0'>
-                                  <TableCell className='w-[26%]'>
+                                  <TableCell className='w-[26%] text-center'>
                                     <span className='font-mono text-xs'>{model.modelID}</span>
-                                    <span className='text-muted-foreground ml-1.5 text-[10.5px]'>
-                                      {model.stream ? t('channelHealth.stream.on') : t('channelHealth.stream.off')}
-                                    </span>
                                   </TableCell>
-                                  <TableCell className='w-[14%]'>
+                                  <TableCell className='w-[14%] text-center'>
                                     <ProbeStatusChip
                                       status={
                                         model.enabled ? (model.latestRun ? gradeOfRun(model.latestRun, thresholdMs) : 'never') : 'disabled'
                                       }
                                     />
                                   </TableCell>
-                                  <TableCell className='w-[14%] font-mono text-xs tabular-nums'>
+                                  <TableCell className='w-[14%] text-center font-mono text-xs tabular-nums'>
                                     {model.firstTokenMs != null ? formatDuration(model.firstTokenMs) : '-'}
                                   </TableCell>
-                                  <TableCell className='w-[20%] font-mono text-xs tabular-nums'>
+                                  <TableCell className='w-[20%] text-center font-mono text-xs tabular-nums'>
                                     {model.p95Ms != null ? `${formatDuration(model.p95Ms)} · n=${model.sampleCount}` : '-'}
                                   </TableCell>
-                                  <TableCell className='text-right'>
+                                  <TableCell className='text-center'>
                                     <Button
                                       variant='ghost'
                                       size='sm'
