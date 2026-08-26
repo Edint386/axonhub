@@ -98,6 +98,42 @@ func latencySignalForCandidate(
 		streaming = true
 	}
 
+	trafficMs, trafficKnown := trafficLatencySignal(metrics, streaming)
+	probeMs, probeKnown := probeLatencySignal(metrics)
+
+	switch {
+	case trafficKnown && probeKnown:
+		// Both are measurements of the same thing, so take the worse one. A ceiling is
+		// a safety rail: if either source says this channel is slow, it is slow for the
+		// purpose of filtering it out.
+		return max(trafficMs, probeMs), true
+	case probeKnown:
+		// The point of reading probes: a channel with no real traffic yet used to be
+		// permanently "unknown" and so could never be filtered by the ceiling.
+		return probeMs, true
+	case trafficKnown:
+		return trafficMs, true
+	default:
+		return 0, false
+	}
+}
+
+// probeLatencySignal reports the channel's synthetic-probe first-token EWMA.
+//
+// The probe's streaming mode is a single global policy value, so every channel is
+// measured the same way and the numbers stay comparable against one ceiling. That
+// mode may differ from the mode of the request being routed; the probe still
+// answers the question the ceiling asks -- how long this channel takes to start
+// responding -- better than having no signal at all.
+func probeLatencySignal(metrics *biz.AggregatedMetrics) (float64, bool) {
+	if metrics.ProbeSampleCount < MinimumLatencyThresholdSamples || metrics.ProbeFirstTokenLatencyEWMA <= 0 {
+		return 0, false
+	}
+
+	return metrics.ProbeFirstTokenLatencyEWMA, true
+}
+
+func trafficLatencySignal(metrics *biz.AggregatedMetrics, streaming bool) (float64, bool) {
 	if streaming {
 		if metrics.StreamingSampleCount < MinimumLatencyThresholdSamples || metrics.StreamingFirstTokenLatencyEWMA <= 0 {
 			return 0, false

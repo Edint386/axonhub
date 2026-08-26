@@ -643,3 +643,39 @@ func TestParseDBTime(t *testing.T) {
 		})
 	}
 }
+
+func TestChannelService_RecordProbeFirstTokenLatency(t *testing.T) {
+	svc := &ChannelService{channelPerfMetrics: make(map[int]*channelMetrics)}
+
+	// A non-positive measurement is not a measurement.
+	svc.RecordProbeFirstTokenLatency(1, 0)
+	svc.RecordProbeFirstTokenLatency(1, -5)
+	require.Empty(t, svc.channelPerfMetrics)
+
+	// The first sample seeds the EWMA; later ones are smoothed, so a single slow
+	// probe cannot swing a channel out of an API key's ceiling on its own.
+	svc.RecordProbeFirstTokenLatency(1, 100)
+	metrics, err := svc.GetChannelMetrics(context.Background(), 1)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), metrics.ProbeSampleCount)
+	require.InDelta(t, 100.0, metrics.ProbeFirstTokenLatencyEWMA, 0.001)
+
+	svc.RecordProbeFirstTokenLatency(1, 1_100)
+	metrics, err = svc.GetChannelMetrics(context.Background(), 1)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), metrics.ProbeSampleCount)
+	require.InDelta(t, latencyEWMAAlpha*1_100+(1-latencyEWMAAlpha)*100, metrics.ProbeFirstTokenLatencyEWMA, 0.001)
+
+	// Probes must not leak into any signal that should reflect real traffic only:
+	// success/failure counts, consecutive failures and the real-traffic EWMAs all
+	// feed load balancing and the auto-disable rules.
+	require.Zero(t, metrics.RequestCount)
+	require.Zero(t, metrics.SuccessCount)
+	require.Zero(t, metrics.FailureCount)
+	require.Zero(t, metrics.ConsecutiveFailures)
+	require.Zero(t, metrics.StreamingSampleCount)
+	require.Zero(t, metrics.StreamingFirstTokenLatencyEWMA)
+	require.Zero(t, metrics.NonStreamingSampleCount)
+	require.Zero(t, metrics.NonStreamingLatencyEWMA)
+	require.Nil(t, metrics.LastSelectedAt)
+}

@@ -107,3 +107,67 @@ func TestFirstTokenLatencySelectorKeepsCandidatesWhenMetricsReadFails(t *testing
 	require.NoError(t, err)
 	require.Equal(t, []*ChannelModelsCandidate{first, second}, candidates)
 }
+
+func TestFirstTokenLatencySelectorUsesProbeSignalWithoutRealTraffic(t *testing.T) {
+	// The reason probes are read at all: a channel that has never served a real
+	// request carries no traffic EWMA, so before this it was permanently "unknown"
+	// and the ceiling could never filter it however slow the probes measured it.
+	fast := latencyCandidate(1)
+	slow := latencyCandidate(2)
+	selector := WithFirstTokenLatencySelector(
+		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{fast, slow}},
+		&latencyThresholdMetricsProvider{metrics: map[int]*biz.AggregatedMetrics{
+			1: {ProbeFirstTokenLatencyEWMA: 200, ProbeSampleCount: 4},
+			2: {ProbeFirstTokenLatencyEWMA: 8_000, ProbeSampleCount: 4},
+		}},
+		500,
+	)
+
+	stream := true
+	candidates, err := selector.Select(context.Background(), &llm.Request{Stream: &stream})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Same(t, fast, candidates[0])
+}
+
+func TestFirstTokenLatencySelectorTakesTheWorseOfProbeAndTraffic(t *testing.T) {
+	// Both sources measure the same thing, so a ceiling must honour whichever says
+	// the channel is slow -- otherwise a fast probe would mask slow real traffic.
+	slowTrafficFastProbe := latencyCandidate(1)
+	fastTrafficSlowProbe := latencyCandidate(2)
+	bothFast := latencyCandidate(3)
+	selector := WithFirstTokenLatencySelector(
+		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{slowTrafficFastProbe, fastTrafficSlowProbe, bothFast}},
+		&latencyThresholdMetricsProvider{metrics: map[int]*biz.AggregatedMetrics{
+			1: {StreamingFirstTokenLatencyEWMA: 900, StreamingSampleCount: 4, ProbeFirstTokenLatencyEWMA: 100, ProbeSampleCount: 4},
+			2: {StreamingFirstTokenLatencyEWMA: 100, StreamingSampleCount: 4, ProbeFirstTokenLatencyEWMA: 900, ProbeSampleCount: 4},
+			3: {StreamingFirstTokenLatencyEWMA: 100, StreamingSampleCount: 4, ProbeFirstTokenLatencyEWMA: 200, ProbeSampleCount: 4},
+		}},
+		500,
+	)
+
+	stream := true
+	candidates, err := selector.Select(context.Background(), &llm.Request{Stream: &stream})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Same(t, bothFast, candidates[0])
+}
+
+func TestFirstTokenLatencySelectorIgnoresProbeSignalBelowSampleFloor(t *testing.T) {
+	// One slow probe must not evict a channel; the same sample floor as real traffic
+	// applies, so the signal stays unknown and the candidate is kept.
+	thin := latencyCandidate(1)
+	selector := WithFirstTokenLatencySelector(
+		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{thin}},
+		&latencyThresholdMetricsProvider{metrics: map[int]*biz.AggregatedMetrics{
+			1: {ProbeFirstTokenLatencyEWMA: 8_000, ProbeSampleCount: MinimumLatencyThresholdSamples - 1},
+		}},
+		500,
+	)
+
+	stream := true
+	candidates, err := selector.Select(context.Background(), &llm.Request{Stream: &stream})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Same(t, thin, candidates[0])
+}

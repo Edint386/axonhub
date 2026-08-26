@@ -232,6 +232,14 @@ type AggregatedMetrics struct {
 	NonStreamingLatencyEWMA float64
 	// NonStreamingSampleCount tracks non-streaming samples recorded for latency-aware scoring.
 	NonStreamingSampleCount int64
+	// ProbeFirstTokenLatencyEWMA is the EWMA of first-token latency measured by
+	// scheduled synthetic health probes. It is kept apart from the real-traffic
+	// EWMAs on purpose: probes must never move success/failure counts, consecutive
+	// failures, auto-disable rules or load-balancer scores, so they feed this field
+	// and nothing else.
+	ProbeFirstTokenLatencyEWMA float64
+	// ProbeSampleCount tracks probe samples recorded for latency-aware filtering.
+	ProbeSampleCount int64
 }
 
 func (m *AggregatedMetrics) Clone() *AggregatedMetrics {
@@ -244,6 +252,8 @@ func (m *AggregatedMetrics) Clone() *AggregatedMetrics {
 		StreamingSampleCount:           m.StreamingSampleCount,
 		NonStreamingLatencyEWMA:        m.NonStreamingLatencyEWMA,
 		NonStreamingSampleCount:        m.NonStreamingSampleCount,
+		ProbeFirstTokenLatencyEWMA:     m.ProbeFirstTokenLatencyEWMA,
+		ProbeSampleCount:               m.ProbeSampleCount,
 	}
 }
 
@@ -496,6 +506,39 @@ func (svc *ChannelService) GetChannelMetrics(ctx context.Context, channelID int)
 	// Return a full copy of the aggregated metrics to avoid concurrent modification
 	// while preserving all load-balancing signals, including latency EWMA.
 	return cm.aggregatedMetrics.Clone(), nil
+}
+
+// RecordProbeFirstTokenLatency folds one synthetic-probe first-token measurement
+// into the channel's probe EWMA. Scheduled probes are the only source of latency
+// telemetry for a channel that carries no real traffic yet, which is what lets an
+// API key's first-token ceiling judge such a channel at all.
+//
+// It deliberately touches ONLY the probe fields. Routing a probe through
+// RecordPerformance instead would move success/failure counts, consecutive-failure
+// state and the auto-disable rules, so a synthetic request would start affecting
+// decisions that must only reflect real traffic.
+func (svc *ChannelService) RecordProbeFirstTokenLatency(channelID int, firstTokenMs float64) {
+	if firstTokenMs <= 0 {
+		return
+	}
+
+	svc.channelPerfMetricsLock.Lock()
+	defer svc.channelPerfMetricsLock.Unlock()
+
+	cm, exists := svc.channelPerfMetrics[channelID]
+	if !exists {
+		cm = newChannelMetrics(channelID)
+		svc.channelPerfMetrics[channelID] = cm
+	}
+
+	if cm.aggregatedMetrics.ProbeSampleCount == 0 {
+		cm.aggregatedMetrics.ProbeFirstTokenLatencyEWMA = firstTokenMs
+	} else {
+		cm.aggregatedMetrics.ProbeFirstTokenLatencyEWMA = latencyEWMAAlpha*firstTokenMs +
+			(1-latencyEWMAAlpha)*cm.aggregatedMetrics.ProbeFirstTokenLatencyEWMA
+	}
+
+	cm.aggregatedMetrics.ProbeSampleCount++
 }
 
 // IncrementChannelSelection increments the request count for a channel at selection time.
