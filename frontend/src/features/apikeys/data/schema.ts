@@ -85,6 +85,7 @@ export const apiKeySchema = z.object({
             loadBalanceStrategy: z.string().optional().nullable(),
             traceStickyMode: z.string().optional().nullable(),
             maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
+            countRealTrafficLatency: z.boolean().optional().nullable(),
             quota: z
               .object({
                 requests: z.number().optional().nullable(),
@@ -188,6 +189,9 @@ export const apiKeyProfileSchema = z.object({
   loadBalanceStrategy: z.string().optional().nullable(),
   traceStickyMode: z.string().optional().nullable(),
   maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
+  // Whether this key's own real traffic also counts toward the latency ceiling
+  // above. Absent/false => judge channels on synthetic probe measurements only.
+  countRealTrafficLatency: z.boolean().optional().nullable(),
   quota: z
     .object({
       requests: z.number().optional().nullable(),
@@ -276,6 +280,7 @@ export const updateApiKeyProfilesInputSchemaFactory = (t: (key: string) => strin
             loadBalanceStrategy: z.string().optional().nullable(),
             traceStickyMode: z.string().optional().nullable(),
             maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
+            countRealTrafficLatency: z.boolean().optional().nullable(),
             quota: z
               .object({
                 requests: z.number().int().positive().optional().nullable(),
@@ -378,6 +383,7 @@ export const updateApiKeyProfilesInputSchema = z.object({
       loadBalanceStrategy: z.string().optional().nullable(),
       traceStickyMode: z.string().optional().nullable(),
       maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
+      countRealTrafficLatency: z.boolean().optional().nullable(),
       quota: z
         .object({
           requests: z.number().int().positive().optional().nullable(),

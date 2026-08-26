@@ -54,7 +54,18 @@ export default function ChannelHealthPage() {
   const { channelPermissions } = usePermissions();
   const overview = useChannelHealthProbeOverview();
   const policy = overview.data?.policy;
-  const thresholdMs = policy?.acceptableLatencyMs ?? 60_000;
+  // The routing ceiling, drawn as a reference line in the detail chart. Health
+  // grading no longer reads it -- that uses the built-in bands in probe-grade.
+  // policy.acceptableLatencyMs is only the fallback; the ceiling actually in force
+  // is the stricter of it and the tightest ceiling across enabled API keys.
+  const routingCeilingMs = useMemo(() => {
+    const fallbackMs = policy?.acceptableLatencyMs ?? 60_000;
+    const apiKeyCeilingMs = policy?.apiKeyMaxFirstTokenLatencyMs;
+    if (typeof apiKeyCeilingMs !== 'number' || !Number.isFinite(apiKeyCeilingMs) || apiKeyCeilingMs <= 0) {
+      return fallbackMs;
+    }
+    return Math.min(fallbackMs, apiKeyCeilingMs);
+  }, [policy?.acceptableLatencyMs, policy?.apiKeyMaxFirstTokenLatencyMs]);
   const canWrite = channelPermissions.canWrite;
   const channels = useMemo(() => overview.data?.channels ?? [], [overview.data?.channels]);
   const modelSettings = useMemo(
@@ -91,7 +102,7 @@ export default function ChannelHealthPage() {
     let abnormal = 0;
     let error = 0;
     for (const channel of channels) {
-      const grade = gradeOfChannel(channel, thresholdMs);
+      const grade = gradeOfChannel(channel);
       if (grade === 'abnormal') {
         abnormal++;
       } else if (grade === 'error') {
@@ -99,12 +110,12 @@ export default function ChannelHealthPage() {
       }
     }
     return { abnormal, error };
-  }, [channels, thresholdMs]);
+  }, [channels]);
 
   const filteredChannels = useMemo(() => {
     const keyword = debouncedQuery.trim().toLowerCase();
     return channels.filter((channel) => {
-      const grade = gradeOfChannel(channel, thresholdMs);
+      const grade = gradeOfChannel(channel);
       // On this page "enabled" means "actually being probed", which needs BOTH the
       // channel's own status and its per-channel probe opt-in. Without probeEnabled
       // here, a channel you switch off stays on screen under every filter option.
@@ -140,7 +151,7 @@ export default function ChannelHealthPage() {
       }
       return true;
     });
-  }, [channels, thresholdMs, channelStatusFilter, statusFilter, modelFilter, debouncedQuery]);
+  }, [channels, channelStatusFilter, statusFilter, modelFilter, debouncedQuery]);
 
   const allModels = useMemo(
     () =>
@@ -238,7 +249,6 @@ export default function ChannelHealthPage() {
 
             <KpiCards
               channels={channels}
-              thresholdMs={thresholdMs}
               active={statusFilter}
               onSelect={(filter) => {
                 setStatusFilter(filter);
@@ -311,7 +321,6 @@ export default function ChannelHealthPage() {
 
                 <ChannelMatrixTable
                   channels={filteredChannels}
-                  thresholdMs={thresholdMs}
                   canWrite={canWrite}
                   onOpenDetail={(channel) => setDetailChannelID(channel.channelID)}
                   probeActions={probeActions}
@@ -333,7 +342,7 @@ export default function ChannelHealthPage() {
             setDetailChannelID(null);
           }
         }}
-        thresholdMs={thresholdMs}
+        thresholdMs={routingCeilingMs}
         onProbeAll={(channel) => void probeActions.probeChannel(channel)}
         probing={detailChannel != null && probeActions.isChannelProbing(detailChannel.channelID)}
         canWrite={canWrite}

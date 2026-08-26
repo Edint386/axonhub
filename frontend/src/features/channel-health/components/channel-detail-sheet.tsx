@@ -80,7 +80,7 @@ export function ChannelDetailSheet({
             {runs.length > 0 ? (
               <div className='flex h-16 items-end gap-[3px]'>
                 {runs.map((run) => {
-                  const grade = gradeOfRun(run, thresholdMs);
+                  const grade = gradeOfRun(run);
                   const first = firstTokenMsOf(run);
                   return (
                     <UITooltip key={run.id}>
@@ -198,9 +198,7 @@ export function ChannelDetailSheet({
                         <span className='font-mono text-xs'>{model.modelID}</span>
                       </td>
                       <td className='px-3 py-2'>
-                        <ProbeStatusChip
-                          status={model.enabled ? (model.latestRun ? gradeOfRun(model.latestRun, thresholdMs) : 'never') : 'disabled'}
-                        />
+                        <ProbeStatusChip status={model.enabled ? (model.latestRun ? gradeOfRun(model.latestRun) : 'never') : 'disabled'} />
                       </td>
                       <td className='px-3 py-2 font-mono text-xs tabular-nums'>
                         {model.firstTokenMs != null ? formatDuration(model.firstTokenMs) : '-'}{' '}

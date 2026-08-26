@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useUpdateChannelHealthProbeSettings, type ChannelHealthProbeChannel } from '../data/channel-health';
 import {
   CHANNEL_GRADE_ORDER,
+  FLUENT_LATENCY_MAX_MS,
+  HEALTH_LATENCY_MAX_MS,
   channelLatestFirst,
   channelP50,
   channelP95,
@@ -58,13 +60,11 @@ const BODY_CELL = 'border-0 bg-inherit px-4 py-3 text-center';
 
 export function ChannelMatrixTable({
   channels,
-  thresholdMs,
   canWrite,
   onOpenDetail,
   probeActions,
 }: {
   channels: ChannelHealthProbeChannel[];
-  thresholdMs: number;
   canWrite: boolean;
   onOpenDetail: (channel: ChannelHealthProbeChannel) => void;
   probeActions: ReturnType<typeof useProbeActions>;
@@ -82,7 +82,7 @@ export function ChannelMatrixTable({
       // Ties fall back to the channel name so the list stays stable.
       priority: (a, b) => a.priority - b.priority || a.channelName.localeCompare(b.channelName, 'zh'),
       mult: (a, b) => a.modelPriceMultiplier - b.modelPriceMultiplier,
-      status: (a, b) => CHANNEL_GRADE_ORDER[gradeOfChannel(a, thresholdMs)] - CHANNEL_GRADE_ORDER[gradeOfChannel(b, thresholdMs)],
+      status: (a, b) => CHANNEL_GRADE_ORDER[gradeOfChannel(a)] - CHANNEL_GRADE_ORDER[gradeOfChannel(b)],
       first: (a, b) => (channelP50(a) ?? Number.MAX_VALUE) - (channelP50(b) ?? Number.MAX_VALUE),
     };
     const list = [...channels].sort((a, b) => {
@@ -90,7 +90,7 @@ export function ChannelMatrixTable({
       return sortAsc ? result : -result;
     });
     return list;
-  }, [channels, sortKey, sortAsc, thresholdMs]);
+  }, [channels, sortKey, sortAsc]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -169,7 +169,7 @@ export function ChannelMatrixTable({
         </TableHeader>
         <TableBody className='!bg-[var(--table-background)]'>
           {sorted.map((channel) => {
-            const grade = gradeOfChannel(channel, thresholdMs);
+            const grade = gradeOfChannel(channel);
             const primaryModel = primaryModelOf(channel);
             const latest = channelLatestFirst(channel);
             const p50 = channelP50(channel);
@@ -226,15 +226,18 @@ export function ChannelMatrixTable({
                   <TableCell className={BODY_CELL}>
                     <div className='space-y-1'>
                       <span className='mx-auto block max-w-40 truncate font-mono text-[11px]'>{primaryModel?.modelID ?? '-'}</span>
-                      <ProbeStatusChip status={primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun, thresholdMs) : grade} />
+                      <ProbeStatusChip status={primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun) : grade} />
                     </div>
                   </TableCell>
                   <TableCell className={BODY_CELL}>
                     <span
                       className={cn(
                         'text-xs tabular-nums',
-                        p50 != null && p50 > thresholdMs * 2 && 'text-destructive font-bold',
-                        p50 != null && p50 > thresholdMs && p50 <= thresholdMs * 2 && 'font-semibold text-[var(--grade-degraded)]'
+                        p50 != null && p50 > FLUENT_LATENCY_MAX_MS && 'text-destructive font-bold',
+                        p50 != null &&
+                          p50 > HEALTH_LATENCY_MAX_MS &&
+                          p50 <= FLUENT_LATENCY_MAX_MS &&
+                          'font-semibold text-[var(--grade-degraded)]'
                       )}
                     >
                       {p50 != null ? formatDuration(p50) : '-'}
@@ -247,7 +250,7 @@ export function ChannelMatrixTable({
                     </span>
                   </TableCell>
                   <TableCell className={BODY_CELL}>
-                    <ProbeRecentStrip channel={channel} thresholdMs={thresholdMs} />
+                    <ProbeRecentStrip channel={channel} />
                   </TableCell>
                   <TableCell className={BODY_CELL} onClick={(event) => event.stopPropagation()}>
                     <Button
@@ -277,9 +280,7 @@ export function ChannelMatrixTable({
                                   </TableCell>
                                   <TableCell className='w-[14%] text-center'>
                                     <ProbeStatusChip
-                                      status={
-                                        model.enabled ? (model.latestRun ? gradeOfRun(model.latestRun, thresholdMs) : 'never') : 'disabled'
-                                      }
+                                      status={model.enabled ? (model.latestRun ? gradeOfRun(model.latestRun) : 'never') : 'disabled'}
                                     />
                                   </TableCell>
                                   <TableCell className='w-[14%] text-center font-mono text-xs tabular-nums'>

@@ -47,12 +47,12 @@ test('settings uses the real-model catalog and preserves drag order', () => {
 });
 
 test('model rows grade the run instead of showing its raw status', () => {
-  assert.match(matrix, /gradeOfRun\(primaryModel\.latestRun, thresholdMs\)/);
-  assert.match(matrix, /gradeOfRun\(model\.latestRun, thresholdMs\)/);
+  assert.match(matrix, /gradeOfRun\(primaryModel\.latestRun\)/);
+  assert.match(matrix, /gradeOfRun\(model\.latestRun\)/);
   assert.doesNotMatch(matrix, /latestRun\?\.status/);
   // The detail sheet must grade its model-compare rows the same way — the
   // omission of this check is exactly why the raw-status regression slipped in.
-  assert.match(detail, /gradeOfRun\(model\.latestRun, thresholdMs\)/);
+  assert.match(detail, /gradeOfRun\(model\.latestRun\)/);
   assert.doesNotMatch(detail, /latestRun\?\.status/);
 });
 
@@ -60,4 +60,29 @@ test('latest first-token latency never falls back to an older run', () => {
   assert.match(grade, /const latest = probes\[probes\.length - 1\]/);
   assert.match(grade, /latest\?\.status === 'healthy' \? firstTokenMsOf\(latest\) : null/);
   assert.doesNotMatch(grade, /for \(let i = runs\.length - 1/);
+});
+
+test('health grading uses built-in bands, not the operator-set routing ceiling', () => {
+  // With the ceiling at 600s every answering channel graded healthy, so the grade
+  // carried no information. Grading must not read that setting at all.
+  assert.match(grade, /HEALTH_LATENCY_MAX_MS = 10_000/);
+  assert.match(grade, /FLUENT_LATENCY_MAX_MS = 30_000/);
+  assert.doesNotMatch(grade, /thresholdMs/);
+  assert.match(grade, /export function gradeOfRun\(run: ActiveChannelHealthProbeRun\)/);
+  assert.match(grade, /export function gradeOfChannel\(channel: ChannelHealthProbeChannel\)/);
+
+  // The first-token column colours off the same bands so the number agrees with
+  // the chip beside it.
+  assert.match(matrix, /p50 > FLUENT_LATENCY_MAX_MS/);
+  assert.match(matrix, /p50 > HEALTH_LATENCY_MAX_MS/);
+  assert.doesNotMatch(matrix, /thresholdMs/);
+
+  // The ceiling survives only as the detail chart's reference line, renamed so it
+  // stops reading as a health criterion. It is the EFFECTIVE routing ceiling: the
+  // stricter of the global fallback and the tightest enabled API key ceiling, so
+  // the line lands inside the plotted range instead of wrecking the y-axis scale.
+  assert.match(page, /routingCeilingMs = useMemo/);
+  assert.match(page, /fallbackMs = policy\?\.acceptableLatencyMs \?\? 60_000/);
+  assert.match(page, /apiKeyCeilingMs = policy\?\.apiKeyMaxFirstTokenLatencyMs/);
+  assert.match(page, /return Math\.min\(fallbackMs, apiKeyCeilingMs\)/);
 });

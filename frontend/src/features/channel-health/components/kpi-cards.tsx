@@ -23,12 +23,10 @@ const GRADE_DEFS: { key: ChannelGrade; icon: typeof CheckCircle2; chip: string }
 
 export function KpiCards({
   channels,
-  thresholdMs,
   active,
   onSelect,
 }: {
   channels: ChannelHealthProbeChannel[];
-  thresholdMs: number;
   active: KpiFilter;
   onSelect: (filter: KpiFilter) => void;
 }) {
@@ -48,10 +46,10 @@ export function KpiCards({
       disabled: 0,
     };
     for (const channel of channels) {
-      result[gradeOfChannel(channel, thresholdMs)]++;
+      result[gradeOfChannel(channel)]++;
     }
     return result;
-  }, [channels, thresholdMs]);
+  }, [channels]);
 
   const cards: { key: KpiFilter; label: string; icon: typeof CheckCircle2; chip: string; value: number }[] = [
     ...GRADE_DEFS.map((def) => ({

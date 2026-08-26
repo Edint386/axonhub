@@ -112,6 +112,7 @@ function buildApiKeyQuery(permissions: { canViewUsers: boolean }) {
             loadBalanceStrategy
             traceStickyMode
             maxFirstTokenLatencyMs
+            countRealTrafficLatency
             quota {
               requests
               totalTokens
@@ -216,6 +217,7 @@ const UPDATE_APIKEY_PROFILES_MUTATION = `
           loadBalanceStrategy
           traceStickyMode
           maxFirstTokenLatencyMs
+          countRealTrafficLatency
           quota {
             requests
             totalTokens
@@ -326,6 +328,7 @@ const APIKEY_PROFILE_TEMPLATES_QUERY = `
             loadBalanceStrategy
             traceStickyMode
             maxFirstTokenLatencyMs
+            countRealTrafficLatency
             quota {
               requests
               totalTokens
@@ -405,6 +408,7 @@ const LOAD_APIKEY_PROFILE_TEMPLATE_MUTATION = `
           loadBalanceStrategy
           traceStickyMode
           maxFirstTokenLatencyMs
+          countRealTrafficLatency
           quota {
             requests
             totalTokens

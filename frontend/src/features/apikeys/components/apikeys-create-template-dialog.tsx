@@ -60,6 +60,7 @@ export function ApiKeyCreateTemplateDialog({ open, onOpenChange }: ApiKeyCreateT
         loadBalanceStrategy: 'default',
         traceStickyMode: 'default',
         maxFirstTokenLatencyMs: null,
+        countRealTrafficLatency: false,
         quota: null as FormValues['profile']['quota'],
       },
     }),
@@ -75,6 +76,18 @@ export function ApiKeyCreateTemplateDialog({ open, onOpenChange }: ApiKeyCreateT
   useEffect(() => {
     form.setValue('profile.name', watchName);
   }, [watchName, form]);
+
+  const maxFirstTokenLatencyMs = form.watch('profile.maxFirstTokenLatencyMs');
+  const latencyCeilingSet = typeof maxFirstTokenLatencyMs === 'number' && maxFirstTokenLatencyMs > 0;
+
+  // The real-traffic toggle only changes how the ceiling above is measured, so it
+  // is inoperative without one. Force it off rather than only disabling it, so the
+  // value we submit matches the switch the operator sees.
+  useEffect(() => {
+    if (!latencyCeilingSet && form.getValues('profile.countRealTrafficLatency')) {
+      form.setValue('profile.countRealTrafficLatency', false, { shouldDirty: true });
+    }
+  }, [latencyCeilingSet, form]);
 
   useEffect(() => {
     if (open) {
@@ -208,10 +221,7 @@ export function ApiKeyCreateTemplateDialog({ open, onOpenChange }: ApiKeyCreateT
                           </FormDescription>
                         </div>
                         <FormControl>
-                          <Select
-                            onValueChange={field.onChange}
-                            value={field.value || 'default'}
-                          >
+                          <Select onValueChange={field.onChange} value={field.value || 'default'}>
                             <SelectTrigger className='w-[140px]'>
                               <SelectValue placeholder={t('apikeys.profiles.loadBalancerStrategyPlaceholder')} />
                             </SelectTrigger>
@@ -251,7 +261,9 @@ export function ApiKeyCreateTemplateDialog({ open, onOpenChange }: ApiKeyCreateT
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value='default'>{t('apikeys.profiles.traceStickyModePlaceholder')}</SelectItem>
-                              <SelectItem value='prefer_previous_channel'>{t('system.retry.traceStickyMode.options.preferPreviousChannel')}</SelectItem>
+                              <SelectItem value='prefer_previous_channel'>
+                                {t('system.retry.traceStickyMode.options.preferPreviousChannel')}
+                              </SelectItem>
                               <SelectItem value='disabled'>{t('system.retry.traceStickyMode.options.disabled')}</SelectItem>
                             </SelectContent>
                           </Select>
@@ -284,6 +296,26 @@ export function ApiKeyCreateTemplateDialog({ open, onOpenChange }: ApiKeyCreateT
                         />
                       </FormControl>
                       <FormDescription>{t('apikeys.profiles.maxFirstTokenLatencyDescription')}</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='profile.countRealTrafficLatency'
+                  render={({ field }) => (
+                    <FormItem className='mt-4 max-w-sm space-y-0'>
+                      <div className='flex items-center gap-x-2'>
+                        <FormControl>
+                          <Switch checked={field.value === true} disabled={!latencyCeilingSet} onCheckedChange={field.onChange} />
+                        </FormControl>
+                        <FormLabel className='text-sm'>{t('apikeys.profiles.countRealTrafficLatency')}</FormLabel>
+                      </div>
+                      <FormDescription className='mt-1 text-xs'>
+                        {field.value === true
+                          ? t('apikeys.profiles.countRealTrafficLatencyHelpOn')
+                          : t('apikeys.profiles.countRealTrafficLatencyHelpOff')}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

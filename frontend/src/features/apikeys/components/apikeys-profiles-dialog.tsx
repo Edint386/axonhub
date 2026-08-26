@@ -268,6 +268,7 @@ export function ApiKeyProfilesDialog({ open, onOpenChange, onSubmit, loading = f
       loadBalanceStrategy: 'default',
       traceStickyMode: 'default',
       maxFirstTokenLatencyMs: null,
+      countRealTrafficLatency: false,
     });
   }, [appendProfile, profileFields]);
 
@@ -517,8 +518,19 @@ function ProfileCard({
   const isExcludeMode = channelTagsMatchMode === 'none';
   const quotaUsage = profileName ? quotaUsageByProfileName.get(profileName) : undefined;
   const currentQuota = form.watch(`profiles.${profileIndex}.quota`);
+  const maxFirstTokenLatencyMs = form.watch(`profiles.${profileIndex}.maxFirstTokenLatencyMs`);
+  const latencyCeilingSet = typeof maxFirstTokenLatencyMs === 'number' && maxFirstTokenLatencyMs > 0;
   const quotaUsagePeriod = (currentQuota?.period ?? quotaUsage?.quota?.period) as ApiKeyQuotaPeriod | null | undefined;
   const quotaUsageEnd = quotaUsage?.window.end ?? (quotaUsagePeriod?.type !== 'calendar_duration' ? new Date() : null);
+
+  // The real-traffic toggle only changes how the ceiling above is measured, so it
+  // is inoperative without one. Force it off rather than only disabling it, so the
+  // value we submit matches the switch the operator sees.
+  useEffect(() => {
+    if (!latencyCeilingSet && form.getValues(`profiles.${profileIndex}.countRealTrafficLatency`)) {
+      form.setValue(`profiles.${profileIndex}.countRealTrafficLatency`, false, { shouldDirty: true });
+    }
+  }, [latencyCeilingSet, form, profileIndex]);
 
   // Initialize local state from form value
   useEffect(() => {
@@ -1009,6 +1021,26 @@ function ProfileCard({
                     />
                   </FormControl>
                   <p className='text-muted-foreground text-xs'>{t('apikeys.profiles.maxFirstTokenLatencyDescription')}</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name={`profiles.${profileIndex}.countRealTrafficLatency`}
+              render={({ field }) => (
+                <FormItem className='mt-4 max-w-sm space-y-0'>
+                  <div className='flex items-center gap-x-2'>
+                    <FormControl>
+                      <Switch checked={field.value === true} disabled={!latencyCeilingSet} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <FormLabel className='text-sm'>{t('apikeys.profiles.countRealTrafficLatency')}</FormLabel>
+                  </div>
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    {field.value === true
+                      ? t('apikeys.profiles.countRealTrafficLatencyHelpOn')
+                      : t('apikeys.profiles.countRealTrafficLatencyHelpOff')}
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

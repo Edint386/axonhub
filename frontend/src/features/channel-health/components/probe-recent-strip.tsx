@@ -48,7 +48,7 @@ function ProbeBar({ run, status, dateLocale }: { run: ActiveChannelHealthProbeRu
  * Recent probe strip for a channel — one graded bar per run, oldest first.
  * The bar list answers "近期表现如何" without leaving the matrix.
  */
-export function ProbeRecentStrip({ channel, thresholdMs }: { channel: ChannelHealthProbeChannel; thresholdMs: number }) {
+export function ProbeRecentStrip({ channel }: { channel: ChannelHealthProbeChannel }) {
   const { t, i18n } = useTranslation();
   const runs = channel.recentRuns ?? [];
   if (runs.length === 0) {
@@ -58,7 +58,7 @@ export function ProbeRecentStrip({ channel, thresholdMs }: { channel: ChannelHea
   return (
     <div className='flex h-9 items-end justify-center gap-[2px]'>
       {runs.map((run) => (
-        <ProbeBar key={run.id} run={run} status={gradeOfRun(run, thresholdMs)} dateLocale={dateLocale} />
+        <ProbeBar key={run.id} run={run} status={gradeOfRun(run)} dateLocale={dateLocale} />
       ))}
     </div>
   );

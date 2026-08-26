@@ -20,6 +20,7 @@ export const formSchemaFactory = (t: (key: string) => string) =>
         loadBalanceStrategy: z.string().optional().nullable(),
         traceStickyMode: z.string().optional().nullable(),
         maxFirstTokenLatencyMs: z.number().int().positive().optional().nullable(),
+        countRealTrafficLatency: z.boolean().optional().nullable(),
         quota: z
           .object({
             requests: z.number().int().positive().optional().nullable(),

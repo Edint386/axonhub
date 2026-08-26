@@ -62,8 +62,24 @@ export function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-/** Grade a single probe run by its latency against the policy threshold. */
-export function gradeOfRun(run: ActiveChannelHealthProbeRun, thresholdMs: number): ProbeBarStatus {
+/**
+ * Built-in latency bands for health grading, in milliseconds.
+ *
+ * These are deliberately constants and NOT derived from the policy's latency
+ * setting. That setting is a routing ceiling the operator chooses for business
+ * reasons -- with it at 600s every channel that answered at all graded as healthy,
+ * so the grade carried no information. "Is this channel in good shape" is a
+ * question the system answers on its own; "may this key use it" is the operator's
+ * to answer. Keeping them as one number conflated the two.
+ *
+ * One band set covers both streaming and non-streaming: the metric differs (TTFT
+ * vs TTFB) but these bounds are loose enough to be meaningful for either.
+ */
+export const HEALTH_LATENCY_MAX_MS = 10_000;
+export const FLUENT_LATENCY_MAX_MS = 30_000;
+
+/** Grade a single probe run by its latency against the built-in bands. */
+export function gradeOfRun(run: ActiveChannelHealthProbeRun): ProbeBarStatus {
   if (run.status === 'skipped') {
     return 'skipped';
   }
@@ -77,10 +93,10 @@ export function gradeOfRun(run: ActiveChannelHealthProbeRun, thresholdMs: number
   if (first == null) {
     return 'unknown';
   }
-  if (first <= thresholdMs * 0.5) {
+  if (first <= HEALTH_LATENCY_MAX_MS) {
     return 'health';
   }
-  if (first <= thresholdMs) {
+  if (first <= FLUENT_LATENCY_MAX_MS) {
     return 'fluent';
   }
   return 'degraded';
@@ -130,7 +146,7 @@ export function channelP95(channel: ChannelHealthProbeChannel): number | null {
 }
 
 /** Aggregate the channel-level grade from the recent probe strip. */
-export function gradeOfChannel(channel: ChannelHealthProbeChannel, thresholdMs: number): ChannelGrade {
+export function gradeOfChannel(channel: ChannelHealthProbeChannel): ChannelGrade {
   if (!channel.enabled) {
     return 'disabled';
   }
@@ -164,10 +180,10 @@ export function gradeOfChannel(channel: ChannelHealthProbeChannel, thresholdMs: 
     return 'unknown';
   }
   const p95 = channelP95(channel);
-  if (p95 != null && p95 > thresholdMs) {
+  if (p95 != null && p95 > FLUENT_LATENCY_MAX_MS) {
     return 'degraded';
   }
-  if (p95 != null && p95 > thresholdMs * 0.5) {
+  if (p95 != null && p95 > HEALTH_LATENCY_MAX_MS) {
     return 'fluent';
   }
   return 'health';

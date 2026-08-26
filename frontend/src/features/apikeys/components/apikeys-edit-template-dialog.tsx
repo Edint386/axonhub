@@ -77,6 +77,7 @@ export function ApiKeyEditTemplateDialog({ open, onOpenChange, template }: ApiKe
         loadBalanceStrategy: normalizeRoutingPolicyValue(profile?.loadBalanceStrategy),
         traceStickyMode: normalizeRoutingPolicyValue(profile?.traceStickyMode),
         maxFirstTokenLatencyMs: profile?.maxFirstTokenLatencyMs ?? null,
+        countRealTrafficLatency: profile?.countRealTrafficLatency ?? false,
         quota: profile?.quota
           ? {
               requests: profile.quota.requests ?? null,
