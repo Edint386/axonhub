@@ -9,19 +9,26 @@ function read(relativePath) {
   return readFileSync(join(srcRoot, relativePath), 'utf8');
 }
 
-test('redesigned request usage column retains mobile defaults and cache-hit color tiers', () => {
+test('request cache columns keep the split layout, mobile defaults and cache-hit color tiers', () => {
   const columns = read('features/requests/components/requests-columns.tsx');
 
   assert.match(columns, /DEFAULT_HIDDEN_COLUMN_IDS/);
   assert.match(columns, /DEFAULT_MOBILE_HIDDEN_COLUMN_IDS/);
-  assert.match(columns, /id:\s*'usage'/);
-  assert.match(columns, /const readCacheTokens = usageLog\.promptCachedTokens/);
-  assert.match(columns, /const writeCacheTokens = usageLog\.promptWriteCachedTokens/);
+  // Upstream #2193 split the combined `usage` cell into three columns; keep them split.
+  assert.match(columns, /id:\s*'tokens'/);
+  assert.match(columns, /id:\s*'readCache'/);
+  assert.match(columns, /id:\s*'writeCache'/);
+  assert.match(columns, /const cachedTokens = usageLog\.promptCachedTokens/);
+  assert.match(columns, /const writeCachedTokens = usageLog\.promptWriteCachedTokens/);
+  // Local customization: tiered hit-rate colors, repeatedly dropped by upstream merges.
   assert.match(columns, /function getCacheHitRateColor\(rate: number\): string/);
   assert.match(columns, /rate >= 98[\s\S]*rate >= 90[\s\S]*rate >= 75[\s\S]*rate >= 50[\s\S]*rate >= 20/);
   assert.match(columns, /const isLowHitRate = hitRate < 80 && promptTokens >= 40000/);
-  assert.match(columns, /isLowHitRate\s*\? 'font-medium text-red-600 dark:text-red-400'\s*:\s*getCacheHitRateColor\(hitRate\)/);
+  assert.match(columns, /isLowHitRate\s*\?\s*'font-medium text-red-600 dark:text-red-400'\s*:\s*getCacheHitRateColor\(hitRate\)/);
+  assert.match(columns, /className=\{hitRateClassName\}/);
   assert.match(columns, /requests\.columns\.cacheHitRate/);
+  // The grey fallback is upstream's binary behaviour — it must not come back on the hit-rate line.
+  assert.doesNotMatch(columns, /isLowHitRate\s*\?\s*'font-medium text-red-600 dark:text-red-400'\s*:\s*'text-muted-foreground'/);
 });
 
 test('request retry process fetches and displays failed-attempt durations', () => {
