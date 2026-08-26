@@ -108,6 +108,18 @@ export function ApiKeyEditTemplateDialog({ open, onOpenChange, template }: ApiKe
     defaultValues,
   });
 
+  const maxFirstTokenLatencyMs = form.watch('profile.maxFirstTokenLatencyMs');
+  const latencyCeilingSet = typeof maxFirstTokenLatencyMs === 'number' && maxFirstTokenLatencyMs > 0;
+
+  // The real-traffic toggle only changes how the ceiling above is measured, so it
+  // is inoperative without one. Force it off rather than only disabling it, so the
+  // value we submit matches the switch the operator sees.
+  useEffect(() => {
+    if (!latencyCeilingSet && form.getValues('profile.countRealTrafficLatency')) {
+      form.setValue('profile.countRealTrafficLatency', false, { shouldDirty: true });
+    }
+  }, [latencyCeilingSet, form]);
+
   const watchName = form.watch('name');
   useEffect(() => {
     form.setValue('profile.name', watchName);
@@ -290,6 +302,53 @@ export function ApiKeyEditTemplateDialog({ open, onOpenChange, template }: ApiKe
                             </Select>
                           </FormControl>
                         </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className='border-t pt-6'>
+                  <FormField
+                    control={form.control}
+                    name='profile.maxFirstTokenLatencyMs'
+                    render={({ field }) => (
+                      <FormItem className='max-w-sm'>
+                        <FormLabel>{t('apikeys.profiles.maxFirstTokenLatency')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={1}
+                            step={1}
+                            value={(field.value as number | null | undefined) ?? ''}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              field.onChange(value === '' ? null : Number(value));
+                            }}
+                            placeholder={t('apikeys.profiles.maxFirstTokenLatencyPlaceholder')}
+                          />
+                        </FormControl>
+                        <FormDescription>{t('apikeys.profiles.maxFirstTokenLatencyDescription')}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='profile.countRealTrafficLatency'
+                    render={({ field }) => (
+                      <FormItem className='mt-4 max-w-sm space-y-0'>
+                        <div className='flex items-center gap-x-2'>
+                          <FormControl>
+                            <Switch checked={field.value === true} disabled={!latencyCeilingSet} onCheckedChange={field.onChange} />
+                          </FormControl>
+                          <FormLabel className='text-sm'>{t('apikeys.profiles.countRealTrafficLatency')}</FormLabel>
+                        </div>
+                        <FormDescription className='mt-1 text-xs'>
+                          {field.value === true
+                            ? t('apikeys.profiles.countRealTrafficLatencyHelpOn')
+                            : t('apikeys.profiles.countRealTrafficLatencyHelpOff')}
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

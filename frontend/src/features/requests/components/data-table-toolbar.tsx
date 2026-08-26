@@ -13,13 +13,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { AutoRefreshControl } from '@/components/auto-refresh-control';
+import { DataTableColumnOrderDialog } from '@/components/data-table-column-order-dialog';
 import { DataTableFacetedFilter } from '@/components/data-table-faceted-filter';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { useApiKeys } from '@/features/apikeys/data';
 import { useMe } from '@/features/auth/data/auth';
 import { useAllChannelSummarys } from '@/features/channels/data/channels';
 import { RequestStatus } from '../data/schema';
-import { DataTableColumnOrderDialog } from '@/components/data-table-column-order-dialog';
 import { DataTableViewOptions } from './data-table-view-options';
 import { MODEL_ID_COLUMN } from './requests-columns';
 
@@ -330,6 +330,13 @@ export function DataTableToolbar<TData>({
     {
       value: 'playground',
       label: t('requests.source.playground'),
+    },
+    {
+      // Scheduled channel health probes run the full request pipeline, so they land
+      // here as normal records with source=test. Without this option they were mixed
+      // into the list with no way to include or exclude them.
+      value: 'test',
+      label: t('requests.source.test'),
     },
   ];
 
