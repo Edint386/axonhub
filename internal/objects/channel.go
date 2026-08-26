@@ -231,11 +231,20 @@ type ChannelSettings struct {
 // switch; channel settings only provide the per-channel interval.
 type ChannelHealthProbeSettings struct {
 	IntervalMinutes int `json:"intervalMinutes"`
+
+	// ProbeEnabled controls whether this channel is included in SCHEDULED health
+	// probing. It is deliberately a pointer: HealthProbe is a stored JSON blob and
+	// existing rows contain only {"intervalMinutes":N}. A plain bool would
+	// unmarshal to false and silently stop probing every existing channel, so a
+	// nil value is treated as enabled (see Normalize and IsProbeEnabled). Note this
+	// gates scheduled probing only; manual probes always run.
+	ProbeEnabled *bool `json:"probeEnabled,omitempty"`
 }
 
 const DefaultChannelHealthProbeIntervalMinutes = 5
 
-// Normalize fills the default cadence for a channel probe setting.
+// Normalize fills the default cadence for a channel probe setting and defaults a
+// nil ProbeEnabled to true so existing rows (which lack the field) keep probing.
 func (s *ChannelHealthProbeSettings) Normalize() {
 	if s == nil {
 		return
@@ -245,6 +254,21 @@ func (s *ChannelHealthProbeSettings) Normalize() {
 		s.IntervalMinutes = DefaultChannelHealthProbeIntervalMinutes
 	}
 
+	if s.ProbeEnabled == nil {
+		enabled := true
+		s.ProbeEnabled = &enabled
+	}
+}
+
+// IsProbeEnabled reports whether scheduled health probing is enabled for the
+// channel. A nil receiver and a nil ProbeEnabled both mean enabled, so call sites
+// cannot accidentally treat an unset field as opted out.
+func (s *ChannelHealthProbeSettings) IsProbeEnabled() bool {
+	if s == nil || s.ProbeEnabled == nil {
+		return true
+	}
+
+	return *s.ProbeEnabled
 }
 
 type RetryableErrorPattern struct {

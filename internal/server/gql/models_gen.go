@@ -200,6 +200,7 @@ type ChannelHealthProbeChannel struct {
 	ChannelStatus   string       `json:"channelStatus"`
 	Priority        int          `json:"priority"`
 	Enabled         bool         `json:"enabled"`
+	ProbeEnabled    bool         `json:"probeEnabled"`
 	IntervalMinutes int          `json:"intervalMinutes"`
 	PrimaryModelID  *string      `json:"primaryModelID,omitempty"`
 	// Multiplier applied to this channel's base model prices. Defaults to 1 when unset.

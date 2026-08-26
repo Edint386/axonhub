@@ -444,6 +444,7 @@ type ComplexityRoot struct {
 		Models               func(childComplexity int) int
 		PrimaryModelID       func(childComplexity int) int
 		Priority             func(childComplexity int) int
+		ProbeEnabled         func(childComplexity int) int
 		RecentRuns           func(childComplexity int) int
 	}
 
@@ -4056,6 +4057,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelHealthProbeChannel.Priority(childComplexity), true
+	case "ChannelHealthProbeChannel.probeEnabled":
+		if e.complexity.ChannelHealthProbeChannel.ProbeEnabled == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeChannel.ProbeEnabled(childComplexity), true
 	case "ChannelHealthProbeChannel.recentRuns":
 		if e.complexity.ChannelHealthProbeChannel.RecentRuns == nil {
 			break
@@ -23198,6 +23205,35 @@ func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_enabled(_ con
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelHealthProbeChannel_probeEnabled(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeChannel_probeEnabled,
+		func(ctx context.Context) (any, error) {
+			return obj.ProbeEnabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_probeEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelHealthProbeChannel_intervalMinutes(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -40621,6 +40657,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelHealthProbeSettin
 				return ec.fieldContext_ChannelHealthProbeChannel_priority(ctx, field)
 			case "enabled":
 				return ec.fieldContext_ChannelHealthProbeChannel_enabled(ctx, field)
+			case "probeEnabled":
+				return ec.fieldContext_ChannelHealthProbeChannel_probeEnabled(ctx, field)
 			case "intervalMinutes":
 				return ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes(ctx, field)
 			case "primaryModelID":
@@ -50423,6 +50461,8 @@ func (ec *executionContext) fieldContext_Query_channelHealthProbeOverview(_ cont
 				return ec.fieldContext_ChannelHealthProbeChannel_priority(ctx, field)
 			case "enabled":
 				return ec.fieldContext_ChannelHealthProbeChannel_enabled(ctx, field)
+			case "probeEnabled":
+				return ec.fieldContext_ChannelHealthProbeChannel_probeEnabled(ctx, field)
 			case "intervalMinutes":
 				return ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes(ctx, field)
 			case "primaryModelID":
@@ -89357,7 +89397,7 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbeSettingsInput(
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"channelID", "intervalMinutes"}
+	fieldsInOrder := [...]string{"channelID", "intervalMinutes", "probeEnabled"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -89378,6 +89418,13 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbeSettingsInput(
 				return it, err
 			}
 			it.IntervalMinutes = data
+		case "probeEnabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("probeEnabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProbeEnabled = data
 		}
 	}
 
@@ -98215,6 +98262,11 @@ func (ec *executionContext) _ChannelHealthProbeChannel(ctx context.Context, sel 
 			}
 		case "enabled":
 			out.Values[i] = ec._ChannelHealthProbeChannel_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "probeEnabled":
+			out.Values[i] = ec._ChannelHealthProbeChannel_probeEnabled(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

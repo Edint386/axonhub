@@ -71,6 +71,7 @@ func NewChannelHealthProbeService(params ChannelHealthProbeServiceParams) *Chann
 type UpdateChannelHealthProbeSettingsInput struct {
 	ChannelID       objects.GUID
 	IntervalMinutes int
+	ProbeEnabled    bool
 }
 
 type RunChannelHealthProbeInput struct {
@@ -139,6 +140,7 @@ type ChannelHealthProbeChannelOverview struct {
 	ChannelStatus        string
 	Priority             int
 	Enabled              bool
+	ProbeEnabled         bool
 	IntervalMinutes      int
 	ModelPriceMultiplier float64
 	PrimaryModelID       *string
@@ -331,6 +333,7 @@ func (svc *ChannelHealthProbeService) UpdateSettings(
 	}
 	probeSettings := &objects.ChannelHealthProbeSettings{
 		IntervalMinutes: input.IntervalMinutes,
+		ProbeEnabled:    &input.ProbeEnabled,
 	}
 
 	_, err := svc.channelService.GetChannel(ctx, input.ChannelID.ID)
@@ -797,10 +800,12 @@ func buildChannelHealthProbeOverview(
 ) *ChannelHealthProbeChannelOverview {
 	enabled := ch.Status == channel.StatusEnabled
 	interval := objects.DefaultChannelHealthProbeIntervalMinutes
+	probeEnabled := true
 	if ch.Settings != nil && ch.Settings.HealthProbe != nil {
 		settings := *ch.Settings.HealthProbe
 		settings.Normalize()
 		interval = settings.IntervalMinutes
+		probeEnabled = settings.IsProbeEnabled()
 	}
 
 	modelIDs := make([]string, 0, len(globalModels))
@@ -880,6 +885,7 @@ func buildChannelHealthProbeOverview(
 		ChannelStatus:        ch.Status.String(),
 		Priority:             ch.Priority,
 		Enabled:              enabled,
+		ProbeEnabled:         probeEnabled,
 		IntervalMinutes:      interval,
 		ModelPriceMultiplier: ch.ModelPriceMultiplier,
 		PrimaryModelID:       primaryModelID,
@@ -992,6 +998,12 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 		if ch.Settings != nil && ch.Settings.HealthProbe != nil {
 			settings = *ch.Settings.HealthProbe
 			settings.Normalize()
+		}
+		// Scheduled probing only: an operator can opt a channel out here without
+		// disabling the channel (which would also kill its real traffic). Manual
+		// probes via CreateManualRun are unaffected.
+		if !settings.IsProbeEnabled() {
+			continue
 		}
 		if settings.IntervalMinutes < MinChannelHealthProbeIntervalMinutes ||
 			settings.IntervalMinutes > MaxChannelHealthProbeIntervalMinutes {

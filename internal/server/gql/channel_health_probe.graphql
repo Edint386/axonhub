@@ -32,6 +32,7 @@ type ChannelHealthProbeChannel {
   channelStatus: String!
   priority: Int!
   enabled: Boolean!
+  probeEnabled: Boolean!
   intervalMinutes: Int!
   primaryModelID: String
   """Multiplier applied to this channel's base model prices. Defaults to 1 when unset."""
@@ -65,6 +66,7 @@ type ChannelHealthProbeHistoryPage {
 input UpdateChannelHealthProbeSettingsInput {
   channelID: ID!
   intervalMinutes: Int!
+  probeEnabled: Boolean!
 }
 
 input UpdateChannelHealthProbePolicyInput {

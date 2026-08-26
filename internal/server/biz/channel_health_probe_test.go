@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -605,4 +606,120 @@ func createHealthProbeTestRequest(
 		SetCreatedAt(createdAt).
 		SetUpdatedAt(createdAt).
 		SaveX(ctx)
+}
+
+func TestChannelHealthProbeSettings_NormalizeDefaultsProbeEnabledToTrue(t *testing.T) {
+	// A settings blob persisted before probeEnabled existed contains only
+	// intervalMinutes; it must normalize to enabled=true so existing channels
+	// keep being probed.
+	var raw = []byte(`{"intervalMinutes":9}`)
+	var settings objects.ChannelHealthProbeSettings
+	require.NoError(t, json.Unmarshal(raw, &settings))
+	require.Nil(t, settings.ProbeEnabled)
+	require.True(t, settings.IsProbeEnabled())
+
+	settings.Normalize()
+	require.NotNil(t, settings.ProbeEnabled)
+	require.True(t, *settings.ProbeEnabled)
+	require.True(t, settings.IsProbeEnabled())
+	require.Equal(t, 9, settings.IntervalMinutes)
+
+	// A nil receiver is treated as enabled.
+	var nilSettings *objects.ChannelHealthProbeSettings
+	require.True(t, nilSettings.IsProbeEnabled())
+
+	// An explicit false is honored.
+	disabled := false
+	off := objects.ChannelHealthProbeSettings{IntervalMinutes: 5, ProbeEnabled: &disabled}
+	off.Normalize()
+	require.False(t, off.IsProbeEnabled())
+}
+
+func TestChannelHealthProbeService_DueTargetsSkipsProbeDisabledChannel(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-optout?mode=memory&_fk=0")
+	defer client.Close()
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+
+	probeOn := true
+	probeOff := false
+	enabledCh := createHealthProbeTestChannel(t, ctx, client, "probe-on", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
+		IntervalMinutes: 5,
+		ProbeEnabled:    &probeOn,
+	})
+	optedOut := createHealthProbeTestChannel(t, ctx, client, "probe-off", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
+		IntervalMinutes: 5,
+		ProbeEnabled:    &probeOff,
+	})
+
+	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
+	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: true}}}
+	targets, err := svc.DueTargetsWithPolicy(ctx, time.Date(2026, 8, 12, 2, 30, 10, 0, time.UTC), policy)
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	require.Equal(t, enabledCh.ID, targets[0].ChannelID)
+
+	// The opted-out channel must never appear as a scheduled target.
+	for _, target := range targets {
+		require.NotEqual(t, optedOut.ID, target.ChannelID)
+	}
+
+	// A manual probe on the opted-out channel must still work: the model is
+	// supported, so CreateManualRun succeeds despite probeEnabled=false. It needs
+	// a channelService to load the channel, so build one for this assertion.
+	manualSvc := &ChannelHealthProbeService{
+		AbstractService: &AbstractService{db: client},
+		channelService:  newTestChannelService(client),
+	}
+	run, err := manualSvc.CreateManualRun(ctx, RunChannelHealthProbeInput{
+		ChannelID: objects.GUID{Type: "Channel", ID: optedOut.ID},
+		ModelID:   "gpt-4",
+		Stream:    true,
+	}, time.Now().UTC())
+	require.NoError(t, err)
+	require.NotNil(t, run)
+}
+
+func TestChannelHealthProbeService_UpdateSettingsRoundTripsProbeEnabled(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-roundtrip?mode=memory&_fk=0")
+	defer client.Close()
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+
+	channelSvc := newTestChannelService(client)
+	defer channelSvc.Stop()
+
+	probeOn := true
+	ch := createHealthProbeTestChannel(t, ctx, client, "roundtrip", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
+		IntervalMinutes: 5,
+		ProbeEnabled:    &probeOn,
+	})
+
+	probeSvc := &ChannelHealthProbeService{
+		AbstractService: &AbstractService{db: client},
+		channelService:  channelSvc,
+	}
+
+	overview, err := probeSvc.UpdateSettings(ctx, UpdateChannelHealthProbeSettingsInput{
+		ChannelID:       objects.GUID{Type: "Channel", ID: ch.ID},
+		IntervalMinutes: 15,
+		ProbeEnabled:    false,
+	})
+	require.NoError(t, err)
+	require.False(t, overview.ProbeEnabled)
+	require.Equal(t, 15, overview.IntervalMinutes)
+
+	// Persisted flag round-trips through the stored settings blob.
+	reloaded := client.Channel.GetX(ctx, ch.ID)
+	require.NotNil(t, reloaded.Settings)
+	require.NotNil(t, reloaded.Settings.HealthProbe)
+	require.NotNil(t, reloaded.Settings.HealthProbe.ProbeEnabled)
+	require.False(t, *reloaded.Settings.HealthProbe.ProbeEnabled)
+
+	// Turning it back on round-trips too.
+	overview, err = probeSvc.UpdateSettings(ctx, UpdateChannelHealthProbeSettingsInput{
+		ChannelID:       objects.GUID{Type: "Channel", ID: ch.ID},
+		IntervalMinutes: 15,
+		ProbeEnabled:    true,
+	})
+	require.NoError(t, err)
+	require.True(t, overview.ProbeEnabled)
 }
