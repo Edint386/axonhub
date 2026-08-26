@@ -33,7 +33,6 @@ type ChannelHealthProbeChannel {
   priority: Int!
   enabled: Boolean!
   probeEnabled: Boolean!
-  intervalMinutes: Int!
   primaryModelID: String
   """Multiplier applied to this channel's base model prices. Defaults to 1 when unset."""
   modelPriceMultiplier: Float!
@@ -44,6 +43,10 @@ type ChannelHealthProbeChannel {
 
 type ChannelHealthProbePolicy {
   enabled: Boolean!
+  """Global probe cadence in minutes; every channel shares it."""
+  intervalMinutes: Int!
+  """Global streaming mode: TTFT is measured when true, TTFB when false."""
+  stream: Boolean!
   acceptableLatencyMs: Int!
   extraChannels: Int!
   p95LookbackHours: Int!
@@ -55,7 +58,6 @@ type ChannelHealthProbePolicy {
 type ActiveHealthProbeModelSetting {
   modelID: String!
   enabled: Boolean!
-  stream: Boolean!
 }
 
 type ChannelHealthProbeHistoryPage {
@@ -65,12 +67,13 @@ type ChannelHealthProbeHistoryPage {
 
 input UpdateChannelHealthProbeSettingsInput {
   channelID: ID!
-  intervalMinutes: Int!
   probeEnabled: Boolean!
 }
 
 input UpdateChannelHealthProbePolicyInput {
   enabled: Boolean!
+  intervalMinutes: Int!
+  stream: Boolean!
   acceptableLatencyMs: Int!
   extraChannels: Int!
   p95LookbackHours: Int!
@@ -80,7 +83,6 @@ input UpdateChannelHealthProbePolicyInput {
 input ActiveHealthProbeModelSettingInput {
   modelID: String!
   enabled: Boolean!
-  stream: Boolean!
 }
 
 input RunChannelHealthProbeInput {

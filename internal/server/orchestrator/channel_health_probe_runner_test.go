@@ -34,6 +34,33 @@ func TestRunPriorityProbeTargetsStopsAfterConfiguredFallbacks(t *testing.T) {
 	require.Equal(t, []biz.ChannelHealthProbeTarget{targets[3], targets[4]}, skipped)
 }
 
+func TestRunPriorityProbeTargetsStopsWhenTheTopChannelIsAcceptable(t *testing.T) {
+	// The reported symptom: with one spare configured and a threshold loose enough that
+	// the highest-priority channel always passes, only two channels may be probed and
+	// every remaining one must be reported as skipped.
+	targets := []biz.ChannelHealthProbeTarget{
+		{ChannelID: 1},
+		{ChannelID: 2},
+		{ChannelID: 3},
+		{ChannelID: 4},
+		{ChannelID: 5},
+		{ChannelID: 6},
+	}
+	executed := make([]int, 0)
+	skipped := runPriorityProbeTargets(t.Context(), targets, 600_000, 1, func(
+		_ context.Context,
+		target biz.ChannelHealthProbeTarget,
+	) (*biz.ChannelHealthProbeRunRecord, bool) {
+		executed = append(executed, target.ChannelID)
+		latency := 5_000.0
+
+		return &biz.ChannelHealthProbeRunRecord{Status: "healthy", Stream: true, TTFTMs: &latency}, true
+	})
+
+	require.Equal(t, []int{1, 2}, executed)
+	require.Equal(t, targets[2:], skipped)
+}
+
 func TestRunPriorityProbeTargetsStopsWhenAnotherInstanceOwnsGroup(t *testing.T) {
 	targets := []biz.ChannelHealthProbeTarget{{ChannelID: 1}, {ChannelID: 2}}
 	executed := 0

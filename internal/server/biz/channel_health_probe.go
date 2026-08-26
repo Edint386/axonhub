@@ -19,7 +19,6 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/predicate"
-	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/scopes"
 )
@@ -69,9 +68,8 @@ func NewChannelHealthProbeService(params ChannelHealthProbeServiceParams) *Chann
 }
 
 type UpdateChannelHealthProbeSettingsInput struct {
-	ChannelID       objects.GUID
-	IntervalMinutes int
-	ProbeEnabled    bool
+	ChannelID    objects.GUID
+	ProbeEnabled bool
 }
 
 type RunChannelHealthProbeInput struct {
@@ -82,6 +80,8 @@ type RunChannelHealthProbeInput struct {
 
 type UpdateChannelHealthProbePolicyInput struct {
 	Enabled             bool
+	IntervalMinutes     int
+	Stream              bool
 	AcceptableLatencyMs int
 	ExtraChannels       int
 	P95LookbackHours    int
@@ -90,6 +90,8 @@ type UpdateChannelHealthProbePolicyInput struct {
 
 type ChannelHealthProbePolicy struct {
 	Enabled                      bool
+	IntervalMinutes              int
+	Stream                       bool
 	AcceptableLatencyMs          int
 	ExtraChannels                int
 	P95LookbackHours             int
@@ -141,7 +143,6 @@ type ChannelHealthProbeChannelOverview struct {
 	Priority             int
 	Enabled              bool
 	ProbeEnabled         bool
-	IntervalMinutes      int
 	ModelPriceMultiplier float64
 	PrimaryModelID       *string
 	RecentRuns           []*ChannelHealthProbeRunRecord
@@ -206,6 +207,8 @@ func (svc *ChannelHealthProbeService) Policy(ctx context.Context) (*ChannelHealt
 	}
 	overview := &ChannelHealthProbePolicy{
 		Enabled:             policy.Enabled,
+		IntervalMinutes:     policy.IntervalMinutes,
+		Stream:              policy.Stream,
 		AcceptableLatencyMs: policy.AcceptableLatencyMs,
 		ExtraChannels:       policy.ExtraChannels,
 		P95LookbackHours:    policy.P95LookbackHours,
@@ -286,6 +289,8 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 	}
 	policy := ActiveHealthProbeScanSetting{
 		Enabled:             input.Enabled,
+		IntervalMinutes:     input.IntervalMinutes,
+		Stream:              input.Stream,
 		AcceptableLatencyMs: input.AcceptableLatencyMs,
 		ExtraChannels:       input.ExtraChannels,
 		P95LookbackHours:    input.P95LookbackHours,
@@ -309,14 +314,6 @@ func normalizeAndValidateChannelHealthProbeSettings(
 	}
 
 	settings.Normalize()
-	if settings.IntervalMinutes < MinChannelHealthProbeIntervalMinutes ||
-		settings.IntervalMinutes > MaxChannelHealthProbeIntervalMinutes {
-		return fmt.Errorf(
-			"health probe interval must be between %d and %d minutes",
-			MinChannelHealthProbeIntervalMinutes,
-			MaxChannelHealthProbeIntervalMinutes,
-		)
-	}
 
 	return nil
 }
@@ -332,8 +329,7 @@ func (svc *ChannelHealthProbeService) UpdateSettings(
 		return nil, err
 	}
 	probeSettings := &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: input.IntervalMinutes,
-		ProbeEnabled:    &input.ProbeEnabled,
+		ProbeEnabled: &input.ProbeEnabled,
 	}
 
 	_, err := svc.channelService.GetChannel(ctx, input.ChannelID.ID)
@@ -417,7 +413,7 @@ func (svc *ChannelHealthProbeService) Overview(ctx context.Context) ([]*ChannelH
 	}
 	result := make([]*ChannelHealthProbeChannelOverview, 0, len(channels))
 	for _, ch := range channels {
-		result = append(result, buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models))
+		result = append(result, buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models, policy.Stream))
 	}
 	return result, nil
 }
@@ -442,7 +438,7 @@ func (svc *ChannelHealthProbeService) overviewForChannel(
 	if err != nil {
 		return nil, err
 	}
-	return buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models), nil
+	return buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models, policy.Stream), nil
 }
 
 // recentRunsByChannel returns the latest channelHealthProbeRecentRunsLimit runs
@@ -718,57 +714,6 @@ func activeHealthProbeModelMap(models []ActiveHealthProbeModelSetting) map[strin
 	return result
 }
 
-// latestRealRequestActivityByChannelAndModel returns the start time of the
-// latest non-test request that selected each channel/request-model pair. Test
-// requests are excluded because manual and scheduled probes are tracked in the
-// dedicated health-probe table.
-func (svc *ChannelHealthProbeService) latestRealRequestActivityByChannelAndModel(
-	ctx context.Context,
-	channelIDs []int,
-	since time.Time,
-) (map[string]time.Time, error) {
-	if len(channelIDs) == 0 {
-		return map[string]time.Time{}, nil
-	}
-
-	var latestIDs []latestChannelHealthRealRequestID
-	err := svc.entFromContext(ctx).Request.Query().
-		Where(
-			request.ChannelIDIn(channelIDs...),
-			request.SourceNEQ(request.SourceTest),
-			request.CreatedAtGTE(since),
-		).
-		GroupBy(request.FieldChannelID, request.FieldModelID).
-		Aggregate(func(selector *entsql.Selector) string {
-			return entsql.As(entsql.Max(selector.C(request.FieldID)), "latest_id")
-		}).
-		Scan(ctx, &latestIDs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query latest real channel request IDs: %w", err)
-	}
-
-	ids := make([]int, 0, len(latestIDs))
-	for _, row := range latestIDs {
-		ids = append(ids, row.LatestID)
-	}
-	if len(ids) == 0 {
-		return map[string]time.Time{}, nil
-	}
-
-	requests, err := svc.entFromContext(ctx).Request.Query().
-		Where(request.IDIn(ids...)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load latest real channel requests: %w", err)
-	}
-
-	result := make(map[string]time.Time, len(requests))
-	for _, req := range requests {
-		result[channelHealthProbeModelKey(req.ChannelID, req.ModelID)] = req.CreatedAt
-	}
-	return result, nil
-}
-
 func isRealProbeModelSupported(ch *ent.Channel, modelID string) bool {
 	if strings.TrimSpace(ch.DefaultTestModel) == modelID {
 		return true
@@ -797,14 +742,13 @@ func buildChannelHealthProbeOverview(
 	metrics map[string]channelHealthProbeModelMetrics,
 	recentRuns []*ChannelHealthProbeRunRecord,
 	globalModels []ActiveHealthProbeModelSetting,
+	stream bool,
 ) *ChannelHealthProbeChannelOverview {
 	enabled := ch.Status == channel.StatusEnabled
-	interval := objects.DefaultChannelHealthProbeIntervalMinutes
 	probeEnabled := true
 	if ch.Settings != nil && ch.Settings.HealthProbe != nil {
 		settings := *ch.Settings.HealthProbe
 		settings.Normalize()
-		interval = settings.IntervalMinutes
 		probeEnabled = settings.IsProbeEnabled()
 	}
 
@@ -836,7 +780,6 @@ func buildChannelHealthProbeOverview(
 			}
 		}
 		enabledModel := globalSetting.Enabled
-		stream := globalSetting.Stream
 		latestRun := latestRuns[channelHealthProbeModelKey(ch.ID, modelID)]
 		metric := metrics[channelHealthProbeModelKey(ch.ID, modelID)]
 		var firstTokenMs *float64
@@ -886,7 +829,6 @@ func buildChannelHealthProbeOverview(
 		Priority:             ch.Priority,
 		Enabled:              enabled,
 		ProbeEnabled:         probeEnabled,
-		IntervalMinutes:      interval,
 		ModelPriceMultiplier: ch.ModelPriceMultiplier,
 		PrimaryModelID:       primaryModelID,
 		RecentRuns:           recentRuns,
@@ -965,6 +907,22 @@ func (svc *ChannelHealthProbeService) DueTargets(
 	return svc.DueTargetsWithPolicy(ctx, now, policy)
 }
 
+// DueTargetsWithPolicy returns EVERY eligible channel/model pair for the current
+// schedule bucket, ordered by channel priority descending.
+//
+// It deliberately does NOT filter out channels that were probed recently. The
+// priority chain in the orchestrator walks this list and stops after the first
+// acceptable channel plus `extraChannels` spares, which only means what it says if
+// the chain always starts from the highest-priority channel. Filtering per channel
+// made the head of the chain rotate: whichever channel was probed (or skipped, or
+// saw real traffic) last round dropped out of the next round, promoting the next
+// one to head, so over a few rounds every channel got probed and the spare limit
+// was silently defeated.
+//
+// Once-per-interval is instead guaranteed by ScheduleKey, which embeds the bucket
+// and carries a unique constraint: a second pass over the same bucket fails to
+// claim the head and exits. That also makes overlapping ticks and multiple server
+// instances safe without any per-channel time arithmetic.
 func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 	ctx context.Context,
 	now time.Time,
@@ -974,6 +932,21 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 	if !policy.Enabled {
 		return []ChannelHealthProbeTarget{}, nil
 	}
+	// The probe cadence is a single global policy value, so every channel shares one
+	// interval and one schedule bucket. ActiveHealthProbeScanSetting is a stored JSON
+	// blob and installs predating this field carry no interval_minutes key, so a
+	// non-positive value means "unset" and falls back to the default rather than
+	// silently switching off all scheduled probing.
+	intervalMinutes := policy.IntervalMinutes
+	if intervalMinutes <= 0 {
+		intervalMinutes = defaultActiveHealthProbeScanSetting.IntervalMinutes
+	}
+	if intervalMinutes < MinChannelHealthProbeIntervalMinutes ||
+		intervalMinutes > MaxChannelHealthProbeIntervalMinutes {
+		return []ChannelHealthProbeTarget{}, nil
+	}
+	interval := time.Duration(intervalMinutes) * time.Minute
+	bucket := now.Truncate(interval)
 	channels, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusEQ(channel.StatusEnabled)).
 		Order(
@@ -986,33 +959,24 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 		return nil, fmt.Errorf("failed to query channels for scheduled health probes: %w", err)
 	}
 
-	channelIDs := make([]int, 0, len(channels))
 	candidates := make([]ChannelHealthProbeTarget, 0)
-	maxInterval := time.Duration(0)
 	globalModels := activeHealthProbeModelMap(policy.Models)
 	if len(globalModels) == 0 {
 		return []ChannelHealthProbeTarget{}, nil
 	}
 	for _, ch := range channels {
-		settings := objects.ChannelHealthProbeSettings{IntervalMinutes: objects.DefaultChannelHealthProbeIntervalMinutes}
+		var settings objects.ChannelHealthProbeSettings
 		if ch.Settings != nil && ch.Settings.HealthProbe != nil {
 			settings = *ch.Settings.HealthProbe
-			settings.Normalize()
 		}
+		settings.Normalize()
 		// Scheduled probing only: an operator can opt a channel out here without
 		// disabling the channel (which would also kill its real traffic). Manual
 		// probes via CreateManualRun are unaffected.
 		if !settings.IsProbeEnabled() {
 			continue
 		}
-		if settings.IntervalMinutes < MinChannelHealthProbeIntervalMinutes ||
-			settings.IntervalMinutes > MaxChannelHealthProbeIntervalMinutes {
-			continue
-		}
 
-		interval := time.Duration(settings.IntervalMinutes) * time.Minute
-		bucket := now.Truncate(interval)
-		channelIncluded := false
 		models := make([]ActiveHealthProbeModelSetting, 0, len(globalModels))
 		for _, model := range globalModels {
 			if model.Enabled {
@@ -1030,55 +994,22 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 			candidates = append(candidates, ChannelHealthProbeTarget{
 				ChannelID:       ch.ID,
 				ModelID:         modelID,
-				Stream:          model.Stream,
+				Stream:          policy.Stream,
 				Priority:        ch.Priority,
 				OrderingWeight:  ch.OrderingWeight,
-				IntervalMinutes: settings.IntervalMinutes,
+				IntervalMinutes: intervalMinutes,
 				ScheduleKey: fmt.Sprintf(
 					"%d:%s:%t:%d",
 					ch.ID,
 					modelID,
-					model.Stream,
+					policy.Stream,
 					bucket.Unix(),
 				),
 			})
-			channelIncluded = true
 		}
-		if channelIncluded {
-			channelIDs = append(channelIDs, ch.ID)
-			if interval > maxInterval {
-				maxInterval = interval
-			}
-		}
-	}
-	if len(candidates) == 0 {
-		return []ChannelHealthProbeTarget{}, nil
 	}
 
-	since := now.Add(-maxInterval)
-	latestProbeRuns, err := svc.latestRunsByChannelAndModelSince(ctx, channelIDs, since, true)
-	if err != nil {
-		return nil, err
-	}
-	latestRealRequests, err := svc.latestRealRequestActivityByChannelAndModel(ctx, channelIDs, since)
-	if err != nil {
-		return nil, err
-	}
-
-	targets := make([]ChannelHealthProbeTarget, 0, len(candidates))
-	for _, target := range candidates {
-		modelKey := channelHealthProbeModelKey(target.ChannelID, target.ModelID)
-		latestActivityAt := latestRealRequests[modelKey]
-		if latestRun := latestProbeRuns[modelKey]; latestRun != nil && latestRun.StartedAt.After(latestActivityAt) {
-			latestActivityAt = latestRun.StartedAt
-		}
-		interval := time.Duration(target.IntervalMinutes) * time.Minute
-		if !latestActivityAt.IsZero() && now.Before(latestActivityAt.Add(interval)) {
-			continue
-		}
-		targets = append(targets, target)
-	}
-	return targets, nil
+	return candidates, nil
 }
 
 func (svc *ChannelHealthProbeService) SkipScheduledTargets(

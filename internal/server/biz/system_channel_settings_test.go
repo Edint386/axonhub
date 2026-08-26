@@ -59,7 +59,7 @@ func TestValidateSystemChannelSettingsGlobalProbeModels(t *testing.T) {
 		ActiveHealthProbeScan: &ActiveHealthProbeScanSetting{
 			AcceptableLatencyMs: 1,
 			Models: []ActiveHealthProbeModelSetting{
-				{ModelID: " gpt-5.6-sol ", Enabled: true, Stream: true},
+				{ModelID: " gpt-5.6-sol ", Enabled: true},
 			},
 		},
 	}

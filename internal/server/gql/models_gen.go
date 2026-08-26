@@ -70,7 +70,6 @@ type ActiveChannelHealthProbeRun struct {
 type ActiveHealthProbeModelSettingInput struct {
 	ModelID string `json:"modelID"`
 	Enabled bool   `json:"enabled"`
-	Stream  bool   `json:"stream"`
 }
 
 type AddUserToProjectInput struct {
@@ -195,14 +194,13 @@ type BulkUpdateChannelOrderingResult struct {
 }
 
 type ChannelHealthProbeChannel struct {
-	ChannelID       objects.GUID `json:"channelID"`
-	ChannelName     string       `json:"channelName"`
-	ChannelStatus   string       `json:"channelStatus"`
-	Priority        int          `json:"priority"`
-	Enabled         bool         `json:"enabled"`
-	ProbeEnabled    bool         `json:"probeEnabled"`
-	IntervalMinutes int          `json:"intervalMinutes"`
-	PrimaryModelID  *string      `json:"primaryModelID,omitempty"`
+	ChannelID      objects.GUID `json:"channelID"`
+	ChannelName    string       `json:"channelName"`
+	ChannelStatus  string       `json:"channelStatus"`
+	Priority       int          `json:"priority"`
+	Enabled        bool         `json:"enabled"`
+	ProbeEnabled   bool         `json:"probeEnabled"`
+	PrimaryModelID *string      `json:"primaryModelID,omitempty"`
 	// Multiplier applied to this channel's base model prices. Defaults to 1 when unset.
 	ModelPriceMultiplier float64 `json:"modelPriceMultiplier"`
 	// Recent probe runs for this channel's primary model, oldest first, for the recent-probe strip.

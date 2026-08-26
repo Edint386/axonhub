@@ -260,7 +260,6 @@ type ComplexityRoot struct {
 	ActiveHealthProbeModelSetting struct {
 		Enabled func(childComplexity int) int
 		ModelID func(childComplexity int) int
-		Stream  func(childComplexity int) int
 	}
 
 	AnalyticsDailyStat struct {
@@ -439,7 +438,6 @@ type ComplexityRoot struct {
 		ChannelName          func(childComplexity int) int
 		ChannelStatus        func(childComplexity int) int
 		Enabled              func(childComplexity int) int
-		IntervalMinutes      func(childComplexity int) int
 		ModelPriceMultiplier func(childComplexity int) int
 		Models               func(childComplexity int) int
 		PrimaryModelID       func(childComplexity int) int
@@ -470,8 +468,10 @@ type ComplexityRoot struct {
 		AvailableModels              func(childComplexity int) int
 		Enabled                      func(childComplexity int) int
 		ExtraChannels                func(childComplexity int) int
+		IntervalMinutes              func(childComplexity int) int
 		Models                       func(childComplexity int) int
 		P95LookbackHours             func(childComplexity int) int
+		Stream                       func(childComplexity int) int
 	}
 
 	ChannelHealthProbeRun struct {
@@ -505,7 +505,7 @@ type ComplexityRoot struct {
 	}
 
 	ChannelHealthProbeSettings struct {
-		IntervalMinutes func(childComplexity int) int
+		ProbeEnabled func(childComplexity int) int
 	}
 
 	ChannelLimiterStats struct {
@@ -3290,12 +3290,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ActiveHealthProbeModelSetting.ModelID(childComplexity), true
-	case "ActiveHealthProbeModelSetting.stream":
-		if e.complexity.ActiveHealthProbeModelSetting.Stream == nil {
-			break
-		}
-
-		return e.complexity.ActiveHealthProbeModelSetting.Stream(childComplexity), true
 
 	case "AnalyticsDailyStat.cachedInputTokens":
 		if e.complexity.AnalyticsDailyStat.CachedInputTokens == nil {
@@ -4027,12 +4021,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelHealthProbeChannel.Enabled(childComplexity), true
-	case "ChannelHealthProbeChannel.intervalMinutes":
-		if e.complexity.ChannelHealthProbeChannel.IntervalMinutes == nil {
-			break
-		}
-
-		return e.complexity.ChannelHealthProbeChannel.IntervalMinutes(childComplexity), true
 	case "ChannelHealthProbeChannel.modelPriceMultiplier":
 		if e.complexity.ChannelHealthProbeChannel.ModelPriceMultiplier == nil {
 			break
@@ -4162,6 +4150,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelHealthProbePolicy.ExtraChannels(childComplexity), true
+	case "ChannelHealthProbePolicy.intervalMinutes":
+		if e.complexity.ChannelHealthProbePolicy.IntervalMinutes == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbePolicy.IntervalMinutes(childComplexity), true
 	case "ChannelHealthProbePolicy.models":
 		if e.complexity.ChannelHealthProbePolicy.Models == nil {
 			break
@@ -4174,6 +4168,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelHealthProbePolicy.P95LookbackHours(childComplexity), true
+	case "ChannelHealthProbePolicy.stream":
+		if e.complexity.ChannelHealthProbePolicy.Stream == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbePolicy.Stream(childComplexity), true
 
 	case "ChannelHealthProbeRun.channel":
 		if e.complexity.ChannelHealthProbeRun.Channel == nil {
@@ -4304,12 +4304,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.ChannelHealthProbeRunEdge.Node(childComplexity), true
 
-	case "ChannelHealthProbeSettings.intervalMinutes":
-		if e.complexity.ChannelHealthProbeSettings.IntervalMinutes == nil {
+	case "ChannelHealthProbeSettings.probeEnabled":
+		if e.complexity.ChannelHealthProbeSettings.ProbeEnabled == nil {
 			break
 		}
 
-		return e.complexity.ChannelHealthProbeSettings.IntervalMinutes(childComplexity), true
+		return e.complexity.ChannelHealthProbeSettings.ProbeEnabled(childComplexity), true
 
 	case "ChannelLimiterStats.capacity":
 		if e.complexity.ChannelLimiterStats.Capacity == nil {
@@ -19236,35 +19236,6 @@ func (ec *executionContext) fieldContext_ActiveHealthProbeModelSetting_enabled(_
 	return fc, nil
 }
 
-func (ec *executionContext) _ActiveHealthProbeModelSetting_stream(ctx context.Context, field graphql.CollectedField, obj *biz.ActiveHealthProbeModelSetting) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_ActiveHealthProbeModelSetting_stream,
-		func(ctx context.Context) (any, error) {
-			return obj.Stream, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_ActiveHealthProbeModelSetting_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "ActiveHealthProbeModelSetting",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _AnalyticsDailyStat_date(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23234,35 +23205,6 @@ func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_probeEnabled(
 	return fc, nil
 }
 
-func (ec *executionContext) _ChannelHealthProbeChannel_intervalMinutes(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes,
-		func(ctx context.Context) (any, error) {
-			return obj.IntervalMinutes, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_intervalMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "ChannelHealthProbeChannel",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _ChannelHealthProbeChannel_primaryModelID(ctx context.Context, field graphql.CollectedField, obj *ChannelHealthProbeChannel) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23800,6 +23742,64 @@ func (ec *executionContext) fieldContext_ChannelHealthProbePolicy_enabled(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelHealthProbePolicy_intervalMinutes(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbePolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbePolicy_intervalMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.IntervalMinutes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbePolicy_intervalMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbePolicy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbePolicy_stream(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbePolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbePolicy_stream,
+		func(ctx context.Context) (any, error) {
+			return obj.Stream, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbePolicy_stream(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbePolicy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelHealthProbePolicy_acceptableLatencyMs(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbePolicy) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23973,8 +23973,6 @@ func (ec *executionContext) fieldContext_ChannelHealthProbePolicy_models(_ conte
 				return ec.fieldContext_ActiveHealthProbeModelSetting_modelID(ctx, field)
 			case "enabled":
 				return ec.fieldContext_ActiveHealthProbeModelSetting_enabled(ctx, field)
-			case "stream":
-				return ec.fieldContext_ActiveHealthProbeModelSetting_stream(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ActiveHealthProbeModelSetting", field.Name)
 		},
@@ -24711,30 +24709,30 @@ func (ec *executionContext) fieldContext_ChannelHealthProbeRunEdge_cursor(_ cont
 	return fc, nil
 }
 
-func (ec *executionContext) _ChannelHealthProbeSettings_intervalMinutes(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeSettings) (ret graphql.Marshaler) {
+func (ec *executionContext) _ChannelHealthProbeSettings_probeEnabled(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelHealthProbeSettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_ChannelHealthProbeSettings_intervalMinutes,
+		ec.fieldContext_ChannelHealthProbeSettings_probeEnabled,
 		func(ctx context.Context) (any, error) {
-			return obj.IntervalMinutes, nil
+			return obj.ProbeEnabled, nil
 		},
 		nil,
-		ec.marshalNInt2int,
+		ec.marshalOBoolean2ᚖbool,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_ChannelHealthProbeSettings_intervalMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_ChannelHealthProbeSettings_probeEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ChannelHealthProbeSettings",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -28543,8 +28541,8 @@ func (ec *executionContext) fieldContext_ChannelSettings_healthProbe(_ context.C
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "intervalMinutes":
-				return ec.fieldContext_ChannelHealthProbeSettings_intervalMinutes(ctx, field)
+			case "probeEnabled":
+				return ec.fieldContext_ChannelHealthProbeSettings_probeEnabled(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelHealthProbeSettings", field.Name)
 		},
@@ -40659,8 +40657,6 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelHealthProbeSettin
 				return ec.fieldContext_ChannelHealthProbeChannel_enabled(ctx, field)
 			case "probeEnabled":
 				return ec.fieldContext_ChannelHealthProbeChannel_probeEnabled(ctx, field)
-			case "intervalMinutes":
-				return ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes(ctx, field)
 			case "primaryModelID":
 				return ec.fieldContext_ChannelHealthProbeChannel_primaryModelID(ctx, field)
 			case "modelPriceMultiplier":
@@ -40714,6 +40710,10 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelHealthProbePolicy
 			switch field.Name {
 			case "enabled":
 				return ec.fieldContext_ChannelHealthProbePolicy_enabled(ctx, field)
+			case "intervalMinutes":
+				return ec.fieldContext_ChannelHealthProbePolicy_intervalMinutes(ctx, field)
+			case "stream":
+				return ec.fieldContext_ChannelHealthProbePolicy_stream(ctx, field)
 			case "acceptableLatencyMs":
 				return ec.fieldContext_ChannelHealthProbePolicy_acceptableLatencyMs(ctx, field)
 			case "extraChannels":
@@ -50463,8 +50463,6 @@ func (ec *executionContext) fieldContext_Query_channelHealthProbeOverview(_ cont
 				return ec.fieldContext_ChannelHealthProbeChannel_enabled(ctx, field)
 			case "probeEnabled":
 				return ec.fieldContext_ChannelHealthProbeChannel_probeEnabled(ctx, field)
-			case "intervalMinutes":
-				return ec.fieldContext_ChannelHealthProbeChannel_intervalMinutes(ctx, field)
 			case "primaryModelID":
 				return ec.fieldContext_ChannelHealthProbeChannel_primaryModelID(ctx, field)
 			case "modelPriceMultiplier":
@@ -50506,6 +50504,10 @@ func (ec *executionContext) fieldContext_Query_channelHealthProbePolicy(_ contex
 			switch field.Name {
 			case "enabled":
 				return ec.fieldContext_ChannelHealthProbePolicy_enabled(ctx, field)
+			case "intervalMinutes":
+				return ec.fieldContext_ChannelHealthProbePolicy_intervalMinutes(ctx, field)
+			case "stream":
+				return ec.fieldContext_ChannelHealthProbePolicy_stream(ctx, field)
 			case "acceptableLatencyMs":
 				return ec.fieldContext_ChannelHealthProbePolicy_acceptableLatencyMs(ctx, field)
 			case "extraChannels":
@@ -68803,7 +68805,7 @@ func (ec *executionContext) unmarshalInputActiveHealthProbeModelSettingInput(ctx
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"modelID", "enabled", "stream"}
+	fieldsInOrder := [...]string{"modelID", "enabled"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -68824,13 +68826,6 @@ func (ec *executionContext) unmarshalInputActiveHealthProbeModelSettingInput(ctx
 				return it, err
 			}
 			it.Enabled = data
-		case "stream":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stream"))
-			data, err := ec.unmarshalNBoolean2bool(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Stream = data
 		}
 	}
 
@@ -70574,20 +70569,20 @@ func (ec *executionContext) unmarshalInputChannelHealthProbeSettingsInput(ctx co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"intervalMinutes"}
+	fieldsInOrder := [...]string{"probeEnabled"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "intervalMinutes":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("intervalMinutes"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
+		case "probeEnabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("probeEnabled"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.IntervalMinutes = data
+			it.ProbeEnabled = data
 		}
 	}
 
@@ -89340,7 +89335,7 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbePolicyInput(ct
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"enabled", "acceptableLatencyMs", "extraChannels", "p95LookbackHours", "models"}
+	fieldsInOrder := [...]string{"enabled", "intervalMinutes", "stream", "acceptableLatencyMs", "extraChannels", "p95LookbackHours", "models"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -89354,6 +89349,20 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbePolicyInput(ct
 				return it, err
 			}
 			it.Enabled = data
+		case "intervalMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("intervalMinutes"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IntervalMinutes = data
+		case "stream":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stream"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Stream = data
 		case "acceptableLatencyMs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("acceptableLatencyMs"))
 			data, err := ec.unmarshalNInt2int(ctx, v)
@@ -89397,7 +89406,7 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbeSettingsInput(
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"channelID", "intervalMinutes", "probeEnabled"}
+	fieldsInOrder := [...]string{"channelID", "probeEnabled"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -89411,13 +89420,6 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbeSettingsInput(
 				return it, err
 			}
 			it.ChannelID = data
-		case "intervalMinutes":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("intervalMinutes"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.IntervalMinutes = data
 		case "probeEnabled":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("probeEnabled"))
 			data, err := ec.unmarshalNBoolean2bool(ctx, v)
@@ -96637,11 +96639,6 @@ func (ec *executionContext) _ActiveHealthProbeModelSetting(ctx context.Context, 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "stream":
-			out.Values[i] = ec._ActiveHealthProbeModelSetting_stream(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -98270,11 +98267,6 @@ func (ec *executionContext) _ChannelHealthProbeChannel(ctx context.Context, sel 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "intervalMinutes":
-			out.Values[i] = ec._ChannelHealthProbeChannel_intervalMinutes(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "primaryModelID":
 			out.Values[i] = ec._ChannelHealthProbeChannel_primaryModelID(ctx, field, obj)
 		case "modelPriceMultiplier":
@@ -98496,6 +98488,16 @@ func (ec *executionContext) _ChannelHealthProbePolicy(ctx context.Context, sel a
 			out.Values[i] = graphql.MarshalString("ChannelHealthProbePolicy")
 		case "enabled":
 			out.Values[i] = ec._ChannelHealthProbePolicy_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "intervalMinutes":
+			out.Values[i] = ec._ChannelHealthProbePolicy_intervalMinutes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stream":
+			out.Values[i] = ec._ChannelHealthProbePolicy_stream(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -98839,11 +98841,8 @@ func (ec *executionContext) _ChannelHealthProbeSettings(ctx context.Context, sel
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("ChannelHealthProbeSettings")
-		case "intervalMinutes":
-			out.Values[i] = ec._ChannelHealthProbeSettings_intervalMinutes(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
+		case "probeEnabled":
+			out.Values[i] = ec._ChannelHealthProbeSettings_probeEnabled(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

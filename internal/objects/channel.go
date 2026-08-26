@@ -226,32 +226,25 @@ type ChannelSettings struct {
 	HealthProbe *ChannelHealthProbeSettings `json:"healthProbe,omitempty"`
 }
 
-// ChannelHealthProbeSettings controls the cadence of scheduled generation probes
-// for one channel. The global active-probe policy owns the model list and master
-// switch; channel settings only provide the per-channel interval.
+// ChannelHealthProbeSettings holds the per-channel part of the active-probe
+// configuration. The global policy owns everything shared -- master switch, probe
+// cadence, latency threshold, P95 window and the model list -- so all that remains
+// here is whether this one channel opts in to scheduled probing.
 type ChannelHealthProbeSettings struct {
-	IntervalMinutes int `json:"intervalMinutes"`
-
 	// ProbeEnabled controls whether this channel is included in SCHEDULED health
 	// probing. It is deliberately a pointer: HealthProbe is a stored JSON blob and
-	// existing rows contain only {"intervalMinutes":N}. A plain bool would
-	// unmarshal to false and silently stop probing every existing channel, so a
-	// nil value is treated as enabled (see Normalize and IsProbeEnabled). Note this
-	// gates scheduled probing only; manual probes always run.
+	// older rows contain only {"intervalMinutes":N}. A plain bool would unmarshal to
+	// false and silently stop probing every existing channel, so a nil value is
+	// treated as enabled (see Normalize and IsProbeEnabled). Note this gates
+	// scheduled probing only; manual probes always run.
 	ProbeEnabled *bool `json:"probeEnabled,omitempty"`
 }
 
-const DefaultChannelHealthProbeIntervalMinutes = 5
-
-// Normalize fills the default cadence for a channel probe setting and defaults a
-// nil ProbeEnabled to true so existing rows (which lack the field) keep probing.
+// Normalize defaults a nil ProbeEnabled to true so rows written before the field
+// existed keep being probed.
 func (s *ChannelHealthProbeSettings) Normalize() {
 	if s == nil {
 		return
-	}
-
-	if s.IntervalMinutes <= 0 {
-		s.IntervalMinutes = DefaultChannelHealthProbeIntervalMinutes
 	}
 
 	if s.ProbeEnabled == nil {

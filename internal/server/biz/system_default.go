@@ -15,6 +15,7 @@ const (
 
 var defaultActiveHealthProbeScanSetting = ActiveHealthProbeScanSetting{
 	Enabled:             false,
+	IntervalMinutes:     5,
 	AcceptableLatencyMs: 60 * 1000,
 	ExtraChannels:       1,
 	P95LookbackHours:    24,

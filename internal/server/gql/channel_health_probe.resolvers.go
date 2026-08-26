@@ -81,7 +81,6 @@ func (r *updateChannelHealthProbePolicyInputResolver) Models(ctx context.Context
 		obj.Models = append(obj.Models, biz.ActiveHealthProbeModelSetting{
 			ModelID: item.ModelID,
 			Enabled: item.Enabled,
-			Stream:  item.Stream,
 		})
 	}
 	return nil

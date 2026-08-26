@@ -361,13 +361,14 @@ func TestSystemService_UpdateChannelSetting_PersistsActiveProbePolicy(t *testing
 	ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
 	policy := ActiveHealthProbeScanSetting{
 		Enabled:             true,
+		IntervalMinutes:     10,
 		AcceptableLatencyMs: 20_000,
 		ExtraChannels:       2,
 		P95LookbackHours:    24,
+		Stream:              true,
 		Models: []ActiveHealthProbeModelSetting{{
 			ModelID: "gpt-5.6-sol",
 			Enabled: true,
-			Stream:  true,
 		}},
 	}
 	require.NoError(t, service.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &policy}))
@@ -375,6 +376,16 @@ func TestSystemService_UpdateChannelSetting_PersistsActiveProbePolicy(t *testing
 	setting, err := service.ChannelSetting(ctx)
 	require.NoError(t, err)
 	require.Equal(t, policy, *setting.ActiveHealthProbeScan)
+
+	// An interval omitted by an install written before the field existed is
+	// normalized to the default rather than persisted as zero, which would read
+	// back as "no cadence" and stop scheduled probing.
+	legacy := policy
+	legacy.IntervalMinutes = 0
+	require.NoError(t, service.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &legacy}))
+	setting, err = service.ChannelSetting(ctx)
+	require.NoError(t, err)
+	require.Equal(t, defaultActiveHealthProbeScanSetting.IntervalMinutes, setting.ActiveHealthProbeScan.IntervalMinutes)
 }
 
 func runSystemSettingUpdate(t *testing.T, service *SystemService, ctx context.Context, input UpdateSystemChannelSettings) <-chan error {

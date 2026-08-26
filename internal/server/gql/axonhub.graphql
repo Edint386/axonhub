@@ -163,11 +163,12 @@ input ChannelProviderQuotaSettingsInput {
 }
 
 type ChannelHealthProbeSettings {
-  intervalMinutes: Int!
+  """Whether this channel takes part in scheduled probing. Null means enabled."""
+  probeEnabled: Boolean
 }
 
 input ChannelHealthProbeSettingsInput {
-  intervalMinutes: Int!
+  probeEnabled: Boolean
 }
 
 type ChannelSettings {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/fx"
@@ -39,6 +40,14 @@ type ChannelHealthProbeRunnerParams struct {
 type ChannelHealthProbeRunner struct {
 	service *biz.ChannelHealthProbeService
 	tester  *TestChannelOrchestrator
+
+	// scanning guards against overlapping scans. The cron fires every minute, but a
+	// priority scan walks its channels sequentially and a single probe may take up to
+	// channelHealthProbeTimeout, so a scan can easily outlive its own tick. Without
+	// this, ticks pile up and several scans walk the list concurrently. Duplicate work
+	// is already impossible (ScheduleKey is unique per bucket), so this only avoids
+	// the wasted queries and goroutines.
+	scanning atomic.Bool
 }
 
 func NewChannelHealthProbeRunner(params ChannelHealthProbeRunnerParams) *ChannelHealthProbeRunner {
@@ -58,6 +67,13 @@ func (runner *ChannelHealthProbeRunner) RegisterScheduledTasks(
 }
 
 func (runner *ChannelHealthProbeRunner) runScheduled(ctx context.Context) {
+	if !runner.scanning.CompareAndSwap(false, true) {
+		log.Debug(ctx, "skipping scheduled channel health probe scan, previous scan still running")
+
+		return
+	}
+	defer runner.scanning.Store(false)
+
 	ctx = authz.WithSystemBypass(ctx, "active-channel-health-probe")
 	ctx = contexts.WithSource(ctx, request.SourceTest)
 

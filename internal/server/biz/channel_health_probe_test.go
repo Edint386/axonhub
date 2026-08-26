@@ -22,14 +22,14 @@ import (
 )
 
 func TestNormalizeAndValidateChannelHealthProbeSettings(t *testing.T) {
-	settings := &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 0,
-	}
+	// Per-channel settings now carry only the probe opt-in; the cadence moved to
+	// the global policy. An unset opt-in normalizes to enabled.
+	settings := &objects.ChannelHealthProbeSettings{}
 	require.NoError(t, normalizeAndValidateChannelHealthProbeSettings(settings))
-	require.Equal(t, objects.DefaultChannelHealthProbeIntervalMinutes, settings.IntervalMinutes)
+	require.NotNil(t, settings.ProbeEnabled)
+	require.True(t, *settings.ProbeEnabled)
 
-	settings.IntervalMinutes = MaxChannelHealthProbeIntervalMinutes + 1
-	require.Error(t, normalizeAndValidateChannelHealthProbeSettings(settings))
+	require.Error(t, normalizeAndValidateChannelHealthProbeSettings(nil))
 }
 
 func TestChannelHealthProbeService_ClaimScheduledRunIsUnique(t *testing.T) {
@@ -37,11 +37,9 @@ func TestChannelHealthProbeService_ClaimScheduledRunIsUnique(t *testing.T) {
 	defer client.Close()
 	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
 
-	ch := createHealthProbeTestChannel(t, ctx, client, "scheduled", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 5,
-	})
+	ch := createHealthProbeTestChannel(t, ctx, client, "scheduled", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
 	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
-	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: true}}}
+	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}}}
 	targets, err := svc.DueTargetsWithPolicy(ctx, time.Date(2026, 8, 12, 2, 30, 10, 0, time.UTC), policy)
 	require.NoError(t, err)
 	require.Len(t, targets, 1)
@@ -57,48 +55,55 @@ func TestChannelHealthProbeService_ClaimScheduledRunIsUnique(t *testing.T) {
 	require.Equal(t, 1, client.ChannelHealthProbeRun.Query().Where(channelhealthproberun.ChannelIDEQ(ch.ID)).CountX(ctx))
 }
 
-func TestChannelHealthProbeService_DueTargetsUsesLatestActivityAndConfiguredInterval(t *testing.T) {
+func TestChannelHealthProbeService_DueTargetsIgnoreRecentActivityAndBucketByGlobalInterval(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-activity?mode=memory&_fk=0")
 	defer client.Close()
 	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
 
-	ch := createHealthProbeTestChannel(t, ctx, client, "activity", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 7,
-	})
-	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{
-		{ModelID: "gpt-4", Enabled: true, Stream: true},
-		{ModelID: "gpt-3.5", Enabled: true, Stream: false},
+	ch := createHealthProbeTestChannel(t, ctx, client, "activity", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
+	policy := ActiveHealthProbeScanSetting{Enabled: true, IntervalMinutes: 7, Models: []ActiveHealthProbeModelSetting{
+		{ModelID: "gpt-4", Enabled: true},
+		{ModelID: "gpt-3.5", Enabled: true},
 	}}
 	base := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+
+	// Real traffic and a just-finished probe used to drop a channel out of the scan
+	// for one interval. That is exactly what rotated the head of the priority chain
+	// and defeated the extra-channel limit, so neither may filter anything now.
 	createHealthProbeTestRequest(t, ctx, client, ch.ID, "gpt-4", request.SourceAPI, base)
-	createHealthProbeTestRequest(t, ctx, client, ch.ID, "gpt-4", request.SourcePlayground, base.Add(4*time.Minute))
-	// Test-channel traffic must not postpone a scheduled active probe.
-	createHealthProbeTestRequest(t, ctx, client, ch.ID, "gpt-4", request.SourceTest, base.Add(9*time.Minute))
 	_, err := client.ChannelHealthProbeRun.Create().
 		SetChannelID(ch.ID).
 		SetModelID("gpt-3.5").
 		SetSource(channelhealthproberun.SourceManual).
 		SetStatus(channelhealthproberun.StatusHealthy).
 		SetStream(false).
-		SetStartedAt(base.Add(3 * time.Minute)).
-		SetCreatedAt(base.Add(3 * time.Minute)).
+		SetStartedAt(base).
+		SetCreatedAt(base).
 		SetTotalMs(10).
 		Save(ctx)
 	require.NoError(t, err)
 
 	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
-	targets, err := svc.DueTargetsWithPolicy(ctx, base.Add(10*time.Minute-time.Second), policy)
+	targets, err := svc.DueTargetsWithPolicy(ctx, base.Add(time.Second), policy)
 	require.NoError(t, err)
-	require.Empty(t, targets)
+	require.Len(t, targets, 2, "both models stay in the scan despite activity a second ago")
 
-	targets, err = svc.DueTargetsWithPolicy(ctx, base.Add(10*time.Minute), policy)
-	require.NoError(t, err)
-	require.Len(t, targets, 1)
-	require.Equal(t, "gpt-3.5", targets[0].ModelID)
+	// Once-per-interval comes from the schedule bucket instead: two times inside the
+	// same bucket produce the same ScheduleKey, whose unique constraint is what stops
+	// the second pass from claiming anything.
+	keysAt := func(at time.Time) []string {
+		list, err := svc.DueTargetsWithPolicy(ctx, at, policy)
+		require.NoError(t, err)
+		keys := make([]string, 0, len(list))
+		for _, target := range list {
+			keys = append(keys, target.ScheduleKey)
+		}
 
-	targets, err = svc.DueTargetsWithPolicy(ctx, base.Add(11*time.Minute), policy)
-	require.NoError(t, err)
-	require.Len(t, targets, 2)
+		return keys
+	}
+	bucketStart := base.Truncate(7 * time.Minute)
+	require.Equal(t, keysAt(bucketStart), keysAt(bucketStart.Add(6*time.Minute)))
+	require.NotEqual(t, keysAt(bucketStart), keysAt(bucketStart.Add(7*time.Minute)))
 }
 
 func TestChannelHealthProbeService_OrdersOverviewAndDueTargetsByPriority(t *testing.T) {
@@ -106,16 +111,14 @@ func TestChannelHealthProbeService_OrdersOverviewAndDueTargetsByPriority(t *test
 	defer client.Close()
 	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
 
-	settings := &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 10,
-	}
+	settings := &objects.ChannelHealthProbeSettings{}
 	low := createHealthProbeTestChannel(t, ctx, client, "low", channel.StatusEnabled, settings)
 	high := createHealthProbeTestChannel(t, ctx, client, "high", channel.StatusEnabled, settings)
 	client.Channel.UpdateOneID(low.ID).SetPriority(10).SetOrderingWeight(100).ExecX(ctx)
 	client.Channel.UpdateOneID(high.ID).SetPriority(20).SetOrderingWeight(1).ExecX(ctx)
 
 	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
-	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: true}}}
+	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}}}
 	overview, err := svc.Overview(ctx)
 	require.NoError(t, err)
 	require.Equal(t, []int{high.ID, low.ID}, []int{overview[0].ChannelID.ID, overview[1].ChannelID.ID})
@@ -126,15 +129,13 @@ func TestChannelHealthProbeService_OrdersOverviewAndDueTargetsByPriority(t *test
 	require.Equal(t, []int{high.ID, low.ID}, []int{targets[0].ChannelID, targets[1].ChannelID})
 }
 
-func TestChannelHealthProbeService_SkippedRunDelaysScheduleWithoutReplacingLatestHealth(t *testing.T) {
+func TestChannelHealthProbeService_SkippedRunKeepsLatestHealthAndBlocksItsBucket(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-skipped?mode=memory&_fk=0")
 	defer client.Close()
 	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
 
-	ch := createHealthProbeTestChannel(t, ctx, client, "skipped", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 10,
-	})
-	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: true}}}
+	ch := createHealthProbeTestChannel(t, ctx, client, "skipped", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
+	policy := ActiveHealthProbeScanSetting{Enabled: true, IntervalMinutes: 10, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}}}
 	systemService, systemClient := setupTestSystemService(t, xcache.Config{Mode: xcache.ModeMemory})
 	defer systemClient.Close()
 	require.NoError(t, systemService.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{
@@ -153,25 +154,37 @@ func TestChannelHealthProbeService_SkippedRunDelaysScheduleWithoutReplacingLates
 		ExecX(ctx)
 
 	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}, systemService: systemService}
-	target := ChannelHealthProbeTarget{
-		ChannelID:       ch.ID,
-		ModelID:         "gpt-4",
-		Stream:          true,
-		IntervalMinutes: 10,
-		ScheduleKey:     "skipped:gpt-4:1",
-	}
+	targets, err := svc.DueTargetsWithPolicy(ctx, base.Add(5*time.Minute), policy)
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	target := targets[0]
+
 	require.NoError(t, svc.SkipScheduledTargets(ctx, []ChannelHealthProbeTarget{target}, base.Add(5*time.Minute)))
 
+	// A skip placeholder must not become the channel's reported health.
 	overview, err := svc.Overview(ctx)
 	require.NoError(t, err)
 	require.Equal(t, channelhealthproberun.StatusHealthy.String(), overview[0].Models[0].LatestRun.Status)
 
-	targets, err := svc.DueTargetsWithPolicy(ctx, base.Add(14*time.Minute), policy)
+	// The target stays in the scan, but its bucket is already taken, so a second pass
+	// cannot claim it. That is what makes one scan per interval hold now.
+	stillListed, err := svc.DueTargetsWithPolicy(ctx, base.Add(6*time.Minute), policy)
 	require.NoError(t, err)
-	require.Empty(t, targets)
-	targets, err = svc.DueTargetsWithPolicy(ctx, base.Add(15*time.Minute), policy)
+	require.Len(t, stillListed, 1)
+	require.Equal(t, target.ScheduleKey, stillListed[0].ScheduleKey)
+
+	_, claimed, err := svc.ClaimScheduledRun(ctx, target, base.Add(6*time.Minute))
 	require.NoError(t, err)
-	require.Len(t, targets, 1)
+	require.False(t, claimed, "the bucket already holds a record for this channel/model")
+
+	// The next bucket is a different key and can be claimed again.
+	nextBucket, err := svc.DueTargetsWithPolicy(ctx, base.Add(15*time.Minute), policy)
+	require.NoError(t, err)
+	require.Len(t, nextBucket, 1)
+	require.NotEqual(t, target.ScheduleKey, nextBucket[0].ScheduleKey)
+	_, claimed, err = svc.ClaimScheduledRun(ctx, nextBucket[0], base.Add(15*time.Minute))
+	require.NoError(t, err)
+	require.True(t, claimed)
 }
 
 func TestChannelHealthProbeService_PolicyUsesStrictestEnabledAPIKeyLimit(t *testing.T) {
@@ -277,9 +290,7 @@ func TestChannelHealthProbeService_OverviewUsesLatestRunPerModel(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-overview?mode=memory&_fk=0")
 	defer client.Close()
 	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
-	ch := createHealthProbeTestChannel(t, ctx, client, "overview", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 10,
-	})
+	ch := createHealthProbeTestChannel(t, ctx, client, "overview", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
 	// Overview reads the global model policy from SystemService. This test uses
 	// the service-backed path so model rows are rendered from the same source as
 	// production.
@@ -289,8 +300,8 @@ func TestChannelHealthProbeService_OverviewUsesLatestRunPerModel(t *testing.T) {
 		ActiveHealthProbeScan: &ActiveHealthProbeScanSetting{
 			Enabled: true,
 			Models: []ActiveHealthProbeModelSetting{
-				{ModelID: "gpt-4", Enabled: true, Stream: true},
-				{ModelID: "gpt-3.5", Enabled: false, Stream: false},
+				{ModelID: "gpt-4", Enabled: true},
+				{ModelID: "gpt-3.5", Enabled: false},
 			},
 		},
 	}))
@@ -311,7 +322,6 @@ func TestChannelHealthProbeService_OverviewUsesLatestRunPerModel(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.True(t, items[0].Enabled)
-	require.Equal(t, 10, items[0].IntervalMinutes)
 	latestByModel := make(map[string]*ChannelHealthProbeRunRecord)
 	for _, model := range items[0].Models {
 		latestByModel[model.ModelID] = model.LatestRun
@@ -341,14 +351,12 @@ func TestChannelHealthProbeDueTargetsUseGlobalModelSettings(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-global-models?mode=memory&_fk=0")
 	defer client.Close()
 	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
-	ch := createHealthProbeTestChannel(t, ctx, client, "global-model", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 5,
-	})
+	ch := createHealthProbeTestChannel(t, ctx, client, "global-model", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
 
 	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
 	targets, err := svc.DueTargetsWithPolicy(ctx, time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC), ActiveHealthProbeScanSetting{
 		Enabled: true,
-		Models:  []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: false}},
+		Models:  []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}},
 	})
 	require.NoError(t, err)
 	require.Len(t, targets, 1)
@@ -359,9 +367,9 @@ func TestChannelHealthProbeDueTargetsUseGlobalModelSettings(t *testing.T) {
 
 func TestChannelHealthProbePrimaryModelFollowsGlobalOrder(t *testing.T) {
 	globalModels := []ActiveHealthProbeModelSetting{
-		{ModelID: "model-1", Enabled: true, Stream: true},
-		{ModelID: "model-2", Enabled: true, Stream: false},
-		{ModelID: "model-3", Enabled: true, Stream: true},
+		{ModelID: "model-1", Enabled: true},
+		{ModelID: "model-2", Enabled: true},
+		{ModelID: "model-3", Enabled: true},
 	}
 	recentRuns := []*ChannelHealthProbeRunRecord{
 		{ModelID: "model-1", StartedAt: time.Date(2026, 8, 26, 1, 0, 0, 0, time.UTC)},
@@ -383,8 +391,8 @@ func TestChannelHealthProbePrimaryModelFollowsGlobalOrder(t *testing.T) {
 		DefaultTestModel: "model-2",
 	}
 
-	first := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels)
-	second := buildChannelHealthProbeOverview(channelTwo, nil, nil, recentRuns, globalModels)
+	first := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels, false)
+	second := buildChannelHealthProbeOverview(channelTwo, nil, nil, recentRuns, globalModels, false)
 	require.Equal(t, "model-1", *first.PrimaryModelID)
 	require.Equal(t, []string{"model-1", "model-2"}, modelOverviewIDs(first.Models))
 	require.Equal(t, []string{"model-1"}, runModelIDs(first.RecentRuns))
@@ -393,7 +401,7 @@ func TestChannelHealthProbePrimaryModelFollowsGlobalOrder(t *testing.T) {
 	require.Equal(t, []string{"model-2"}, runModelIDs(second.RecentRuns))
 
 	globalModels[0].Enabled = false
-	disabledFirst := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels)
+	disabledFirst := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels, false)
 	require.Equal(t, "model-2", *disabledFirst.PrimaryModelID)
 }
 
@@ -417,16 +425,14 @@ func TestChannelHealthProbeOverviewIncludesP95AndLatestFirstToken(t *testing.T) 
 	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-metrics?mode=memory&_fk=0")
 	defer client.Close()
 	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
-	ch := createHealthProbeTestChannel(t, ctx, client, "metrics", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 5,
-	})
+	ch := createHealthProbeTestChannel(t, ctx, client, "metrics", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
 	systemService, systemClient := setupTestSystemService(t, xcache.Config{Mode: xcache.ModeMemory})
 	defer systemClient.Close()
 	require.NoError(t, systemService.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{
 		ActiveHealthProbeScan: &ActiveHealthProbeScanSetting{
 			Enabled:          true,
 			P95LookbackHours: 24,
-			Models:           []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: false}, {ModelID: "other", Enabled: true, Stream: false}, {ModelID: "gpt-3.5", Enabled: true, Stream: false}},
+			Models:           []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}, {ModelID: "other", Enabled: true}, {ModelID: "gpt-3.5", Enabled: true}},
 		},
 	}))
 	base := time.Now().UTC().Add(-5 * time.Minute)
@@ -476,7 +482,7 @@ func TestChannelHealthProbeOverviewUsesConfiguredP95WindowAndPerChannelRecentLim
 		ActiveHealthProbeScan: &ActiveHealthProbeScanSetting{
 			Enabled:          true,
 			P95LookbackHours: 1,
-			Models:           []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: false}},
+			Models:           []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}},
 		},
 	}))
 
@@ -622,7 +628,6 @@ func TestChannelHealthProbeSettings_NormalizeDefaultsProbeEnabledToTrue(t *testi
 	require.NotNil(t, settings.ProbeEnabled)
 	require.True(t, *settings.ProbeEnabled)
 	require.True(t, settings.IsProbeEnabled())
-	require.Equal(t, 9, settings.IntervalMinutes)
 
 	// A nil receiver is treated as enabled.
 	var nilSettings *objects.ChannelHealthProbeSettings
@@ -630,7 +635,7 @@ func TestChannelHealthProbeSettings_NormalizeDefaultsProbeEnabledToTrue(t *testi
 
 	// An explicit false is honored.
 	disabled := false
-	off := objects.ChannelHealthProbeSettings{IntervalMinutes: 5, ProbeEnabled: &disabled}
+	off := objects.ChannelHealthProbeSettings{ProbeEnabled: &disabled}
 	off.Normalize()
 	require.False(t, off.IsProbeEnabled())
 }
@@ -643,16 +648,14 @@ func TestChannelHealthProbeService_DueTargetsSkipsProbeDisabledChannel(t *testin
 	probeOn := true
 	probeOff := false
 	enabledCh := createHealthProbeTestChannel(t, ctx, client, "probe-on", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 5,
-		ProbeEnabled:    &probeOn,
+		ProbeEnabled: &probeOn,
 	})
 	optedOut := createHealthProbeTestChannel(t, ctx, client, "probe-off", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 5,
-		ProbeEnabled:    &probeOff,
+		ProbeEnabled: &probeOff,
 	})
 
 	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
-	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true, Stream: true}}}
+	policy := ActiveHealthProbeScanSetting{Enabled: true, Models: []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}}}
 	targets, err := svc.DueTargetsWithPolicy(ctx, time.Date(2026, 8, 12, 2, 30, 10, 0, time.UTC), policy)
 	require.NoError(t, err)
 	require.Len(t, targets, 1)
@@ -689,8 +692,7 @@ func TestChannelHealthProbeService_UpdateSettingsRoundTripsProbeEnabled(t *testi
 
 	probeOn := true
 	ch := createHealthProbeTestChannel(t, ctx, client, "roundtrip", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{
-		IntervalMinutes: 5,
-		ProbeEnabled:    &probeOn,
+		ProbeEnabled: &probeOn,
 	})
 
 	probeSvc := &ChannelHealthProbeService{
@@ -699,13 +701,11 @@ func TestChannelHealthProbeService_UpdateSettingsRoundTripsProbeEnabled(t *testi
 	}
 
 	overview, err := probeSvc.UpdateSettings(ctx, UpdateChannelHealthProbeSettingsInput{
-		ChannelID:       objects.GUID{Type: "Channel", ID: ch.ID},
-		IntervalMinutes: 15,
-		ProbeEnabled:    false,
+		ChannelID:    objects.GUID{Type: "Channel", ID: ch.ID},
+		ProbeEnabled: false,
 	})
 	require.NoError(t, err)
 	require.False(t, overview.ProbeEnabled)
-	require.Equal(t, 15, overview.IntervalMinutes)
 
 	// Persisted flag round-trips through the stored settings blob.
 	reloaded := client.Channel.GetX(ctx, ch.ID)
@@ -716,9 +716,8 @@ func TestChannelHealthProbeService_UpdateSettingsRoundTripsProbeEnabled(t *testi
 
 	// Turning it back on round-trips too.
 	overview, err = probeSvc.UpdateSettings(ctx, UpdateChannelHealthProbeSettingsInput{
-		ChannelID:       objects.GUID{Type: "Channel", ID: ch.ID},
-		IntervalMinutes: 15,
-		ProbeEnabled:    true,
+		ChannelID:    objects.GUID{Type: "Channel", ID: ch.ID},
+		ProbeEnabled: true,
 	})
 	require.NoError(t, err)
 	require.True(t, overview.ProbeEnabled)

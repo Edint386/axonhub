@@ -576,14 +576,20 @@ type UpdateSystemChannelSettings struct {
 type ActiveHealthProbeModelSetting struct {
 	ModelID string `json:"model_id"`
 	Enabled bool   `json:"enabled"`
-	Stream  bool   `json:"stream"`
 }
 
-// ActiveHealthProbeScanSetting controls the global model switches, the P95
-// lookback window, and the priority-aware window for scheduled synthetic
-// probes. Per-channel settings only provide the cadence interval.
+// ActiveHealthProbeScanSetting owns every shared knob for scheduled synthetic
+// probes: the master switch, the cadence, the streaming mode, the acceptable
+// first-token latency, the P95 lookback window, the priority-aware spare count and
+// the model list. Per-channel settings only carry the probe opt-in.
 type ActiveHealthProbeScanSetting struct {
-	Enabled             bool                            `json:"enabled"`
+	Enabled         bool `json:"enabled"`
+	IntervalMinutes int  `json:"interval_minutes"`
+	// Stream selects which first-token metric every probe measures: TTFT when
+	// streaming, TTFB when not. It is global because the threshold it is compared
+	// against is global too -- mixing both modes across models would compare two
+	// different measurements against one number.
+	Stream              bool                            `json:"stream"`
 	AcceptableLatencyMs int                             `json:"acceptable_latency_ms"`
 	ExtraChannels       int                             `json:"extra_channels"`
 	P95LookbackHours    int                             `json:"p95_lookback_hours"`
@@ -1382,6 +1388,9 @@ func normalizeSystemChannelSettings(setting *SystemChannelSettings) {
 		policy := defaultActiveHealthProbeScanSetting
 		setting.ActiveHealthProbeScan = &policy
 	} else {
+		if setting.ActiveHealthProbeScan.IntervalMinutes == 0 {
+			setting.ActiveHealthProbeScan.IntervalMinutes = defaultActiveHealthProbeScanSetting.IntervalMinutes
+		}
 		if setting.ActiveHealthProbeScan.AcceptableLatencyMs == 0 {
 			setting.ActiveHealthProbeScan.AcceptableLatencyMs = defaultActiveHealthProbeScanSetting.AcceptableLatencyMs
 		}
@@ -1405,6 +1414,14 @@ func validateSystemChannelSettings(setting *SystemChannelSettings) error {
 	}
 	if setting.ActiveHealthProbeScan == nil {
 		return fmt.Errorf("active health probe scan settings must not be nil")
+	}
+	if setting.ActiveHealthProbeScan.IntervalMinutes < MinChannelHealthProbeIntervalMinutes ||
+		setting.ActiveHealthProbeScan.IntervalMinutes > MaxChannelHealthProbeIntervalMinutes {
+		return fmt.Errorf(
+			"active health probe interval must be between %d and %d minutes",
+			MinChannelHealthProbeIntervalMinutes,
+			MaxChannelHealthProbeIntervalMinutes,
+		)
 	}
 	if setting.ActiveHealthProbeScan.AcceptableLatencyMs < minActiveHealthProbeAcceptableLatencyMs ||
 		setting.ActiveHealthProbeScan.AcceptableLatencyMs > maxActiveHealthProbeAcceptableLatencyMs {
