@@ -452,6 +452,11 @@ input APIKeyProfileInput {
   traceStickyMode: String
   """Optional channel latency ceiling used by best-effort candidate filtering."""
   maxFirstTokenLatencyMs: Int
+  """
+  When true the latency ceiling may also judge a channel by its real-traffic
+  latency, taking the worse of probe and traffic. Default false reads probes only.
+  """
+  countRealTrafficLatency: Boolean
 }
 
 input UpdateProjectProfilesInput {
@@ -500,6 +505,11 @@ type APIKeyProfile {
   loadBalanceStrategy: String
   traceStickyMode: String
   maxFirstTokenLatencyMs: Int
+  """
+  When true the latency ceiling may also judge a channel by its real-traffic
+  latency, taking the worse of probe and traffic. Default false reads probes only.
+  """
+  countRealTrafficLatency: Boolean
 }
 
 enum ChannelTagsMatchMode {

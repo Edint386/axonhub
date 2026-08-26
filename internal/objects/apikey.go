@@ -30,6 +30,16 @@ type APIKeyProfile struct {
 	// MaxFirstTokenLatencyMs is an optional best-effort routing ceiling based on
 	// the channel's recent latency telemetry. A nil value disables the filter.
 	MaxFirstTokenLatencyMs *int64 `json:"maxFirstTokenLatencyMs,omitempty"`
+	// CountRealTrafficLatency chooses which measurements MaxFirstTokenLatencyMs may
+	// judge a channel by. False (the default) reads synthetic probe latency only:
+	// probes measure every channel the same way on one global cadence, so the numbers
+	// are comparable against a single ceiling. True additionally admits this channel's
+	// real-traffic latency and takes the worse of the two, which is stricter but is
+	// shaped by whatever this key's callers happened to send.
+	//
+	// Profiles are a stored JSON blob, so an absent key unmarshals to false and no
+	// migration is needed.
+	CountRealTrafficLatency bool `json:"countRealTrafficLatency,omitempty"`
 }
 
 // ChannelTagsMatchMode controls how profile channel tags are matched.

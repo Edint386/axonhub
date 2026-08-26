@@ -23,21 +23,29 @@ type FirstTokenLatencySelector struct {
 	wrapped         CandidateSelector
 	metricsProvider ChannelMetricsProvider
 	maxLatencyMs    int64
+	// countRealTrafficLatency mirrors the profile flag of the same name: false reads
+	// synthetic probe latency only, true also admits real-traffic latency.
+	countRealTrafficLatency bool
 }
 
 // WithFirstTokenLatencySelector creates a best-effort latency filter. Unknown
 // metrics (no provider, too few samples, or a metrics read error) remain
 // eligible. If every known candidate is over the threshold, the original set
 // is returned so a profile cannot silently remove all routing options.
+//
+// countRealTrafficLatency selects which measurements may feed the ceiling; see
+// latencySignalForCandidate.
 func WithFirstTokenLatencySelector(
 	wrapped CandidateSelector,
 	metricsProvider ChannelMetricsProvider,
 	maxLatencyMs int64,
+	countRealTrafficLatency bool,
 ) *FirstTokenLatencySelector {
 	return &FirstTokenLatencySelector{
-		wrapped:         wrapped,
-		metricsProvider: metricsProvider,
-		maxLatencyMs:    maxLatencyMs,
+		wrapped:                 wrapped,
+		metricsProvider:         metricsProvider,
+		maxLatencyMs:            maxLatencyMs,
+		countRealTrafficLatency: countRealTrafficLatency,
 	}
 }
 
@@ -55,7 +63,7 @@ func (s *FirstTokenLatencySelector) Select(ctx context.Context, req *llm.Request
 		}
 
 		metrics, metricsErr := s.metricsProvider.GetChannelMetrics(ctx, candidate.Channel.ID)
-		latencyMs, known := latencySignalForCandidate(candidate, req, metrics, metricsErr)
+		latencyMs, known := latencySignalForCandidate(candidate, req, metrics, metricsErr, s.countRealTrafficLatency)
 		if !known || latencyMs <= float64(s.maxLatencyMs) {
 			eligible = append(eligible, candidate)
 		}
@@ -81,14 +89,35 @@ func (s *FirstTokenLatencySelector) Select(ctx context.Context, req *llm.Request
 	return eligible, nil
 }
 
+// latencySignalForCandidate reduces a channel's telemetry to one number the ceiling
+// can compare against, plus whether that number is known at all.
+//
+// countRealTrafficLatency chooses the admissible sources:
+//   - false (the default): the synthetic probe signal only. A channel with no usable
+//     probe samples stays UNKNOWN however slow its real traffic is, because probes
+//     measure every channel identically on one global cadence while real traffic is
+//     whatever this key's callers happened to send.
+//   - true: whichever of the probe and traffic signals are valid, taking the worse
+//     one. Both measure the same thing, and a ceiling is a safety rail -- if either
+//     source says the channel is slow, it is slow for filtering purposes.
+//
+// The sample floor applies identically to both sources, and unknown always KEEPS the
+// candidate (handled by the caller).
 func latencySignalForCandidate(
 	candidate *ChannelModelsCandidate,
 	req *llm.Request,
 	metrics *biz.AggregatedMetrics,
 	metricsErr error,
+	countRealTrafficLatency bool,
 ) (float64, bool) {
 	if metricsErr != nil || metrics == nil || candidate == nil || candidate.Channel == nil {
 		return 0, false
+	}
+
+	probeMs, probeKnown := probeLatencySignal(metrics)
+
+	if !countRealTrafficLatency {
+		return probeMs, probeKnown
 	}
 
 	streaming := req != nil && req.Stream != nil && *req.Stream
@@ -99,13 +128,9 @@ func latencySignalForCandidate(
 	}
 
 	trafficMs, trafficKnown := trafficLatencySignal(metrics, streaming)
-	probeMs, probeKnown := probeLatencySignal(metrics)
 
 	switch {
 	case trafficKnown && probeKnown:
-		// Both are measurements of the same thing, so take the worse one. A ceiling is
-		// a safety rail: if either source says this channel is slow, it is slow for the
-		// purpose of filtering it out.
 		return max(trafficMs, probeMs), true
 	case probeKnown:
 		// The point of reading probes: a channel with no real traffic yet used to be

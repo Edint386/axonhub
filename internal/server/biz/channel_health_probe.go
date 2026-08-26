@@ -219,24 +219,108 @@ func (svc *ChannelHealthProbeService) Policy(ctx context.Context) (*ChannelHealt
 	if !authz.HasScope(ctx, scopes.ScopeReadAPIKeys) {
 		return overview, nil
 	}
+
+	strictest, err := svc.strictestEnabledAPIKeyFirstTokenLatencyMs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	overview.APIKeyMaxFirstTokenLatencyMs = strictest
+
+	return overview, nil
+}
+
+// strictestEnabledAPIKeyFirstTokenLatencyMs reports the smallest positive
+// first-token ceiling configured across the active profiles of ENABLED API keys,
+// or nil when no enabled key sets one.
+//
+// Only enabled keys count: a disabled or deleted key cannot route a request, so
+// its ceiling must stop constraining anything the moment it is turned off. A
+// non-positive value means "unset" and is ignored rather than treated as zero.
+//
+// The caller is responsible for the scope check -- Policy gates on
+// ScopeReadAPIKeys, while the scheduled probe runner reaches this under a system
+// bypass.
+func (svc *ChannelHealthProbeService) strictestEnabledAPIKeyFirstTokenLatencyMs(
+	ctx context.Context,
+) (*float64, error) {
 	apiKeys, err := svc.entFromContext(ctx).APIKey.Query().
 		Where(apikey.StatusEQ(apikey.StatusEnabled)).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query API key latency thresholds: %w", err)
 	}
+
+	var strictest *float64
+
 	for _, key := range apiKeys {
 		profile := key.GetActiveProfile()
 		if profile == nil || profile.MaxFirstTokenLatencyMs == nil || *profile.MaxFirstTokenLatencyMs <= 0 {
 			continue
 		}
+
 		latency := float64(*profile.MaxFirstTokenLatencyMs)
-		if overview.APIKeyMaxFirstTokenLatencyMs == nil || latency < *overview.APIKeyMaxFirstTokenLatencyMs {
-			overview.APIKeyMaxFirstTokenLatencyMs = &latency
+		if strictest == nil || latency < *strictest {
+			strictest = &latency
 		}
 	}
 
-	return overview, nil
+	return strictest, nil
+}
+
+// EffectiveAcceptableLatencyMs is the latency a scheduled probe chain must treat
+// as acceptable before it stops walking down the priority list.
+//
+// The operator's global AcceptableLatencyMs is only a FALLBACK. What decides
+// whether a channel still needs fresh probe data is the strictest ceiling any
+// enabled API key can impose, because a channel above that ceiling is excluded
+// from routing for that key -- and the only way the ceiling can judge it at all is
+// probe telemetry. Stopping the chain on the global value alone (600s by default)
+// means every answering channel looks acceptable, so the chain always stops at its
+// head plus the configured spares and never reaches the channels a strict key
+// would exclude.
+//
+// Returns min(global, strictest enabled key ceiling). The key ceiling is ignored
+// when absent or non-positive, so deleting or disabling the strict key restores the
+// global value with no further bookkeeping.
+func (svc *ChannelHealthProbeService) EffectiveAcceptableLatencyMs(ctx context.Context) (int, error) {
+	scan, err := svc.ScanPolicy(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return svc.effectiveAcceptableLatencyMsForScan(ctx, scan)
+}
+
+func (svc *ChannelHealthProbeService) effectiveAcceptableLatencyMsForScan(
+	ctx context.Context,
+	scan ActiveHealthProbeScanSetting,
+) (int, error) {
+	// Callers without the API key scope keep the global value. Reading keys is a
+	// privileged operation and the fallback is the documented behaviour, so this must
+	// not become an error path.
+	if !authz.HasScope(ctx, scopes.ScopeReadAPIKeys) {
+		return scan.AcceptableLatencyMs, nil
+	}
+
+	strictest, err := svc.strictestEnabledAPIKeyFirstTokenLatencyMs(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	if strictest == nil || *strictest <= 0 {
+		return scan.AcceptableLatencyMs, nil
+	}
+
+	keyCeilingMs := int(*strictest)
+	// A non-positive global setting means "unset" throughout this policy blob, so it
+	// must not win the min() and silently make every channel unacceptable -- the key
+	// ceiling is the only real constraint in that case.
+	if scan.AcceptableLatencyMs <= 0 {
+		return keyCeilingMs, nil
+	}
+
+	return min(scan.AcceptableLatencyMs, keyCeilingMs), nil
 }
 
 func (svc *ChannelHealthProbeService) availableRealModelIDs(ctx context.Context) ([]string, error) {

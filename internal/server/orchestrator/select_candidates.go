@@ -73,6 +73,7 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 				selector,
 				inbound.state.ChannelService,
 				*profile.MaxFirstTokenLatencyMs,
+				profile.CountRealTrafficLatency,
 			)
 		}
 

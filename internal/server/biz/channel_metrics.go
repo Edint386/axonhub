@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/pkg/ringbuffer"
@@ -357,6 +358,33 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 		}
 	}()
 
+	// A synthetic probe runs the full request pipeline, so without this it would move
+	// every real-traffic signal: success/failure counts, consecutive failures and the
+	// auto-disable rules, the traffic latency EWMAs, and LastSelectedAt. Probe latency
+	// is published on its own by ChannelService.RecordProbeFirstTokenLatency, so the
+	// two sources stay separable instead of being averaged into one number.
+	//
+	// RequestCount cannot simply be left untouched. IncrementChannelSelection already
+	// counted this request at SELECTION time, and the sliding-window cleanup only ever
+	// subtracts SLOT counts from the aggregate -- so skipping the slot increment while
+	// leaving the aggregate alone makes it drift upward by one per probe, forever.
+	// Undo the selection increment and skip the slot entirely, exactly as the Canceled
+	// branch below does.
+	if perf.IsSynthetic() {
+		svc.channelPerfMetricsLock.Lock()
+
+		// Absent metrics mean no selection increment was ever recorded (a probe that
+		// never reached the load balancer), so there is nothing to undo and creating an
+		// entry here would only drive the count negative.
+		if cm, exists := svc.channelPerfMetrics[perf.ChannelID]; exists {
+			cm.aggregatedMetrics.RequestCount--
+		}
+
+		svc.channelPerfMetricsLock.Unlock()
+
+		return
+	}
+
 	if perf.Success {
 		svc.channelErrorCountsLock.Lock()
 		delete(svc.channelErrorCounts, perf.ChannelID)
@@ -586,8 +614,17 @@ func deriveErrorMessage(errorCode int) string {
 
 // PerformanceRecord contains performance metrics collected during request processing.
 type PerformanceRecord struct {
-	ChannelID          int
-	APIKey             string // API key used for the request (sensitive, do not log full value)
+	ChannelID int
+	APIKey    string // API key used for the request (sensitive, do not log full value)
+	// Source names the pipeline that produced this record, so RecordPerformance can
+	// tell synthetic probe traffic from real traffic.
+	//
+	// It has to travel ON the record: AsyncRecordPerformance only pushes onto a
+	// channel and drops the request context, and a consumer goroutine then calls
+	// RecordPerformance with an unrelated context, so contexts.GetSource is useless
+	// at the recording point. An empty value means "not a probe" and is treated as
+	// real traffic.
+	Source             request.Source
 	StartTime          time.Time
 	FirstTokenTime     *time.Time
 	ReasoningStartTime *time.Time
@@ -602,6 +639,12 @@ type PerformanceRecord struct {
 	ResponseStatusCode int
 	ErrorMessage       string
 	CompletionTokens   int64
+}
+
+// IsSynthetic reports whether this record came from a synthetic health probe
+// rather than from a real caller.
+func (m *PerformanceRecord) IsSynthetic() bool {
+	return m.Source == request.SourceTest
 }
 
 // Calculate calculates performance metrics from collected data.

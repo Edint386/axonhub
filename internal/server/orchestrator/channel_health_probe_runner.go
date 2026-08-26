@@ -89,7 +89,20 @@ func (runner *ChannelHealthProbeRunner) runScheduled(ctx context.Context) {
 	}
 
 	if policy.Enabled {
-		runner.runPriorityScheduled(ctx, targets, policy)
+		// The chain's stop condition is the EFFECTIVE ceiling, not the operator's
+		// global setting: see ChannelHealthProbeService.EffectiveAcceptableLatencyMs.
+		// A read failure degrades to the global value rather than abandoning the scan,
+		// which would leave every channel without fresh probe data.
+		acceptableLatencyMs, err := runner.service.EffectiveAcceptableLatencyMs(ctx)
+		if err != nil {
+			log.Error(ctx, "failed to resolve effective acceptable latency for scheduled channel health probes",
+				log.Cause(err))
+
+			acceptableLatencyMs = policy.AcceptableLatencyMs
+		}
+
+		runner.runPriorityScheduled(ctx, targets, policy, acceptableLatencyMs)
+
 		return
 	}
 
@@ -116,6 +129,7 @@ func (runner *ChannelHealthProbeRunner) runPriorityScheduled(
 	ctx context.Context,
 	targets []biz.ChannelHealthProbeTarget,
 	policy biz.ActiveHealthProbeScanSetting,
+	acceptableLatencyMs int,
 ) {
 	groups := make(map[string][]biz.ChannelHealthProbeTarget)
 	modelIDs := make([]string, 0)
@@ -147,7 +161,7 @@ func (runner *ChannelHealthProbeRunner) runPriorityScheduled(
 			skipped := runPriorityProbeTargets(
 				groupCtx,
 				modelTargets,
-				policy.AcceptableLatencyMs,
+				acceptableLatencyMs,
 				policy.ExtraChannels,
 				runner.executeScheduledTarget,
 			)

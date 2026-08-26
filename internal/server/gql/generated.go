@@ -150,18 +150,19 @@ type ComplexityRoot struct {
 	}
 
 	APIKeyProfile struct {
-		ChannelIDs             func(childComplexity int) int
-		ChannelTags            func(childComplexity int) int
-		ChannelTagsMatchMode   func(childComplexity int) int
-		LoadBalanceStrategy    func(childComplexity int) int
-		MaxFirstTokenLatencyMs func(childComplexity int) int
-		ModelIDs               func(childComplexity int) int
-		ModelMappings          func(childComplexity int) int
-		Name                   func(childComplexity int) int
-		Quota                  func(childComplexity int) int
-		TemplateID             func(childComplexity int) int
-		TemplateName           func(childComplexity int) int
-		TraceStickyMode        func(childComplexity int) int
+		ChannelIDs              func(childComplexity int) int
+		ChannelTags             func(childComplexity int) int
+		ChannelTagsMatchMode    func(childComplexity int) int
+		CountRealTrafficLatency func(childComplexity int) int
+		LoadBalanceStrategy     func(childComplexity int) int
+		MaxFirstTokenLatencyMs  func(childComplexity int) int
+		ModelIDs                func(childComplexity int) int
+		ModelMappings           func(childComplexity int) int
+		Name                    func(childComplexity int) int
+		Quota                   func(childComplexity int) int
+		TemplateID              func(childComplexity int) int
+		TemplateName            func(childComplexity int) int
+		TraceStickyMode         func(childComplexity int) int
 	}
 
 	APIKeyProfileQuotaUsage struct {
@@ -2886,6 +2887,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.APIKeyProfile.ChannelTagsMatchMode(childComplexity), true
+	case "APIKeyProfile.countRealTrafficLatency":
+		if e.complexity.APIKeyProfile.CountRealTrafficLatency == nil {
+			break
+		}
+
+		return e.complexity.APIKeyProfile.CountRealTrafficLatency(childComplexity), true
 	case "APIKeyProfile.loadBalanceStrategy":
 		if e.complexity.APIKeyProfile.LoadBalanceStrategy == nil {
 			break
@@ -17434,6 +17441,35 @@ func (ec *executionContext) fieldContext_APIKeyProfile_maxFirstTokenLatencyMs(_ 
 	return fc, nil
 }
 
+func (ec *executionContext) _APIKeyProfile_countRealTrafficLatency(ctx context.Context, field graphql.CollectedField, obj *objects.APIKeyProfile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APIKeyProfile_countRealTrafficLatency,
+		func(ctx context.Context) (any, error) {
+			return obj.CountRealTrafficLatency, nil
+		},
+		nil,
+		ec.marshalOBoolean2bool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_APIKeyProfile_countRealTrafficLatency(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APIKeyProfile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _APIKeyProfileQuotaUsage_profileName(ctx context.Context, field graphql.CollectedField, obj *APIKeyProfileQuotaUsage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17796,6 +17832,8 @@ func (ec *executionContext) fieldContext_APIKeyProfileTemplate_profile(_ context
 				return ec.fieldContext_APIKeyProfile_traceStickyMode(ctx, field)
 			case "maxFirstTokenLatencyMs":
 				return ec.fieldContext_APIKeyProfile_maxFirstTokenLatencyMs(ctx, field)
+			case "countRealTrafficLatency":
+				return ec.fieldContext_APIKeyProfile_countRealTrafficLatency(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type APIKeyProfile", field.Name)
 		},
@@ -18155,6 +18193,8 @@ func (ec *executionContext) fieldContext_APIKeyProfiles_profiles(_ context.Conte
 				return ec.fieldContext_APIKeyProfile_traceStickyMode(ctx, field)
 			case "maxFirstTokenLatencyMs":
 				return ec.fieldContext_APIKeyProfile_maxFirstTokenLatencyMs(ctx, field)
+			case "countRealTrafficLatency":
+				return ec.fieldContext_APIKeyProfile_countRealTrafficLatency(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type APIKeyProfile", field.Name)
 		},
@@ -67368,7 +67408,7 @@ func (ec *executionContext) unmarshalInputAPIKeyProfileInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "templateID", "templateName", "modelMappings", "channelIDs", "channelTags", "channelTagsMatchMode", "modelIDs", "quota", "loadBalanceStrategy", "traceStickyMode", "maxFirstTokenLatencyMs"}
+	fieldsInOrder := [...]string{"name", "templateID", "templateName", "modelMappings", "channelIDs", "channelTags", "channelTagsMatchMode", "modelIDs", "quota", "loadBalanceStrategy", "traceStickyMode", "maxFirstTokenLatencyMs", "countRealTrafficLatency"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -67459,6 +67499,13 @@ func (ec *executionContext) unmarshalInputAPIKeyProfileInput(ctx context.Context
 				return it, err
 			}
 			it.MaxFirstTokenLatencyMs = data
+		case "countRealTrafficLatency":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("countRealTrafficLatency"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CountRealTrafficLatency = data
 		}
 	}
 
@@ -95804,6 +95851,8 @@ func (ec *executionContext) _APIKeyProfile(ctx context.Context, sel ast.Selectio
 			out.Values[i] = ec._APIKeyProfile_traceStickyMode(ctx, field, obj)
 		case "maxFirstTokenLatencyMs":
 			out.Values[i] = ec._APIKeyProfile_maxFirstTokenLatencyMs(ctx, field, obj)
+		case "countRealTrafficLatency":
+			out.Values[i] = ec._APIKeyProfile_countRealTrafficLatency(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

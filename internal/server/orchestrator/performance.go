@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/looplj/axonhub/internal/contexts"
+	entrequest "github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
@@ -41,6 +42,12 @@ func (m *performanceRecording) OnInboundLlmRequest(ctx context.Context, request 
 		m.outbound.state.Perf = &biz.PerformanceRecord{}
 	}
 
+	// The recording point cannot see this context: AsyncRecordPerformance drops it and
+	// a consumer goroutine records the value later. Capture the source here, while a
+	// usable context still exists, so RecordPerformance can keep synthetic probes out
+	// of the real-traffic metrics.
+	m.outbound.state.Perf.Source = requestSourceFromContext(ctx)
+
 	if request.Stream != nil {
 		m.outbound.state.Perf.Stream = *request.Stream
 	} else {
@@ -48,6 +55,13 @@ func (m *performanceRecording) OnInboundLlmRequest(ctx context.Context, request 
 	}
 
 	return request, nil
+}
+
+// requestSourceFromContext resolves the request source, defaulting to the real
+// caller path. Anything other than request.SourceTest counts as real traffic, so an
+// absent source can never be mistaken for a probe.
+func requestSourceFromContext(ctx context.Context) entrequest.Source {
+	return contexts.GetSourceOrDefault(ctx, entrequest.DefaultSource)
 }
 
 func (m *performanceRecording) OnOutboundRawRequest(ctx context.Context, request *httpclient.Request) (*httpclient.Request, error) {
@@ -70,6 +84,9 @@ func (m *performanceRecording) OnOutboundRawRequest(ctx context.Context, request
 	perf.Success = false
 	perf.RequestCompleted = false
 	perf.Stream = streamFlag
+	// This record REPLACES the one built in OnInboundLlmRequest, so the source has to
+	// be re-read here or a probe would look like real traffic at the recording point.
+	perf.Source = requestSourceFromContext(ctx)
 
 	// Get the API key used for this request from context (set by TraceStickyKeyProvider).
 	// OAuth channels authenticate from Credentials.OAuth and never pass through the
