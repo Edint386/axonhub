@@ -722,3 +722,52 @@ func TestChannelHealthProbeService_UpdateSettingsRoundTripsProbeEnabled(t *testi
 	require.NoError(t, err)
 	require.True(t, overview.ProbeEnabled)
 }
+
+func TestChannelHealthProbeService_ReapStalePendingRuns(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-reap?mode=memory&_fk=0")
+	defer client.Close()
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+
+	ch := createHealthProbeTestChannel(t, ctx, client, "reap", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
+	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+
+	newRun := func(status channelhealthproberun.Status, startedAt time.Time, key string) int {
+		run := client.ChannelHealthProbeRun.Create().
+			SetChannelID(ch.ID).
+			SetModelID("gpt-4").
+			SetSource(channelhealthproberun.SourceScheduled).
+			SetStatus(status).
+			SetStream(true).
+			SetScheduleKey(key).
+			SetStartedAt(startedAt).
+			SetTotalMs(0).
+			SaveX(ctx)
+
+		return run.ID
+	}
+
+	// Abandoned: claimed well before the staleness window and never reported.
+	stale := newRun(channelhealthproberun.StatusPending, now.Add(-ChannelHealthProbeStaleAfter-time.Minute), "reap:stale")
+	// Still legitimately in flight -- a probe is allowed to take minutes.
+	fresh := newRun(channelhealthproberun.StatusPending, now.Add(-time.Second), "reap:fresh")
+	// Already finished; the sweep must not rewrite a real result.
+	done := newRun(channelhealthproberun.StatusHealthy, now.Add(-time.Hour), "reap:done")
+
+	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
+	reaped, err := svc.ReapStalePendingRuns(ctx, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, reaped)
+
+	closed := client.ChannelHealthProbeRun.GetX(ctx, stale)
+	require.Equal(t, channelhealthproberun.StatusUnhealthy, closed.Status)
+	require.NotNil(t, closed.CompletedAt, "a closed run must carry a completion time")
+	require.NotEmpty(t, closed.ErrorMessage, "the row must say why it was closed")
+
+	require.Equal(t, channelhealthproberun.StatusPending, client.ChannelHealthProbeRun.GetX(ctx, fresh).Status)
+	require.Equal(t, channelhealthproberun.StatusHealthy, client.ChannelHealthProbeRun.GetX(ctx, done).Status)
+
+	// Idempotent: a second sweep finds nothing left to close.
+	reaped, err = svc.ReapStalePendingRuns(ctx, now)
+	require.NoError(t, err)
+	require.Zero(t, reaped)
+}

@@ -32,6 +32,15 @@ const (
 	channelHealthProbeMetricsSampleLimit  = 10_000
 	channelHealthProbeRecentRunsLimit     = 15
 	channelHealthProbeMetricsCacheTTL     = 30 * time.Second
+
+	// ChannelHealthProbeStaleAfter is how long a run may sit in `pending` before it is
+	// treated as abandoned. A probe is bounded by a 2-minute request timeout plus a
+	// 10-second persist timeout, so anything still pending well past that is not slow,
+	// it is orphaned -- the process that owned it died, or its completion write failed.
+	// CompleteRun is the only path out of `pending`, so without a sweep such a row
+	// stays "running" forever, occupies a slot in the recent-probe window, and makes
+	// the channel read as pending when it happens to be the latest row.
+	ChannelHealthProbeStaleAfter = 5 * time.Minute
 )
 
 func channelHealthProbeDescColumn(column string) entsql.Querier {
@@ -1142,6 +1151,45 @@ func (svc *ChannelHealthProbeService) ClaimScheduledRun(
 		return nil, false, fmt.Errorf("failed to claim scheduled channel health probe: %w", err)
 	}
 	return run, true, nil
+}
+
+// ReapStalePendingRuns marks abandoned `pending` runs as unhealthy and reports how
+// many it closed.
+//
+// CompleteRun is the only path out of `pending`, and it runs in the same process
+// that claimed the row. Three things therefore strand a row there permanently: the
+// process dies mid-probe (restart or deploy), the completion write fails or exceeds
+// its 10-second budget, or the upstream call hangs past its own timeout. Nothing
+// else ever revisits such a row, so it reads as "running" forever, holds a slot in
+// the fixed-size recent-probe window that a real result should occupy, and grades
+// the channel as pending whenever it is the newest row.
+//
+// Closing them as unhealthy rather than deleting them keeps the timeline honest: a
+// probe that never reported is a probe that did not succeed, and the error message
+// says why the row was closed rather than pretending an upstream returned it.
+func (svc *ChannelHealthProbeService) ReapStalePendingRuns(ctx context.Context, now time.Time) (int, error) {
+	cutoff := now.UTC().Add(-ChannelHealthProbeStaleAfter)
+	message := "probe did not report a result before it was declared abandoned"
+
+	affected, err := svc.entFromContext(ctx).ChannelHealthProbeRun.Update().
+		Where(
+			channelhealthproberun.StatusEQ(channelhealthproberun.StatusPending),
+			channelhealthproberun.StartedAtLT(cutoff),
+		).
+		SetStatus(channelhealthproberun.StatusUnhealthy).
+		SetErrorMessage(message).
+		SetCompletedAt(now.UTC()).
+		Save(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to reap stale pending channel health probes: %w", err)
+	}
+
+	if affected > 0 {
+		// The aggregates are computed from these rows, so a sweep invalidates them.
+		svc.invalidateMetricsCache()
+	}
+
+	return affected, nil
 }
 
 func (svc *ChannelHealthProbeService) CreateManualRun(

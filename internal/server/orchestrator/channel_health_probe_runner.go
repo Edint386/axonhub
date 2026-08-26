@@ -77,6 +77,16 @@ func (runner *ChannelHealthProbeRunner) runScheduled(ctx context.Context) {
 	ctx = authz.WithSystemBypass(ctx, "active-channel-health-probe")
 	ctx = contexts.WithSource(ctx, request.SourceTest)
 
+	// Close out runs abandoned by an earlier tick or by a process that died mid-probe
+	// before reading any state derived from them. This is the only thing that ever
+	// revisits a stranded `pending` row, and it runs every tick so an orphan survives
+	// at most one interval past the staleness window.
+	if reaped, err := runner.service.ReapStalePendingRuns(ctx, time.Now().UTC()); err != nil {
+		log.Error(ctx, "failed to reap stale pending channel health probes", log.Cause(err))
+	} else if reaped > 0 {
+		log.Info(ctx, "closed abandoned channel health probes", log.Int("count", reaped))
+	}
+
 	policy, err := runner.service.ScanPolicy(ctx)
 	if err != nil {
 		log.Error(ctx, "failed to load scheduled channel health probe policy", log.Cause(err))
