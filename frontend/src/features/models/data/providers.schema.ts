@@ -57,11 +57,18 @@ const modelExperimentalModeSchema = z
   })
   .passthrough();
 
-const modelExperimentalSchema = z
+// `experimental` carries two unrelated shapes in the vendored catalogs:
+//   - a config object describing alternate modes (OpenAI, Anthropic)
+//   - a plain boolean flag meaning "this model is experimental" (DeepSeek)
+// Accepting only the object made one boolean in one DeepSeek entry fail the parse of
+// the ENTIRE catalog, which took down the channels and models pages.
+const modelExperimentalObjectSchema = z
   .object({
     modes: z.record(z.string(), modelExperimentalModeSchema).optional(),
   })
   .passthrough();
+
+const modelExperimentalSchema = z.union([z.boolean(), modelExperimentalObjectSchema]);
 
 // Single model schema
 export const providerModelSchema = z.object({
@@ -82,7 +89,10 @@ export const providerModelSchema = z.object({
   open_weights: z.boolean().optional(),
   cost: modelCostSchema.optional(),
   limit: modelLimitSchema.optional().nullable(),
-  experimental: modelExperimentalSchema.optional(),
+  // `.catch(undefined)` because these catalogs are refreshed by an automated upstream
+  // sync: a third shape must degrade this one field to "unknown", not fail the model.
+  // Nothing reads this field today.
+  experimental: modelExperimentalSchema.optional().catch(undefined),
   display_name: z.string().optional(),
   extra_capabilities: z.record(z.string(), z.unknown()).optional(),
   vision: z.boolean().optional(),
