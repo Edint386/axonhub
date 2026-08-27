@@ -239,6 +239,14 @@ func CalculateConfidenceLevel(requestCount int, median float64) string {
 // Unlike BuildThroughputQuery, this does not join with channels table and returns
 // raw metrics needed for probe calculations rather than throughput rankings.
 //
+// Synthetic health probes are EXCLUDED (requests.source = 'test'). A probe request
+// runs through the full production pipeline and is persisted like any other request,
+// so without this predicate the surface the UI labels "runtime health (real
+// traffic)" counted the system's own probes in its success rate and latency -- and
+// on a channel with little real traffic the probes could be most of what it showed.
+// requests.source is a non-null enum defaulting to 'api', so the inequality needs no
+// NULL handling.
+
 // Parameters:
 //
 //   - useDollarPlaceholders: if true, uses $1, $2, etc. for PostgreSQL
@@ -277,6 +285,7 @@ SELECT
     COUNT(DISTINCT se.request_id) as request_count,
     SUM(CASE WHEN se.status = 'completed' AND se.stream AND se.metrics_first_token_latency_ms IS NOT NULL THEN 1 ELSE 0 END) as streaming_request_count
 FROM request_executions se
+JOIN requests r ON r.id = se.request_id
 LEFT JOIN (
     SELECT
         request_id,
@@ -291,6 +300,7 @@ LEFT JOIN (
 WHERE se.created_at >= %s
     AND se.created_at < %s
     AND se.status IN ('completed', 'failed')
+    AND r.source <> 'test'
     %s
 GROUP BY se.channel_id
 ORDER BY se.channel_id`, placeholder1, placeholder1, placeholder2, channelIDFilter)

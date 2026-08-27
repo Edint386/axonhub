@@ -479,6 +479,22 @@ func TestBuildProbeStatsQuery(t *testing.T) {
 }
 
 // TestBuildProbeStatsQuery_SQLStructure tests that the generated SQL has proper structure.
+func TestBuildProbeStatsQuery_ExcludesSyntheticProbeTraffic(t *testing.T) {
+	// This query feeds the surface labelled "runtime health (real traffic)". A health
+	// probe runs through the full production pipeline and is persisted like any other
+	// request, so without the source predicate the system's own probes were counted as
+	// real traffic -- and on a channel with little real traffic they could be most of
+	// what it reported.
+	for _, mode := range []ThroughputQueryMode{ThroughputModeRowNumber, ThroughputModeMaxID} {
+		got := BuildProbeStatsQuery(true, "AND se.channel_id = $3", mode)
+
+		assert.Contains(t, got, "JOIN requests r ON r.id = se.request_id",
+			"needs the requests join to reach the source column")
+		assert.Contains(t, got, "AND r.source <> 'test'",
+			"synthetic probe traffic must not count as real traffic")
+	}
+}
+
 func TestBuildProbeStatsQuery_SQLStructure(t *testing.T) {
 	tests := []struct {
 		name string
