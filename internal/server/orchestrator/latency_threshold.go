@@ -10,40 +10,46 @@ import (
 )
 
 // MinimumLatencyThresholdSamples prevents a single transient request from
-// changing routing eligibility. The current in-memory metrics are channel-wide
-// EWMA values, so this is intentionally conservative and best-effort.
+// changing routing eligibility.
 const MinimumLatencyThresholdSamples int64 = 3
+
+// ChannelLatencyStatsProvider supplies the windowed first-token latency a ceiling
+// judges a channel by. Implemented by biz.ChannelService, which recomputes the
+// statistic from the requests table on a schedule; the lookup here is a map read, so
+// no routing decision waits on a query.
+type ChannelLatencyStatsProvider interface {
+	ChannelLatencyStats(channelID int, streaming bool, includeRealTraffic bool) (biz.ChannelLatencySample, bool)
+}
 
 // FirstTokenLatencySelector applies an API-key profile latency ceiling after
 // the normal model/channel/stream filters and before load balancing. The
-// metrics are channel-level aggregates; credential-aware eligibility remains a
-// later phase because channel credentials are selected inside the outbound
-// transformer.
+// statistic is channel-level; credential-aware eligibility remains a later phase
+// because channel credentials are selected inside the outbound transformer.
 type FirstTokenLatencySelector struct {
-	wrapped         CandidateSelector
-	metricsProvider ChannelMetricsProvider
-	maxLatencyMs    int64
-	// countRealTrafficLatency mirrors the profile flag of the same name: false reads
-	// synthetic probe latency only, true also admits real-traffic latency.
+	wrapped       CandidateSelector
+	statsProvider ChannelLatencyStatsProvider
+	maxLatencyMs  int64
+	// countRealTrafficLatency mirrors the profile flag of the same name: false counts
+	// synthetic probe traffic only, true counts every source.
 	countRealTrafficLatency bool
 }
 
 // WithFirstTokenLatencySelector creates a best-effort latency filter. Unknown
-// metrics (no provider, too few samples, or a metrics read error) remain
+// statistics (no provider, no samples in the window, or too few samples) remain
 // eligible. If every known candidate is over the threshold, the original set
 // is returned so a profile cannot silently remove all routing options.
 //
-// countRealTrafficLatency selects which measurements may feed the ceiling; see
+// countRealTrafficLatency selects which measurements feed the ceiling; see
 // latencySignalForCandidate.
 func WithFirstTokenLatencySelector(
 	wrapped CandidateSelector,
-	metricsProvider ChannelMetricsProvider,
+	statsProvider ChannelLatencyStatsProvider,
 	maxLatencyMs int64,
 	countRealTrafficLatency bool,
 ) *FirstTokenLatencySelector {
 	return &FirstTokenLatencySelector{
 		wrapped:                 wrapped,
-		metricsProvider:         metricsProvider,
+		statsProvider:           statsProvider,
 		maxLatencyMs:            maxLatencyMs,
 		countRealTrafficLatency: countRealTrafficLatency,
 	}
@@ -51,19 +57,19 @@ func WithFirstTokenLatencySelector(
 
 func (s *FirstTokenLatencySelector) Select(ctx context.Context, req *llm.Request) ([]*ChannelModelsCandidate, error) {
 	candidates, err := s.wrapped.Select(ctx, req)
-	if err != nil || len(candidates) == 0 || s.maxLatencyMs <= 0 || s.metricsProvider == nil {
+	if err != nil || len(candidates) == 0 || s.maxLatencyMs <= 0 || s.statsProvider == nil {
 		return candidates, err
 	}
 
 	eligible := make([]*ChannelModelsCandidate, 0, len(candidates))
+
 	for _, candidate := range candidates {
 		if candidate == nil || candidate.Channel == nil {
 			eligible = append(eligible, candidate)
 			continue
 		}
 
-		metrics, metricsErr := s.metricsProvider.GetChannelMetrics(ctx, candidate.Channel.ID)
-		latencyMs, known := latencySignalForCandidate(candidate, req, metrics, metricsErr, s.countRealTrafficLatency)
+		latencyMs, known := latencySignalForCandidate(candidate, req, s.statsProvider, s.countRealTrafficLatency)
 		if !known || latencyMs <= float64(s.maxLatencyMs) {
 			eligible = append(eligible, candidate)
 		}
@@ -89,89 +95,91 @@ func (s *FirstTokenLatencySelector) Select(ctx context.Context, req *llm.Request
 	return eligible, nil
 }
 
-// latencySignalForCandidate reduces a channel's telemetry to one number the ceiling
-// can compare against, plus whether that number is known at all.
+// latencySignalForCandidate reduces a channel's latency window to one number the
+// ceiling can compare against, plus whether that number is known at all.
 //
-// countRealTrafficLatency chooses the admissible sources:
-//   - false (the default): the synthetic probe signal only. A channel with no usable
-//     probe samples stays UNKNOWN however slow its real traffic is, because probes
-//     measure every channel identically on one global cadence while real traffic is
-//     whatever this key's callers happened to send.
-//   - true: whichever of the probe and traffic signals are valid, taking the worse
-//     one. Both measure the same thing, and a ceiling is a safety rail -- if either
-//     source says the channel is slow, it is slow for filtering purposes.
+// countRealTrafficLatency selects the SCOPE of the window rather than merging two
+// signals:
+//   - false (the default): synthetic probe traffic only. Probes measure every channel
+//     identically on one global cadence, which is what makes the numbers comparable
+//     against a single ceiling.
+//   - true: every source. The key is declaring that its own traffic is continuous
+//     enough to keep a channel warm, so its real requests belong in the same window.
 //
-// The sample floor applies identically to both sources, and unknown always KEEPS the
-// candidate (handled by the caller).
+// Because the scope is a filter on one statistic, there is no rule reconciling two
+// numbers -- and no way for a stale value to outvote a fresh one, which is what the
+// previous two-EWMA arrangement could do: samples simply leave the window as they age.
+//
+// The value is the window's MEAN, not its P95. Both are computed by the same scan,
+// so this is a one-line choice, but they answer different questions: the P95 asks
+// "how slow is the slowest 5%" and the mean asks "how fast is this channel
+// usually". A ceiling phrased as "maximum first-token latency" reads as the second
+// question, and over a lookback window measured in hours the P95 is dominated by a
+// handful of tail samples -- strict enough that a ceiling set by the intuition of an
+// average excludes channels that are typically well inside it. Unknown always KEEPS
+// the candidate (handled by the caller).
 func latencySignalForCandidate(
 	candidate *ChannelModelsCandidate,
 	req *llm.Request,
-	metrics *biz.AggregatedMetrics,
-	metricsErr error,
+	statsProvider ChannelLatencyStatsProvider,
 	countRealTrafficLatency bool,
 ) (float64, bool) {
-	if metricsErr != nil || metrics == nil || candidate == nil || candidate.Channel == nil {
+	if statsProvider == nil || candidate == nil || candidate.Channel == nil {
 		return 0, false
 	}
 
-	probeMs, probeKnown := probeLatencySignal(metrics)
+	streaming := candidateIsStreaming(candidate, req)
 
-	if !countRealTrafficLatency {
-		return probeMs, probeKnown
+	if sample, ok := usableLatencyWindow(statsProvider, candidate.Channel.ID, streaming, countRealTrafficLatency); ok {
+		return sample.AvgMs, true
 	}
 
-	streaming := req != nil && req.Stream != nil && *req.Stream
-	// A required streaming policy changes the actual upstream request even when
-	// the caller omitted the stream flag, so evaluate it with TTFT telemetry.
-	if candidate.Channel.Policies.Stream == objects.CapabilityPolicyRequire {
-		streaming = true
+	// Fall back to the other streaming mode when this one has no window.
+	//
+	// Without this the ceiling silently measures nothing in the DEFAULT configuration:
+	// the global probe stream flag is off, so every probe row is non-streaming, and a
+	// streaming request reading the probe-scoped streaming window would find it empty
+	// and pass every channel however slow the probes measured them. A ceiling that
+	// quietly does nothing is worse than one comparing against the closest available
+	// measurement, and the two are close in practice -- a probe prompt is small enough
+	// that its total latency is nearly its first-token latency.
+	if sample, ok := usableLatencyWindow(statsProvider, candidate.Channel.ID, !streaming, countRealTrafficLatency); ok {
+		return sample.AvgMs, true
 	}
 
-	trafficMs, trafficKnown := trafficLatencySignal(metrics, streaming)
-
-	switch {
-	case trafficKnown && probeKnown:
-		return max(trafficMs, probeMs), true
-	case probeKnown:
-		// The point of reading probes: a channel with no real traffic yet used to be
-		// permanently "unknown" and so could never be filtered by the ceiling.
-		return probeMs, true
-	case trafficKnown:
-		return trafficMs, true
-	default:
-		return 0, false
-	}
+	return 0, false
 }
 
-// probeLatencySignal reports the channel's synthetic-probe first-token EWMA.
+// usableLatencyWindow reports a window only when it holds enough samples to act on.
+// A couple of slow samples must not evict a channel, so a thin window is unknown.
 //
-// The probe's streaming mode is a single global policy value, so every channel is
-// measured the same way and the numbers stay comparable against one ceiling. That
-// mode may differ from the mode of the request being routed; the probe still
-// answers the question the ceiling asks -- how long this channel takes to start
-// responding -- better than having no signal at all.
-func probeLatencySignal(metrics *biz.AggregatedMetrics) (float64, bool) {
-	if metrics.ProbeSampleCount < MinimumLatencyThresholdSamples || metrics.ProbeFirstTokenLatencyEWMA <= 0 {
-		return 0, false
+// The positivity check is on AvgMs because that is the value returned; every sample
+// in the window is a positive latency by construction, so a non-positive mean means
+// the row carried nothing usable.
+func usableLatencyWindow(
+	statsProvider ChannelLatencyStatsProvider,
+	channelID int,
+	streaming bool,
+	includeRealTraffic bool,
+) (biz.ChannelLatencySample, bool) {
+	sample, ok := statsProvider.ChannelLatencyStats(channelID, streaming, includeRealTraffic)
+	if !ok || sample.SampleCount < MinimumLatencyThresholdSamples || sample.AvgMs <= 0 {
+		return biz.ChannelLatencySample{}, false
 	}
 
-	return metrics.ProbeFirstTokenLatencyEWMA, true
+	return sample, true
 }
 
-func trafficLatencySignal(metrics *biz.AggregatedMetrics, streaming bool) (float64, bool) {
-	if streaming {
-		if metrics.StreamingSampleCount < MinimumLatencyThresholdSamples || metrics.StreamingFirstTokenLatencyEWMA <= 0 {
-			return 0, false
-		}
-
-		return metrics.StreamingFirstTokenLatencyEWMA, true
+// candidateIsStreaming reports the mode the upstream request will actually run in,
+// which decides which half of the window is comparable: streaming rows carry a real
+// first-token boundary, non-streaming rows only a total latency.
+func candidateIsStreaming(candidate *ChannelModelsCandidate, req *llm.Request) bool {
+	// A required streaming policy changes the actual upstream request even when the
+	// caller omitted the stream flag.
+	if candidate != nil && candidate.Channel != nil &&
+		candidate.Channel.Policies.Stream == objects.CapabilityPolicyRequire {
+		return true
 	}
 
-	if metrics.NonStreamingSampleCount < MinimumLatencyThresholdSamples || metrics.NonStreamingLatencyEWMA <= 0 {
-		return 0, false
-	}
-
-	// Non-streaming responses do not expose a separate first-token boundary in
-	// the current telemetry, so total latency is the documented fallback signal.
-	return metrics.NonStreamingLatencyEWMA, true
+	return req != nil && req.Stream != nil && *req.Stream
 }

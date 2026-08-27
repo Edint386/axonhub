@@ -228,6 +228,11 @@ type ChannelService struct {
 
 	// perfCh is the channel for performance records for async processing.
 	perfCh chan *PerformanceRecord
+
+	// channelLatencyStats holds the most recent windowed first-token latency
+	// snapshot, recomputed from the requests table on a schedule. Stored as an
+	// immutable value so the request path reads it without locking.
+	channelLatencyStats atomic.Pointer[channelLatencyStatsSnapshot]
 }
 
 func (svc *ChannelService) RegisterScheduledTasks(ctx context.Context, s *scheduler.Scheduler) error {
@@ -237,6 +242,18 @@ func (svc *ChannelService) RegisterScheduledTasks(ctx context.Context, s *schedu
 		CronExpr:    "11 * * * *",
 		Timezone:    "UTC",
 	}, svc.runSyncChannelModelsPeriodically); err != nil {
+		return err
+	}
+
+	// The routing ceiling reads the snapshot this produces, so the refresh interval
+	// is the staleness bound on that decision. A minute is the finest a crontab
+	// expression can express and is well inside the lookback window being summarised.
+	if err := s.Register(ctx, scheduler.TaskSpec{
+		Name:        "channel-latency-stats",
+		Description: "Recompute windowed channel first-token latency from request records every minute",
+		CronExpr:    "* * * * *",
+		Timezone:    "UTC",
+	}, svc.runChannelLatencyStatsPeriodically); err != nil {
 		return err
 	}
 

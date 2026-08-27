@@ -13,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	entrequest "github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/objects"
 )
@@ -31,8 +32,10 @@ func TestAggregatedMetrics_Clone(t *testing.T) {
 		StreamingFirstTokenLatencyEWMA: 320,
 		StreamingTokensPerSecondEWMA:   42,
 		StreamingSampleCount:           3,
+		StreamingLastSampleAt:          new(now.Add(-2 * time.Minute)),
 		NonStreamingLatencyEWMA:        1800,
 		NonStreamingSampleCount:        4,
+		NonStreamingLastSampleAt:       new(now.Add(-3 * time.Minute)),
 	}
 
 	cloned := metrics.Clone()
@@ -42,8 +45,63 @@ func TestAggregatedMetrics_Clone(t *testing.T) {
 	require.Equal(t, metrics.StreamingFirstTokenLatencyEWMA, cloned.StreamingFirstTokenLatencyEWMA)
 	require.Equal(t, metrics.StreamingTokensPerSecondEWMA, cloned.StreamingTokensPerSecondEWMA)
 	require.Equal(t, metrics.StreamingSampleCount, cloned.StreamingSampleCount)
+	require.Equal(t, metrics.StreamingLastSampleAt, cloned.StreamingLastSampleAt)
 	require.Equal(t, metrics.NonStreamingLatencyEWMA, cloned.NonStreamingLatencyEWMA)
 	require.Equal(t, metrics.NonStreamingSampleCount, cloned.NonStreamingSampleCount)
+	require.Equal(t, metrics.NonStreamingLastSampleAt, cloned.NonStreamingLastSampleAt)
+}
+
+// An EWMA cannot decay on its own -- it only moves when a sample arrives -- so a
+// channel that stops receiving traffic used to report its last latency indefinitely.
+// That is self-reinforcing rather than merely stale: the latency score demotes the
+// channel, the demotion costs it traffic, and no traffic is exactly the condition
+// under which the value stops being updated.
+func TestAggregatedMetrics_ExpireStaleLatencySignals(t *testing.T) {
+	now := time.Now()
+	window := 10 * time.Minute
+
+	fresh := &AggregatedMetrics{
+		metricsRecord:                  metricsRecord{RequestCount: 9, SuccessCount: 8, FailureCount: 1},
+		StreamingFirstTokenLatencyEWMA: 320,
+		StreamingTokensPerSecondEWMA:   42,
+		StreamingSampleCount:           5,
+		StreamingLastSampleAt:          new(now.Add(-1 * time.Minute)),
+		NonStreamingLatencyEWMA:        1800,
+		NonStreamingSampleCount:        4,
+		NonStreamingLastSampleAt:       new(now.Add(-1 * time.Minute)),
+	}
+	fresh.expireStaleLatencySignals(now, window)
+	require.EqualValues(t, 320, fresh.StreamingFirstTokenLatencyEWMA)
+	require.EqualValues(t, 5, fresh.StreamingSampleCount)
+	require.EqualValues(t, 1800, fresh.NonStreamingLatencyEWMA)
+	require.EqualValues(t, 4, fresh.NonStreamingSampleCount)
+
+	// Both modes past the window: zero samples is what LatencyAwareStrategy already
+	// reads as "no data" and answers with a neutral score.
+	stale := fresh.Clone()
+	stale.StreamingLastSampleAt = new(now.Add(-2 * window))
+	stale.NonStreamingLastSampleAt = new(now.Add(-2 * window))
+	stale.expireStaleLatencySignals(now, window)
+	require.Zero(t, stale.StreamingFirstTokenLatencyEWMA)
+	require.Zero(t, stale.StreamingTokensPerSecondEWMA)
+	require.Zero(t, stale.StreamingSampleCount)
+	require.Zero(t, stale.NonStreamingLatencyEWMA)
+	require.Zero(t, stale.NonStreamingSampleCount)
+
+	// The counts have their own sliding-window expiry and must not be touched here.
+	require.EqualValues(t, 9, stale.RequestCount)
+	require.EqualValues(t, 8, stale.SuccessCount)
+	require.EqualValues(t, 1, stale.FailureCount)
+
+	// The two modes expire independently: a channel serving only streaming traffic
+	// must not lose its streaming signal because its non-streaming one went cold.
+	mixed := fresh.Clone()
+	mixed.NonStreamingLastSampleAt = new(now.Add(-2 * window))
+	mixed.expireStaleLatencySignals(now, window)
+	require.EqualValues(t, 320, mixed.StreamingFirstTokenLatencyEWMA)
+	require.EqualValues(t, 5, mixed.StreamingSampleCount)
+	require.Zero(t, mixed.NonStreamingLatencyEWMA)
+	require.Zero(t, mixed.NonStreamingSampleCount)
 }
 
 func TestChannelMetrics_RecordSuccess(t *testing.T) {
@@ -644,38 +702,48 @@ func TestParseDBTime(t *testing.T) {
 	}
 }
 
-func TestChannelService_RecordProbeFirstTokenLatency(t *testing.T) {
-	svc := &ChannelService{channelPerfMetrics: make(map[int]*channelMetrics)}
+// The expiry has to be applied on the path the load balancer actually reads, not
+// merely exist as a method -- that wiring is the whole fix.
+func TestChannelService_GetChannelMetricsExpiresStaleLatencySignals(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:stale-latency?mode=memory&_fk=0")
+	defer client.Close()
 
-	// A non-positive measurement is not a measurement.
-	svc.RecordProbeFirstTokenLatency(1, 0)
-	svc.RecordProbeFirstTokenLatency(1, -5)
-	require.Empty(t, svc.channelPerfMetrics)
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	svc := newTestChannelService(client)
 
-	// The first sample seeds the EWMA; later ones are smoothed, so a single slow
-	// probe cannot swing a channel out of an API key's ceiling on its own.
-	svc.RecordProbeFirstTokenLatency(1, 100)
-	metrics, err := svc.GetChannelMetrics(context.Background(), 1)
+	const channelID = 11
+
+	// A successful sample measured far outside the sliding window.
+	old := time.Now().Add(-2 * defaultPerformanceWindowSize * time.Second)
+	svc.IncrementChannelSelection(channelID)
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:        channelID,
+		Source:           entrequest.SourceAPI,
+		StartTime:        old.Add(-time.Second),
+		EndTime:          old,
+		Success:          true,
+		RequestCompleted: true,
+	})
+
+	metrics, err := svc.GetChannelMetrics(ctx, channelID)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), metrics.ProbeSampleCount)
-	require.InDelta(t, 100.0, metrics.ProbeFirstTokenLatencyEWMA, 0.001)
-
-	svc.RecordProbeFirstTokenLatency(1, 1_100)
-	metrics, err = svc.GetChannelMetrics(context.Background(), 1)
-	require.NoError(t, err)
-	require.Equal(t, int64(2), metrics.ProbeSampleCount)
-	require.InDelta(t, latencyEWMAAlpha*1_100+(1-latencyEWMAAlpha)*100, metrics.ProbeFirstTokenLatencyEWMA, 0.001)
-
-	// Probes must not leak into any signal that should reflect real traffic only:
-	// success/failure counts, consecutive failures and the real-traffic EWMAs all
-	// feed load balancing and the auto-disable rules.
-	require.Zero(t, metrics.RequestCount)
-	require.Zero(t, metrics.SuccessCount)
-	require.Zero(t, metrics.FailureCount)
-	require.Zero(t, metrics.ConsecutiveFailures)
-	require.Zero(t, metrics.StreamingSampleCount)
-	require.Zero(t, metrics.StreamingFirstTokenLatencyEWMA)
-	require.Zero(t, metrics.NonStreamingSampleCount)
+	require.Zero(t, metrics.NonStreamingSampleCount, "a sample older than the window must read as unknown")
 	require.Zero(t, metrics.NonStreamingLatencyEWMA)
-	require.Nil(t, metrics.LastSelectedAt)
+
+	// A fresh sample makes the channel known again. The live aggregate kept its EWMA
+	// through the stale period, so this blends into it rather than restarting.
+	svc.IncrementChannelSelection(channelID)
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:        channelID,
+		Source:           entrequest.SourceAPI,
+		StartTime:        time.Now().Add(-time.Second),
+		EndTime:          time.Now(),
+		Success:          true,
+		RequestCompleted: true,
+	})
+
+	metrics, err = svc.GetChannelMetrics(ctx, channelID)
+	require.NoError(t, err)
+	require.Positive(t, metrics.NonStreamingSampleCount)
+	require.Positive(t, metrics.NonStreamingLatencyEWMA)
 }

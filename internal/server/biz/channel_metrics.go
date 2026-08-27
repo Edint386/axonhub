@@ -229,18 +229,22 @@ type AggregatedMetrics struct {
 	StreamingTokensPerSecondEWMA float64
 	// StreamingSampleCount tracks streaming samples recorded for latency-aware scoring.
 	StreamingSampleCount int64
+	// StreamingLastSampleAt is when the newest streaming latency sample landed, and
+	// is what lets a reader tell "measured recently" from "measured once, long ago".
+	//
+	// An EWMA cannot decay on its own -- it only moves when a sample arrives -- so
+	// without a timestamp a channel that stops receiving traffic keeps reporting its
+	// last value forever. That is not merely stale: a channel dropped by the latency
+	// score gets less traffic, which is exactly the condition under which its value
+	// stops being updated. The request/success/failure counts already expire with the
+	// sliding window, so this makes the whole struct one window rather than a mix.
+	StreamingLastSampleAt *time.Time
 	// NonStreamingLatencyEWMA is the EWMA of total request latency for non-streaming requests.
 	NonStreamingLatencyEWMA float64
 	// NonStreamingSampleCount tracks non-streaming samples recorded for latency-aware scoring.
 	NonStreamingSampleCount int64
-	// ProbeFirstTokenLatencyEWMA is the EWMA of first-token latency measured by
-	// scheduled synthetic health probes. It is kept apart from the real-traffic
-	// EWMAs on purpose: probes must never move success/failure counts, consecutive
-	// failures, auto-disable rules or load-balancer scores, so they feed this field
-	// and nothing else.
-	ProbeFirstTokenLatencyEWMA float64
-	// ProbeSampleCount tracks probe samples recorded for latency-aware filtering.
-	ProbeSampleCount int64
+	// NonStreamingLastSampleAt is the non-streaming counterpart of StreamingLastSampleAt.
+	NonStreamingLastSampleAt *time.Time
 }
 
 func (m *AggregatedMetrics) Clone() *AggregatedMetrics {
@@ -251,10 +255,35 @@ func (m *AggregatedMetrics) Clone() *AggregatedMetrics {
 		StreamingFirstTokenLatencyEWMA: m.StreamingFirstTokenLatencyEWMA,
 		StreamingTokensPerSecondEWMA:   m.StreamingTokensPerSecondEWMA,
 		StreamingSampleCount:           m.StreamingSampleCount,
+		StreamingLastSampleAt:          m.StreamingLastSampleAt,
 		NonStreamingLatencyEWMA:        m.NonStreamingLatencyEWMA,
 		NonStreamingSampleCount:        m.NonStreamingSampleCount,
-		ProbeFirstTokenLatencyEWMA:     m.ProbeFirstTokenLatencyEWMA,
-		ProbeSampleCount:               m.ProbeSampleCount,
+		NonStreamingLastSampleAt:       m.NonStreamingLastSampleAt,
+	}
+}
+
+// expireStaleLatencySignals returns the latency signals to UNKNOWN when no sample
+// landed inside the window, by zeroing the sample count the consumers already treat
+// as "no data" (see LatencyAwareStrategy, which falls back to a neutral score).
+//
+// Call this on a CLONE, never on the live aggregate: the live value must keep its
+// EWMA so a later sample blends into it rather than restarting from scratch.
+func (m *AggregatedMetrics) expireStaleLatencySignals(now time.Time, window time.Duration) {
+	if window <= 0 {
+		return
+	}
+
+	cutoff := now.Add(-window)
+
+	if m.StreamingLastSampleAt != nil && m.StreamingLastSampleAt.Before(cutoff) {
+		m.StreamingFirstTokenLatencyEWMA = 0
+		m.StreamingTokensPerSecondEWMA = 0
+		m.StreamingSampleCount = 0
+	}
+
+	if m.NonStreamingLastSampleAt != nil && m.NonStreamingLastSampleAt.Before(cutoff) {
+		m.NonStreamingLatencyEWMA = 0
+		m.NonStreamingSampleCount = 0
 	}
 }
 
@@ -301,6 +330,7 @@ func (cm *channelMetrics) recordSuccess(slot *timeSlotMetrics, perf *Performance
 		}
 
 		cm.aggregatedMetrics.StreamingSampleCount++
+		cm.aggregatedMetrics.StreamingLastSampleAt = &perf.EndTime
 
 		return
 	}
@@ -313,6 +343,7 @@ func (cm *channelMetrics) recordSuccess(slot *timeSlotMetrics, perf *Performance
 	}
 
 	cm.aggregatedMetrics.NonStreamingSampleCount++
+	cm.aggregatedMetrics.NonStreamingLastSampleAt = &perf.EndTime
 }
 
 // recordFailure records a failed request to the channel metrics.
@@ -361,8 +392,8 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 	// A synthetic probe runs the full request pipeline, so without this it would move
 	// every real-traffic signal: success/failure counts, consecutive failures and the
 	// auto-disable rules, the traffic latency EWMAs, and LastSelectedAt. Probe latency
-	// is published on its own by ChannelService.RecordProbeFirstTokenLatency, so the
-	// two sources stay separable instead of being averaged into one number.
+	// still reaches the routing ceiling, but through the windowed statistic computed
+	// from the requests table, where the source column keeps the two separable.
 	//
 	// RequestCount cannot simply be left untouched. IncrementChannelSelection already
 	// counted this request at SELECTION time, and the sliding-window cleanup only ever
@@ -440,10 +471,7 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 	svc.channelPerfMetricsLock.Unlock()
 
 	// Determine window size
-	var windowSize int64 = defaultPerformanceWindowSize
-	if svc.perfWindowSeconds > 0 {
-		windowSize = svc.perfWindowSeconds
-	}
+	windowSize := int64(svc.performanceWindow() / time.Second)
 
 	ts := perf.EndTime.Unix()
 
@@ -533,40 +561,24 @@ func (svc *ChannelService) GetChannelMetrics(ctx context.Context, channelID int)
 
 	// Return a full copy of the aggregated metrics to avoid concurrent modification
 	// while preserving all load-balancing signals, including latency EWMA.
-	return cm.aggregatedMetrics.Clone(), nil
+	metrics := cm.aggregatedMetrics.Clone()
+
+	// The counts in this snapshot already cover the sliding window; the latency EWMAs
+	// have no such expiry of their own, so apply it here and hand back one coherent
+	// window instead of recent counts beside an indefinitely old latency.
+	metrics.expireStaleLatencySignals(time.Now(), svc.performanceWindow())
+
+	return metrics, nil
 }
 
-// RecordProbeFirstTokenLatency folds one synthetic-probe first-token measurement
-// into the channel's probe EWMA. Scheduled probes are the only source of latency
-// telemetry for a channel that carries no real traffic yet, which is what lets an
-// API key's first-token ceiling judge such a channel at all.
-//
-// It deliberately touches ONLY the probe fields. Routing a probe through
-// RecordPerformance instead would move success/failure counts, consecutive-failure
-// state and the auto-disable rules, so a synthetic request would start affecting
-// decisions that must only reflect real traffic.
-func (svc *ChannelService) RecordProbeFirstTokenLatency(channelID int, firstTokenMs float64) {
-	if firstTokenMs <= 0 {
-		return
+// performanceWindow is the sliding window every signal in AggregatedMetrics covers.
+func (svc *ChannelService) performanceWindow() time.Duration {
+	seconds := int64(defaultPerformanceWindowSize)
+	if svc.perfWindowSeconds > 0 {
+		seconds = svc.perfWindowSeconds
 	}
 
-	svc.channelPerfMetricsLock.Lock()
-	defer svc.channelPerfMetricsLock.Unlock()
-
-	cm, exists := svc.channelPerfMetrics[channelID]
-	if !exists {
-		cm = newChannelMetrics(channelID)
-		svc.channelPerfMetrics[channelID] = cm
-	}
-
-	if cm.aggregatedMetrics.ProbeSampleCount == 0 {
-		cm.aggregatedMetrics.ProbeFirstTokenLatencyEWMA = firstTokenMs
-	} else {
-		cm.aggregatedMetrics.ProbeFirstTokenLatencyEWMA = latencyEWMAAlpha*firstTokenMs +
-			(1-latencyEWMAAlpha)*cm.aggregatedMetrics.ProbeFirstTokenLatencyEWMA
-	}
-
-	cm.aggregatedMetrics.ProbeSampleCount++
+	return time.Duration(seconds) * time.Second
 }
 
 // IncrementChannelSelection increments the request count for a channel at selection time.

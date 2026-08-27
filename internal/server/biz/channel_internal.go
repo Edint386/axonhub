@@ -75,6 +75,13 @@ func (svc *ChannelService) initChannelPerformances(ctx context.Context) {
 	if err := svc.loadChannelPerformances(ctx); err != nil {
 		log.Warn(ctx, "failed to load channel performances", log.Cause(err))
 	}
+
+	// Warm the latency snapshot at startup instead of waiting for the first
+	// scheduled tick: until it exists every channel reads as UNKNOWN, and an API
+	// key's first-token ceiling would filter nothing for up to a minute after boot.
+	if err := svc.RefreshChannelLatencyStats(ctx); err != nil {
+		log.Warn(ctx, "failed to load channel latency stats", log.Cause(err))
+	}
 }
 
 func (svc *ChannelService) ReloadEnabledChannelsCache(ctx context.Context) error {

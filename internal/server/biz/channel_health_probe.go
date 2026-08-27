@@ -1256,19 +1256,12 @@ func (svc *ChannelHealthProbeService) CompleteRun(
 	}
 	svc.invalidateMetricsCache()
 
-	record := channelHealthProbeRunRecord(run)
-	// Publish the measurement into the channel's probe EWMA so an API key's
-	// first-token ceiling can judge this channel even when it carries no real
-	// traffic. Only a healthy run with a usable first-token metric counts: a failure
-	// says nothing about latency, and a run missing the metric must stay unknown
-	// rather than be folded in as a fast sample.
-	if svc.channelService != nil && record.Status == channelhealthproberun.StatusHealthy.String() {
-		if firstTokenMs, ok := channelHealthProbeFirstTokenMs(record); ok && firstTokenMs > 0 {
-			svc.channelService.RecordProbeFirstTokenLatency(record.ChannelID.ID, firstTokenMs)
-		}
-	}
-
-	return record, nil
+	// No latency is published from here. A probe's measurement reaches the routing
+	// ceiling through the windowed statistic computed from the requests table, where
+	// this run is already recorded with source 'test' -- so probe-only and
+	// probe-plus-traffic are one query with one WHERE clause instead of two averages
+	// that would need a merge rule.
+	return channelHealthProbeRunRecord(run), nil
 }
 
 func channelHealthProbeRunRecord(run *ent.ChannelHealthProbeRun) *ChannelHealthProbeRunRecord {
