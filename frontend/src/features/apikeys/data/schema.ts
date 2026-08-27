@@ -13,6 +13,15 @@ export type ApiKeyStatus = z.infer<typeof apiKeyStatusSchema>;
 export const channelTagsMatchModeSchema = z.enum(['any', 'all', 'none']);
 export type ChannelTagsMatchMode = z.infer<typeof channelTagsMatchModeSchema>;
 
+/**
+ * Tolerant variant for data coming IN from the server, which may report an
+ * absent match mode as null or ''. Use this in RESPONSE schemas only: in Zod 4
+ * `z.preprocess` widens the schema's input type to `unknown`, and `zodResolver`
+ * derives a form's field types from the schema INPUT, so using this in a form
+ * schema desynchronises the resolver from the declared form values. Form and
+ * mutation-input schemas take the strict `channelTagsMatchModeSchema` instead —
+ * every value they receive has already been normalized by a response schema.
+ */
 const channelTagsMatchModeFieldSchema = z.preprocess((value) => {
   if (value == null || value === '') {
     return 'any';
@@ -243,7 +252,9 @@ export type ApiKeyProfileTemplate = z.infer<typeof apiKeyProfileTemplateSchema>;
 export const createApiKeyProfileTemplateInputSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
-  projectID: z.string(),
+  // Callers may not have a project selected yet; useCreateApiKeyProfileTemplate
+  // falls back to the ambient project and sends null when there is none.
+  projectID: z.string().nullable(),
   profile: apiKeyProfileSchema,
 });
 export type CreateApiKeyProfileTemplateInput = z.infer<typeof createApiKeyProfileTemplateInputSchema>;
@@ -275,7 +286,7 @@ export const updateApiKeyProfilesInputSchemaFactory = (t: (key: string) => strin
             ),
             channelIDs: z.array(z.number()).optional().nullable(),
             channelTags: z.array(z.string()).optional().nullable(),
-            channelTagsMatchMode: channelTagsMatchModeFieldSchema,
+            channelTagsMatchMode: channelTagsMatchModeSchema,
             modelIDs: z.array(z.string()).optional().nullable(),
             loadBalanceStrategy: z.string().optional().nullable(),
             traceStickyMode: z.string().optional().nullable(),
@@ -370,6 +381,8 @@ export const updateApiKeyProfilesInputSchema = z.object({
   profiles: z.array(
     z.object({
       name: z.string().min(1, 'Profile name is required'),
+      templateID: z.number().optional().nullable(),
+      templateName: z.string().optional().nullable(),
       modelMappings: z.array(
         z.object({
           from: z.string().min(1, 'Source model is required'),
@@ -378,7 +391,7 @@ export const updateApiKeyProfilesInputSchema = z.object({
       ),
       channelIDs: z.array(z.number()).optional().nullable(),
       channelTags: z.array(z.string()).optional().nullable(),
-      channelTagsMatchMode: channelTagsMatchModeFieldSchema,
+      channelTagsMatchMode: channelTagsMatchModeSchema,
       modelIDs: z.array(z.string()).optional().nullable(),
       loadBalanceStrategy: z.string().optional().nullable(),
       traceStickyMode: z.string().optional().nullable(),
