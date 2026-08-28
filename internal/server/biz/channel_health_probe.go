@@ -94,6 +94,7 @@ type UpdateChannelHealthProbePolicyInput struct {
 	AcceptableLatencyMs int
 	ExtraChannels       int
 	P95LookbackHours    int
+	GateWindowMinutes   int
 	Models              []ActiveHealthProbeModelSetting
 }
 
@@ -104,6 +105,7 @@ type ChannelHealthProbePolicy struct {
 	AcceptableLatencyMs          int
 	ExtraChannels                int
 	P95LookbackHours             int
+	GateWindowMinutes            int
 	APIKeyMaxFirstTokenLatencyMs *float64
 	AvailableModels              []string
 	Models                       []ActiveHealthProbeModelSetting
@@ -140,9 +142,20 @@ type ChannelHealthProbeModelOverview struct {
 	Stream       bool
 	FirstTokenMs *float64
 	P95Ms        *float64
-	LastProbedAt *time.Time
-	SampleCount  int
-	LatestRun    *ChannelHealthProbeRunRecord
+	// GateAvgMs is the number an API-key first-token ceiling actually compares this
+	// channel-and-model against: the mean over the gate window, probe-scoped, with the
+	// ceiling's sample floor already applied. Nil means the ceiling reads UNKNOWN and
+	// would keep this channel whatever the limit is.
+	//
+	// It is surfaced so the dashboard can stop showing a number computed a different
+	// way from the one that decides routing.
+	GateAvgMs *float64
+	// GateSampleCount is how many samples that window held, so a dashboard can explain
+	// a nil GateAvgMs as "not enough measurements yet" rather than "fast".
+	GateSampleCount int
+	LastProbedAt    *time.Time
+	SampleCount     int
+	LatestRun       *ChannelHealthProbeRunRecord
 }
 
 type ChannelHealthProbeChannelOverview struct {
@@ -221,6 +234,7 @@ func (svc *ChannelHealthProbeService) Policy(ctx context.Context) (*ChannelHealt
 		AcceptableLatencyMs: policy.AcceptableLatencyMs,
 		ExtraChannels:       policy.ExtraChannels,
 		P95LookbackHours:    policy.P95LookbackHours,
+		GateWindowMinutes:   policy.GateWindowMinutes,
 		AvailableModels:     availableModels,
 		Models:              models,
 	}
@@ -387,6 +401,7 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 		AcceptableLatencyMs: input.AcceptableLatencyMs,
 		ExtraChannels:       input.ExtraChannels,
 		P95LookbackHours:    input.P95LookbackHours,
+		GateWindowMinutes:   input.GateWindowMinutes,
 		Models:              slices.Clone(models),
 	}
 	err = authz.RunWithSystemBypassVoid(ctx, "update-active-channel-health-probe-policy", func(bypassCtx context.Context) error {
@@ -505,8 +520,12 @@ func (svc *ChannelHealthProbeService) Overview(ctx context.Context) ([]*ChannelH
 		return nil, err
 	}
 	result := make([]*ChannelHealthProbeChannelOverview, 0, len(channels))
+	gateStats := svc.gateLatencyLookup()
+
 	for _, ch := range channels {
-		result = append(result, buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models, policy.Stream))
+		result = append(result, buildChannelHealthProbeOverview(
+			ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models, policy.Stream, gateStats,
+		))
 	}
 	return result, nil
 }
@@ -531,7 +550,26 @@ func (svc *ChannelHealthProbeService) overviewForChannel(
 	if err != nil {
 		return nil, err
 	}
-	return buildChannelHealthProbeOverview(ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models, policy.Stream), nil
+	return buildChannelHealthProbeOverview(
+		ch, latestRuns, metrics, recentRuns[ch.ID], policy.Models, policy.Stream, svc.gateLatencyLookup(),
+	), nil
+}
+
+// gateLatencyLookup exposes the routing ceiling's windowed statistic to the overview
+// builder, probe-scoped because the channel-health page is the probe's own view.
+//
+// A key that counts its real traffic is judged on a different scope, so its ceiling
+// can differ from what this page shows. That is a genuine limit of showing one number
+// per row rather than a second inconsistency: the scope is a per-key choice and the
+// page has no key context.
+func (svc *ChannelHealthProbeService) gateLatencyLookup() func(int, string) (ChannelLatencySample, bool) {
+	if svc.channelService == nil {
+		return nil
+	}
+
+	return func(channelID int, modelID string) (ChannelLatencySample, bool) {
+		return svc.channelService.ChannelLatencyStats(channelID, modelID, false)
+	}
 }
 
 // recentRunsByChannel returns the latest channelHealthProbeRecentRunsLimit runs
@@ -836,6 +874,11 @@ func buildChannelHealthProbeOverview(
 	recentRuns []*ChannelHealthProbeRunRecord,
 	globalModels []ActiveHealthProbeModelSetting,
 	stream bool,
+	// gateStats reports the routing ceiling's own view of one channel-and-model, or
+	// false when the ceiling reads UNKNOWN. Passed in rather than reached for so this
+	// stays a free function, and so a caller with no ceiling data (a test, a cold
+	// process) simply supplies nil.
+	gateStats func(channelID int, modelID string) (ChannelLatencySample, bool),
 ) *ChannelHealthProbeChannelOverview {
 	enabled := ch.Status == channel.StatusEnabled
 	probeEnabled := true
@@ -887,15 +930,37 @@ func buildChannelHealthProbeOverview(
 			}
 			lastProbedAt = &value
 		}
+		// The routing ceiling's own view of this channel and model, so the dashboard can
+		// display the number that actually decides rather than one of its own.
+		var (
+			gateAvgMs       *float64
+			gateSampleCount int
+		)
+
+		if gateStats != nil {
+			if sample, ok := gateStats(ch.ID, modelID); ok {
+				// The count is reported even below the floor: it is what distinguishes "not
+				// measured enough yet" from "never measured". The VALUE is withheld, because
+				// the ceiling is ignoring it and the dashboard must not imply otherwise.
+				gateSampleCount = int(sample.SampleCount)
+				if sample.UsableForGate() {
+					value := sample.AvgMs
+					gateAvgMs = &value
+				}
+			}
+		}
+
 		models = append(models, &ChannelHealthProbeModelOverview{
-			ModelID:      modelID,
-			Enabled:      enabledModel,
-			Stream:       stream,
-			FirstTokenMs: firstTokenMs,
-			P95Ms:        metric.P95Ms,
-			LastProbedAt: lastProbedAt,
-			SampleCount:  metric.SampleCount,
-			LatestRun:    latestRun,
+			ModelID:         modelID,
+			Enabled:         enabledModel,
+			Stream:          stream,
+			FirstTokenMs:    firstTokenMs,
+			P95Ms:           metric.P95Ms,
+			GateAvgMs:       gateAvgMs,
+			GateSampleCount: gateSampleCount,
+			LastProbedAt:    lastProbedAt,
+			SampleCount:     metric.SampleCount,
+			LatestRun:       latestRun,
 		})
 	}
 

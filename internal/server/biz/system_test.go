@@ -365,6 +365,7 @@ func TestSystemService_UpdateChannelSetting_PersistsActiveProbePolicy(t *testing
 		AcceptableLatencyMs: 20_000,
 		ExtraChannels:       2,
 		P95LookbackHours:    24,
+		GateWindowMinutes:   20,
 		Stream:              true,
 		Models: []ActiveHealthProbeModelSetting{{
 			ModelID: "gpt-5.6-sol",
@@ -386,6 +387,23 @@ func TestSystemService_UpdateChannelSetting_PersistsActiveProbePolicy(t *testing
 	setting, err = service.ChannelSetting(ctx)
 	require.NoError(t, err)
 	require.Equal(t, defaultActiveHealthProbeScanSetting.IntervalMinutes, setting.ActiveHealthProbeScan.IntervalMinutes)
+
+	// The gate window's bounds are enforced, not merely documented -- a window of zero
+	// reads as "unset" and falls back, but an out-of-range one is a rejection.
+	tooLong := policy
+	tooLong.GateWindowMinutes = maxActiveHealthProbeGateWindowMinutes + 1
+	require.Error(t, service.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &tooLong}))
+
+	// A negative value cannot arrive through the API, but a hand-edited row or an
+	// imported backup can carry one. Normalization must fold it back to the default
+	// instead of reporting it as the live policy.
+	negative := policy
+	negative.GateWindowMinutes = -5
+	require.NoError(t, service.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &negative}))
+
+	setting, err = service.ChannelSetting(ctx)
+	require.NoError(t, err)
+	require.Equal(t, defaultActiveHealthProbeScanSetting.GateWindowMinutes, setting.ActiveHealthProbeScan.GateWindowMinutes)
 }
 
 func runSystemSettingUpdate(t *testing.T, service *SystemService, ctx context.Context, input UpdateSystemChannelSettings) <-chan error {

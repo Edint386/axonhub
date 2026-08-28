@@ -23,14 +23,18 @@ const GRADE_DEFS: { key: ChannelGrade; icon: typeof CheckCircle2; chip: string }
 
 export function KpiCards({
   channels,
+  gateWindowMinutes,
   active,
   onSelect,
 }: {
   channels: ChannelHealthProbeChannel[];
+  /** Same window the table and the ceiling use, so the counts match the rows. */
+  gateWindowMinutes: number;
   active: KpiFilter;
   onSelect: (filter: KpiFilter) => void;
 }) {
   const { t } = useTranslation();
+  const gateWindowMs = gateWindowMinutes * 60_000;
   const counts = useMemo(() => {
     const result: Record<ChannelGrade, number> = {
       health: 0,
@@ -46,10 +50,10 @@ export function KpiCards({
       disabled: 0,
     };
     for (const channel of channels) {
-      result[gradeOfChannel(channel)]++;
+      result[gradeOfChannel(channel, gateWindowMs)]++;
     }
     return result;
-  }, [channels]);
+  }, [channels, gateWindowMs]);
 
   const cards: { key: KpiFilter; label: string; icon: typeof CheckCircle2; chip: string; value: number }[] = [
     ...GRADE_DEFS.map((def) => ({

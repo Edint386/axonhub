@@ -54,11 +54,27 @@ type ChannelLatencyStatsQuery struct {
 }
 
 // BuildChannelLatencyStatsQuery builds the windowed first-token latency aggregation
-// for every channel in the filter, split by streaming mode.
+// for every channel in the filter, split by the MODEL the request asked for.
+//
+// The model is the grouping dimension because it is the dimension the ceiling is
+// asked about: a routing decision is always "may this request, for THIS model, use
+// this channel". Two models on one channel do not share a first-token latency -- a
+// reasoning model and a plain one differ by more than two channels typically do -- so
+// a per-channel figure answers a question nobody asked and silently judges model B by
+// model A's measurements.
+//
+// Streaming mode is deliberately NOT part of the key. It was, and that split
+// subdivided every group without adding information the ceiling could act on: the
+// probe cadence has one global stream flag, so one bucket held every probe sample and
+// the other held none, which forced a cross-mode fallback to keep the ceiling working
+// at all. Folding the modes together removes that machinery. The cost is that a
+// streaming TTFT and a non-streaming total latency can now land in the same mean --
+// acceptable because the sample projection already coalesces the two metrics, and a
+// probe response is capped short enough that they are close.
 //
 // Returned columns, identical in both dialects so one scan handles either:
 //
-//	channel_id, is_stream, sample_count, avg_ms, p95_ms
+//	channel_id, model_id, sample_count, avg_ms, p95_ms
 //
 // Two dialect implementations, one definition. PostgreSQL gets PERCENTILE_DISC,
 // which is an ordered-set aggregate: it folds into the existing GROUP BY without
@@ -87,38 +103,47 @@ func BuildChannelLatencyStatsQuery(query ChannelLatencyStatsQuery) string {
 //
 // Sample eligibility:
 //   - completed executions only -- a failed attempt says nothing about latency
-//   - first-token latency, falling back to total latency. Non-streaming responses
-//     expose no separate first-token boundary, and their total latency is the
-//     closest analogue (the whole response arrives at once). This mirrors what the
-//     health-probe metric already does.
 //   - a positive latency: a missing or zero metric leaves the pair UNKNOWN rather
 //     than contributing a spuriously fast sample.
+//   - an execution that reaches a request row. The join is what supplies the model,
+//     so an execution with no request is dropped rather than attributed to a guess.
+//   - a row that actually measures a FIRST TOKEN. metrics_first_token_latency_ms is
+//     written only for streaming executions, so a non-streaming row carries nothing
+//     but its total completion time. For a length-capped probe those are nearly the
+//     same number and the fallback is sound; for real traffic they are not remotely
+//     the same -- a long generation takes tens of seconds after a fast first token --
+//     and a ceiling named "maximum first-token latency" would then exclude a channel
+//     for being verbose. So the fallback is admitted for probes and refused for
+//     everything else, which is a filter on the ROW rather than on the scope: the
+//     probe-only scope is unaffected, and the all-sources scope keeps every probe
+//     plus every streaming request.
 func channelLatencySampleSource(query ChannelLatencyStatsQuery) string {
 	windowStart, windowEnd := "?", "?"
 	if query.UseDollarPlaceholders {
 		windowStart, windowEnd = "$1", "$2"
 	}
 
-	// The join exists only to reach requests.source, so the all-sources scope skips
-	// it entirely and stays a single-table scan.
-	sourceJoin, sourceFilter := "", ""
+	// The join is unconditional now that the model comes from it; only the source
+	// predicate varies by scope. It is a primary-key lookup per execution row.
+	sourceFilter := ""
 	if query.Scope == ChannelLatencyStatsScopeProbe {
-		sourceJoin = "\n    JOIN requests r ON r.id = se.request_id"
 		sourceFilter = "\n        AND r.source = 'test'"
 	}
 
 	return fmt.Sprintf(`    SELECT
         se.channel_id AS channel_id,
-        CASE WHEN se.stream THEN 1 ELSE 0 END AS is_stream,
+        r.model_id AS model_id,
         COALESCE(se.metrics_first_token_latency_ms, se.metrics_latency_ms) AS latency_ms
-    FROM request_executions se%s
+    FROM request_executions se
+    JOIN requests r ON r.id = se.request_id
     WHERE se.created_at >= %s
         AND se.created_at < %s
         AND se.status = 'completed'
         AND se.channel_id IS NOT NULL
+        AND (se.metrics_first_token_latency_ms IS NOT NULL OR r.source = 'test')
         AND COALESCE(se.metrics_first_token_latency_ms, se.metrics_latency_ms) > 0%s
         %s`,
-		sourceJoin, windowStart, windowEnd, sourceFilter, query.ChannelIDFilter)
+		windowStart, windowEnd, sourceFilter, query.ChannelIDFilter)
 }
 
 // buildChannelLatencyStatsQueryPostgres uses the native ordered-set aggregate.
@@ -133,13 +158,13 @@ WITH samples AS (
 )
 SELECT
     channel_id,
-    is_stream,
+    model_id,
     COUNT(*) AS sample_count,
     AVG(latency_ms)::double precision AS avg_ms,
     PERCENTILE_DISC(%s) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms
 FROM samples
-GROUP BY channel_id, is_stream
-ORDER BY channel_id, is_stream`, samples, channelLatencyStatsPercentileFraction)
+GROUP BY channel_id, model_id
+ORDER BY channel_id, model_id`, samples, channelLatencyStatsPercentileFraction)
 }
 
 // buildChannelLatencyStatsQueryPortable computes the same nearest-rank percentile
@@ -156,20 +181,20 @@ WITH samples AS (
 ), ranked AS (
     SELECT
         channel_id,
-        is_stream,
+        model_id,
         latency_ms,
-        ROW_NUMBER() OVER (PARTITION BY channel_id, is_stream ORDER BY latency_ms) AS latency_rank,
-        COUNT(*) OVER (PARTITION BY channel_id, is_stream) AS sample_count,
-        AVG(latency_ms) OVER (PARTITION BY channel_id, is_stream) AS avg_ms
+        ROW_NUMBER() OVER (PARTITION BY channel_id, model_id ORDER BY latency_ms) AS latency_rank,
+        COUNT(*) OVER (PARTITION BY channel_id, model_id) AS sample_count,
+        AVG(latency_ms) OVER (PARTITION BY channel_id, model_id) AS avg_ms
     FROM samples
 )
 SELECT
     channel_id,
-    is_stream,
+    model_id,
     sample_count,
     avg_ms,
     latency_ms AS p95_ms
 FROM ranked
 WHERE latency_rank = (sample_count * %d + 99) / 100
-ORDER BY channel_id, is_stream`, samples, channelLatencyStatsPercentilePercent)
+ORDER BY channel_id, model_id`, samples, channelLatencyStatsPercentilePercent)
 }

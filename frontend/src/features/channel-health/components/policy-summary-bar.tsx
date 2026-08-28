@@ -34,6 +34,7 @@ export function PolicySummaryBar({
         {t('channelHealth.policyBar.threshold', { latency: formatThresholdSeconds(policy.acceptableLatencyMs) })}
       </Badge>
       <Badge variant='secondary'>{t('channelHealth.policyBar.p95Window', { hours: policy.p95LookbackHours })}</Badge>
+      <Badge variant='secondary'>{t('channelHealth.policyBar.gateWindow', { minutes: policy.gateWindowMinutes })}</Badge>
       <Badge variant='secondary'>{t('channelHealth.policyBar.extraChannels', { count: policy.extraChannels })}</Badge>
       <span className='flex-1' />
       <Button variant='secondary' size='sm' onClick={onEdit} disabled={!canWrite}>

@@ -589,11 +589,25 @@ type ActiveHealthProbeScanSetting struct {
 	// streaming, TTFB when not. It is global because the threshold it is compared
 	// against is global too -- mixing both modes across models would compare two
 	// different measurements against one number.
-	Stream              bool                            `json:"stream"`
-	AcceptableLatencyMs int                             `json:"acceptable_latency_ms"`
-	ExtraChannels       int                             `json:"extra_channels"`
-	P95LookbackHours    int                             `json:"p95_lookback_hours"`
-	Models              []ActiveHealthProbeModelSetting `json:"models,omitempty"`
+	Stream              bool `json:"stream"`
+	AcceptableLatencyMs int  `json:"acceptable_latency_ms"`
+	ExtraChannels       int  `json:"extra_channels"`
+	P95LookbackHours    int  `json:"p95_lookback_hours"`
+	// GateWindowMinutes is how far back the API-key first-token ceiling looks.
+	//
+	// Separate from P95LookbackHours on purpose. The two windows answer different
+	// questions: the dashboard's P95 asks "how has this channel behaved lately", where
+	// a day of history is the point, while the routing ceiling asks "is this channel
+	// fast right NOW", where a day of history is exactly what dilutes a slowdown that
+	// started minutes ago -- leaving the gate slowest to react at the moment it exists
+	// for. Sharing one window made a safety rail average over a whole day.
+	//
+	// The lower bound in practice is interval_minutes x the ceiling's minimum sample
+	// count (3): shorter than that and the window holds too few samples, the statistic
+	// reads UNKNOWN, and the ceiling passes every channel. That failure is safe but
+	// silent, which is why the UI states the coupling.
+	GateWindowMinutes int                             `json:"gate_window_minutes"`
+	Models            []ActiveHealthProbeModelSetting `json:"models,omitempty"`
 }
 
 type ChannelModelAutoSyncSetting struct {
@@ -1397,6 +1411,14 @@ func normalizeSystemChannelSettings(setting *SystemChannelSettings) {
 		if setting.ActiveHealthProbeScan.P95LookbackHours == 0 {
 			setting.ActiveHealthProbeScan.P95LookbackHours = defaultActiveHealthProbeScanSetting.P95LookbackHours
 		}
+		// Stored policies predating this field carry no gate_window_minutes key, so a
+		// zero means "unset" and must fall back rather than be validated as invalid. A
+		// NEGATIVE value cannot come from the API (validate rejects it) but can from a
+		// hand-edited row or an imported backup, and would otherwise survive normalize
+		// and be reported as the live policy.
+		if setting.ActiveHealthProbeScan.GateWindowMinutes <= 0 {
+			setting.ActiveHealthProbeScan.GateWindowMinutes = defaultActiveHealthProbeScanSetting.GateWindowMinutes
+		}
 	}
 	if setting.ActiveHealthProbeScan != nil {
 		for index := range setting.ActiveHealthProbeScan.Models {
@@ -1445,6 +1467,14 @@ func validateSystemChannelSettings(setting *SystemChannelSettings) error {
 			"active health probe P95 lookback must be between %d and %d hours",
 			minActiveHealthProbeP95LookbackHours,
 			maxActiveHealthProbeP95LookbackHours,
+		)
+	}
+	if setting.ActiveHealthProbeScan.GateWindowMinutes < minActiveHealthProbeGateWindowMinutes ||
+		setting.ActiveHealthProbeScan.GateWindowMinutes > maxActiveHealthProbeGateWindowMinutes {
+		return fmt.Errorf(
+			"active health probe gate window must be between %d and %d minutes",
+			minActiveHealthProbeGateWindowMinutes,
+			maxActiveHealthProbeGateWindowMinutes,
 		)
 	}
 	seenModels := make(map[string]struct{}, len(setting.ActiveHealthProbeScan.Models))

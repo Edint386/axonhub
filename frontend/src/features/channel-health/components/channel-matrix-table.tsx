@@ -13,7 +13,8 @@ import {
   FLUENT_LATENCY_MAX_MS,
   HEALTH_LATENCY_MAX_MS,
   channelLatestFirst,
-  channelP50,
+  channelGateAvgMs,
+  channelGateSampleCount,
   channelP95,
   formatMultiplier,
   gradeOfChannel,
@@ -63,11 +64,22 @@ export function ChannelMatrixTable({
   canWrite,
   onOpenDetail,
   probeActions,
+  gateWindowMinutes,
+  p95LookbackHours,
 }: {
   channels: ChannelHealthProbeChannel[];
   canWrite: boolean;
   onOpenDetail: (channel: ChannelHealthProbeChannel) => void;
   probeActions: ReturnType<typeof useProbeActions>;
+  /**
+   * Window the first-token figure and the status chip are computed over — the same one
+   * the API-key ceiling judges by, so the numbers on screen answer the question the
+   * router actually asks. Only the recent-probe strip stays unbounded: it is explicitly
+   * a history view.
+   */
+  gateWindowMinutes: number;
+  /** Window of the P95 shown beneath the gate figure, so that number is labelled too. */
+  p95LookbackHours: number;
 }) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>('priority');
@@ -75,6 +87,7 @@ export function ChannelMatrixTable({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { probing, probeChannel, probeModel } = probeActions;
   const updateSettings = useUpdateChannelHealthProbeSettings();
+  const gateWindowMs = gateWindowMinutes * 60_000;
 
   const sorted = useMemo(() => {
     const comparators: Record<SortKey, (a: ChannelHealthProbeChannel, b: ChannelHealthProbeChannel) => number> = {
@@ -82,15 +95,18 @@ export function ChannelMatrixTable({
       // Ties fall back to the channel name so the list stays stable.
       priority: (a, b) => a.priority - b.priority || a.channelName.localeCompare(b.channelName, 'zh'),
       mult: (a, b) => a.modelPriceMultiplier - b.modelPriceMultiplier,
-      status: (a, b) => CHANNEL_GRADE_ORDER[gradeOfChannel(a)] - CHANNEL_GRADE_ORDER[gradeOfChannel(b)],
-      first: (a, b) => (channelP50(a) ?? Number.MAX_VALUE) - (channelP50(b) ?? Number.MAX_VALUE),
+      status: (a, b) =>
+        CHANNEL_GRADE_ORDER[gradeOfChannel(a, gateWindowMs)] - CHANNEL_GRADE_ORDER[gradeOfChannel(b, gateWindowMs)],
+      // Sorting must read the same figure the column displays, or the column orders
+      // itself by a number that is nowhere on screen.
+      first: (a, b) => (channelGateAvgMs(a) ?? Number.MAX_VALUE) - (channelGateAvgMs(b) ?? Number.MAX_VALUE),
     };
     const list = [...channels].sort((a, b) => {
       const result = comparators[sortKey](a, b);
       return sortAsc ? result : -result;
     });
     return list;
-  }, [channels, sortKey, sortAsc]);
+  }, [channels, sortKey, sortAsc, gateWindowMs]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -157,7 +173,7 @@ export function ChannelMatrixTable({
             <SortableHead label={t('channelHealth.columns.status')} sortKey='status' current={sortKey} asc={sortAsc} onSort={handleSort} />
             <TableHead className={HEAD_CELL}>{t('channelHealth.columns.modelHealth')}</TableHead>
             <SortableHead
-              label={t('channelHealth.columns.firstToken')}
+              label={t('channelHealth.columns.firstTokenWindowed', { minutes: gateWindowMinutes })}
               sortKey='first'
               current={sortKey}
               asc={sortAsc}
@@ -169,10 +185,20 @@ export function ChannelMatrixTable({
         </TableHeader>
         <TableBody className='!bg-[var(--table-background)]'>
           {sorted.map((channel) => {
-            const grade = gradeOfChannel(channel);
+            const grade = gradeOfChannel(channel, gateWindowMs);
             const primaryModel = primaryModelOf(channel);
-            const latest = channelLatestFirst(channel);
-            const p50 = channelP50(channel);
+            // `latestRun` is the newest run of ANY age. Graded unbounded it produced a
+            // row that contradicted itself: a green "healthy" model chip between a
+            // channel chip reading "no metric" and a first-token cell reading "-".
+            // Outside the window the channel grade is the honest answer, because it is
+            // the one that accounts for the window being empty. An unparseable
+            // timestamp keeps the run, matching the window filter's own rule.
+            const latestRunStartedAt = primaryModel?.latestRun ? Date.parse(primaryModel.latestRun.startedAt) : Number.NaN;
+            const latestRunInWindow =
+              primaryModel?.latestRun != null &&
+              (!Number.isFinite(latestRunStartedAt) || latestRunStartedAt >= Date.now() - gateWindowMs);
+            const latest = channelLatestFirst(channel, gateWindowMs);
+            const gateAvgMs = channelGateAvgMs(channel);
             const p95 = channelP95(channel);
             const isProbing = probeActions.isChannelProbing(channel.channelID);
             const isExpanded = expanded.has(channel.channelID);
@@ -226,26 +252,35 @@ export function ChannelMatrixTable({
                   <TableCell className={BODY_CELL}>
                     <div className='space-y-1'>
                       <span className='mx-auto block max-w-40 truncate font-mono text-[11px]'>{primaryModel?.modelID ?? '-'}</span>
-                      <ProbeStatusChip status={primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun) : grade} />
+                      <ProbeStatusChip status={latestRunInWindow && primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun) : grade} />
                     </div>
                   </TableCell>
                   <TableCell className={BODY_CELL}>
                     <span
                       className={cn(
                         'text-xs tabular-nums',
-                        p50 != null && p50 > FLUENT_LATENCY_MAX_MS && 'text-destructive font-bold',
-                        p50 != null &&
-                          p50 > HEALTH_LATENCY_MAX_MS &&
-                          p50 <= FLUENT_LATENCY_MAX_MS &&
+                        gateAvgMs != null && gateAvgMs > FLUENT_LATENCY_MAX_MS && 'text-destructive font-bold',
+                        gateAvgMs != null &&
+                          gateAvgMs > HEALTH_LATENCY_MAX_MS &&
+                          gateAvgMs <= FLUENT_LATENCY_MAX_MS &&
                           'font-semibold text-[var(--grade-degraded)]'
                       )}
                     >
-                      {p50 != null ? formatDuration(p50) : '-'}
+                      {gateAvgMs != null ? formatDuration(gateAvgMs) : '-'}
                       <span className='text-muted-foreground block text-[10.5px]'>
-                        {t('channelHealth.firstTokenDetail', {
-                          latest: latest != null ? formatDuration(latest) : '-',
-                          p95: p95 != null ? formatDuration(p95) : '-',
-                        })}
+                        {gateAvgMs != null
+                          ? t('channelHealth.firstTokenDetail', {
+                              latest: latest != null ? formatDuration(latest) : '-',
+                              p95: p95 != null ? formatDuration(p95) : '-',
+                              hours: p95LookbackHours,
+                            })
+                          : // No gate figure means the ceiling itself reads unknown. Say which
+                            // kind of unknown it is: measured too little, or not measured at
+                            // all -- the backend reports the count precisely so these two do
+                            // not collapse into one message.
+                            channelGateSampleCount(channel) === 0
+                            ? t('channelHealth.firstTokenNeverMeasured')
+                            : t('channelHealth.firstTokenNoGate', { count: channelGateSampleCount(channel) })}
                       </span>
                     </span>
                   </TableCell>

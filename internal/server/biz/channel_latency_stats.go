@@ -17,9 +17,10 @@ import (
 	"github.com/looplj/axonhub/internal/server/gql/qb"
 )
 
-// channelLatencyStatsDefaultLookback is the window used when no valid P95 lookback
-// is configured.
-const channelLatencyStatsDefaultLookback = 24 * time.Hour
+// channelLatencyStatsDefaultLookback is the window used when no valid gate window is
+// configured. It matches defaultActiveHealthProbeScanSetting.GateWindowMinutes so an
+// unconfigured install and a default-configured one judge identically.
+const channelLatencyStatsDefaultLookback = 30 * time.Minute
 
 // ChannelLatencySample is one channel's windowed first-token latency, for one
 // streaming mode and one source scope.
@@ -52,11 +53,35 @@ type ChannelLatencySample struct {
 	SampleCount int64
 }
 
-// channelLatencyStatsKey identifies one statistic: a channel, a streaming mode, and
-// whether real traffic was admitted alongside synthetic probes.
+// ChannelLatencyGateMinimumSamples is the smallest window the routing ceiling will
+// act on. Below it the statistic reads UNKNOWN, which keeps the candidate.
+const ChannelLatencyGateMinimumSamples int64 = 3
+
+// UsableForGate reports whether the routing ceiling will act on this statistic.
+//
+// It lives on the sample, not beside the ceiling, because two consumers must agree on
+// it: the ceiling itself and the dashboard, which now displays the very number the
+// ceiling judges by. A dashboard applying its own idea of "enough samples" would show
+// a figure the ceiling is ignoring -- the same "the number you read is not the number
+// that decides" defect this whole line of work exists to remove.
+//
+// The positivity check is on AvgMs because that is the value consumers read; every
+// sample in the window is a positive latency by construction, so a non-positive mean
+// means the row carried nothing usable.
+func (s ChannelLatencySample) UsableForGate() bool {
+	return s.SampleCount >= ChannelLatencyGateMinimumSamples && s.AvgMs > 0
+}
+
+// channelLatencyStatsKey identifies one statistic: a channel, the model the request
+// asked for, and whether real traffic was admitted alongside synthetic probes.
+//
+// The model is part of the key because it is what the ceiling is asked about. A
+// per-channel figure would judge one model by another model's measurements, and on a
+// channel serving both a reasoning model and a plain one those differ by more than
+// two channels typically do.
 type channelLatencyStatsKey struct {
 	channelID          int
-	streaming          bool
+	modelID            string
 	includeRealTraffic bool
 }
 
@@ -71,26 +96,32 @@ type channelLatencyStatsSnapshot struct {
 
 type channelLatencyStatsRow struct {
 	channelID   int
-	streaming   bool
+	modelID     string
 	sampleCount int64
 	avgMs       float64
 	p95Ms       float64
 }
 
-// ChannelLatencyStats reports a channel's windowed first-token latency, or false
-// when the window holds nothing for it.
+// ChannelLatencyStats reports a channel's windowed first-token latency for one model,
+// or false when the window holds nothing for that pair.
 //
 // This is a single map lookup against the most recent snapshot: the aggregation runs
 // on a schedule, never on the request path, so a routing decision never waits on a
 // database query.
 //
 // A missing entry means UNKNOWN, not fast and not slow. Callers must keep such a
-// channel eligible.
+// channel eligible. A model that is never probed and carries no real traffic is
+// therefore unjudged by design: the ceiling declines to rank it rather than borrowing
+// another model's number.
 func (svc *ChannelService) ChannelLatencyStats(
 	channelID int,
-	streaming bool,
+	modelID string,
 	includeRealTraffic bool,
 ) (ChannelLatencySample, bool) {
+	if modelID == "" {
+		return ChannelLatencySample{}, false
+	}
+
 	snapshot := svc.channelLatencyStats.Load()
 	if snapshot == nil {
 		return ChannelLatencySample{}, false
@@ -98,7 +129,7 @@ func (svc *ChannelService) ChannelLatencyStats(
 
 	sample, ok := snapshot.samples[channelLatencyStatsKey{
 		channelID:          channelID,
-		streaming:          streaming,
+		modelID:            modelID,
 		includeRealTraffic: includeRealTraffic,
 	}]
 
@@ -132,7 +163,9 @@ func (svc *ChannelService) RefreshChannelLatencyStats(ctx context.Context) error
 	}
 
 	lookback := svc.channelLatencyStatsLookback(ctx)
-	samples := make(map[channelLatencyStatsKey]ChannelLatencySample, len(channelIDs)*4)
+	// One entry per (channel, model, scope); the model count is unknown here, so this is
+	// only a starting size.
+	samples := make(map[channelLatencyStatsKey]ChannelLatencySample, len(channelIDs)*2)
 
 	if len(channelIDs) > 0 {
 		since := now.Add(-lookback)
@@ -150,7 +183,7 @@ func (svc *ChannelService) RefreshChannelLatencyStats(ctx context.Context) error
 			for _, row := range rows {
 				samples[channelLatencyStatsKey{
 					channelID:          row.channelID,
-					streaming:          row.streaming,
+					modelID:            row.modelID,
 					includeRealTraffic: includeRealTraffic,
 				}] = ChannelLatencySample{
 					P95Ms:       row.p95Ms,
@@ -188,19 +221,30 @@ func (svc *ChannelService) runChannelLatencyStatsPeriodically(ctx context.Contex
 	}
 }
 
-// channelLatencyStatsLookback reuses the active-probe P95 window, so the number the
-// routing ceiling compares against covers the same period the dashboard shows.
+// channelLatencyStatsLookback is the window the routing ceiling judges by.
+//
+// It reads GateWindowMinutes, NOT the dashboard's P95 window. The gate answers "is
+// this channel fast right now", and over a window measured in hours a slowdown that
+// started minutes ago is diluted by hundreds of older samples -- the gate would react
+// slowest at exactly the moment it exists for. The dashboard's longer window answers
+// a different question and keeps its own setting.
+//
+// A time window rather than "the newest N samples" is deliberate, and it is about how
+// each one FAILS. A time window that holds too few samples fails to UNKNOWN, and
+// unknown has a safe exit: the candidate is kept. A sample-count window always finds
+// N samples, so when probing is sparse those N span hours and a stale number is used
+// as though it were current -- a silent wrong answer instead of an admitted absence.
 func (svc *ChannelService) channelLatencyStatsLookback(ctx context.Context) time.Duration {
 	if svc.SystemService == nil {
 		return channelLatencyStatsDefaultLookback
 	}
 
 	setting := svc.SystemService.ChannelSettingOrDefault(ctx)
-	if setting == nil || setting.ActiveHealthProbeScan == nil || setting.ActiveHealthProbeScan.P95LookbackHours <= 0 {
+	if setting == nil || setting.ActiveHealthProbeScan == nil || setting.ActiveHealthProbeScan.GateWindowMinutes <= 0 {
 		return channelLatencyStatsDefaultLookback
 	}
 
-	return time.Duration(setting.ActiveHealthProbeScan.P95LookbackHours) * time.Hour
+	return time.Duration(setting.ActiveHealthProbeScan.GateWindowMinutes) * time.Minute
 }
 
 func (svc *ChannelService) enabledChannelIDs(ctx context.Context) ([]int, error) {
@@ -271,13 +315,13 @@ func (svc *ChannelService) queryChannelLatencyStats(
 	for rows.Next() {
 		var (
 			channelID   int
-			isStream    int64
+			modelID     string
 			sampleCount int64
 			avgMs       sql.NullFloat64
 			p95Ms       sql.NullFloat64
 		)
 
-		if err := rows.Scan(&channelID, &isStream, &sampleCount, &avgMs, &p95Ms); err != nil {
+		if err := rows.Scan(&channelID, &modelID, &sampleCount, &avgMs, &p95Ms); err != nil {
 			return nil, fmt.Errorf("failed to scan channel latency stats: %w", err)
 		}
 
@@ -288,9 +332,15 @@ func (svc *ChannelService) queryChannelLatencyStats(
 			continue
 		}
 
+		// A blank model cannot be matched by a lookup, so the group is unusable rather
+		// than a bucket every unnamed request would silently share.
+		if modelID == "" {
+			continue
+		}
+
 		results = append(results, channelLatencyStatsRow{
 			channelID:   channelID,
-			streaming:   isStream != 0,
+			modelID:     modelID,
 			sampleCount: sampleCount,
 			avgMs:       avgMs.Float64,
 			p95Ms:       p95Ms.Float64,

@@ -11,6 +11,8 @@ const (
 	maxActiveHealthProbeExtraChannels       = 20
 	minActiveHealthProbeP95LookbackHours    = 1
 	maxActiveHealthProbeP95LookbackHours    = 30 * 24
+	minActiveHealthProbeGateWindowMinutes   = 1
+	maxActiveHealthProbeGateWindowMinutes   = 24 * 60
 )
 
 var defaultActiveHealthProbeScanSetting = ActiveHealthProbeScanSetting{
@@ -19,6 +21,15 @@ var defaultActiveHealthProbeScanSetting = ActiveHealthProbeScanSetting{
 	AcceptableLatencyMs: 60 * 1000,
 	ExtraChannels:       1,
 	P95LookbackHours:    24,
+	// 30 minutes at the default 5-minute interval leaves ~6 probe samples, which is
+	// twice the routing ceiling's minimum of 3 -- enough that one cold-start blip
+	// cannot evict a channel, while still describing the channel's CURRENT speed.
+	//
+	// This is deliberately NOT P95LookbackHours. That window answers "how has this
+	// channel behaved lately" for the dashboard, where a day of history is the point;
+	// the gate answers "is this channel fast right now", where a day of history is
+	// precisely what must not dilute a change that happened minutes ago.
+	GateWindowMinutes: 30,
 }
 
 func defaultCleanupOptions() []CleanupOption {

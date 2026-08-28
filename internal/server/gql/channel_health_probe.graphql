@@ -21,6 +21,25 @@ type ChannelHealthProbeModelOverview {
   stream: Boolean!
   firstTokenMs: Float
   p95Ms: Float
+  """
+  The number an API-key first-token ceiling compares this channel and model against
+  when the key counts probe traffic only, which is the default: the mean over
+  gateWindowMinutes with the ceiling's sample floor already applied. A key that opts
+  into counting its own real traffic is judged on a different scope, so its ceiling
+  can differ from this figure -- the scope is a per-key choice and this field has no
+  key context.
+
+  Null means the ceiling reads UNKNOWN for this model and keeps this channel whatever
+  the limit is -- so a dashboard must render it as "no measurement", never as fast.
+
+  Distinct from p95Ms, which is the history view over p95LookbackHours.
+  """
+  gateAvgMs: Float
+  """
+  How many samples that window held. Non-zero with a null gateAvgMs means "not
+  measured enough yet" rather than "never measured".
+  """
+  gateSampleCount: Int!
   lastProbedAt: Time
   sampleCount: Int!
   latestRun: ActiveChannelHealthProbeRun
@@ -50,6 +69,23 @@ type ChannelHealthProbePolicy {
   acceptableLatencyMs: Int!
   extraChannels: Int!
   p95LookbackHours: Int!
+  """
+  Window the API-key first-token ceiling judges by, in minutes. Distinct from
+  p95LookbackHours: that one is the dashboard's history view, this one answers
+  "is this channel fast right now".
+
+  The statistic is per (channel, model), and every enabled model on a probed channel
+  is probed once per interval, so the ceiling's 3-sample floor applies to each model
+  independently: below intervalMinutes x 3 the window holds too few samples and the
+  ceiling reads unknown, passing every channel.
+
+  Window length is not sufficient on its own. A probe round stops after the first
+  acceptable channel plus extraChannels backups and records the rest as skipped;
+  a skipped run issues no request and therefore contributes no sample. A channel
+  below that probed head accrues nothing from probing however long the window is,
+  and is judged only if its key counts real traffic.
+  """
+  gateWindowMinutes: Int!
   apiKeyMaxFirstTokenLatencyMs: Float
   availableModels: [String!]!
   models: [ActiveHealthProbeModelSetting!]!
@@ -77,6 +113,7 @@ input UpdateChannelHealthProbePolicyInput {
   acceptableLatencyMs: Int!
   extraChannels: Int!
   p95LookbackHours: Int!
+  gateWindowMinutes: Int!
   models: [ActiveHealthProbeModelSettingInput!]
 }
 

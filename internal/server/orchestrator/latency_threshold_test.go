@@ -12,11 +12,12 @@ import (
 	"github.com/looplj/axonhub/llm"
 )
 
-// latencyStatsKey mirrors the identity of one windowed statistic: a channel, a
-// streaming mode, and whether real traffic was admitted alongside probes.
+// latencyStatsKey mirrors the identity of one windowed statistic: a channel, the
+// model the request asked for, and whether real traffic was admitted alongside
+// probes.
 type latencyStatsKey struct {
 	channelID          int
-	streaming          bool
+	modelID            string
 	includeRealTraffic bool
 }
 
@@ -26,12 +27,12 @@ type latencyThresholdStatsProvider struct {
 
 func (p *latencyThresholdStatsProvider) ChannelLatencyStats(
 	channelID int,
-	streaming bool,
+	modelID string,
 	includeRealTraffic bool,
 ) (biz.ChannelLatencySample, bool) {
 	sample, ok := p.samples[latencyStatsKey{
 		channelID:          channelID,
-		streaming:          streaming,
+		modelID:            modelID,
 		includeRealTraffic: includeRealTraffic,
 	}]
 
@@ -39,13 +40,13 @@ func (p *latencyThresholdStatsProvider) ChannelLatencyStats(
 }
 
 // probeScope and allScope name the two source scopes at the call site, so a fixture
-// reads as "this channel's probe-only window says X".
-func probeScope(channelID int, streaming bool) latencyStatsKey {
-	return latencyStatsKey{channelID: channelID, streaming: streaming}
+// reads as "this channel's probe-only window for this model says X".
+func probeScope(channelID int, modelID string) latencyStatsKey {
+	return latencyStatsKey{channelID: channelID, modelID: modelID}
 }
 
-func allScope(channelID int, streaming bool) latencyStatsKey {
-	return latencyStatsKey{channelID: channelID, streaming: streaming, includeRealTraffic: true}
+func allScope(channelID int, modelID string) latencyStatsKey {
+	return latencyStatsKey{channelID: channelID, modelID: modelID, includeRealTraffic: true}
 }
 
 // window builds a statistic whose MEAN is meanMs -- the value the ceiling reads.
@@ -77,9 +78,21 @@ func latencyCandidate(id int) *ChannelModelsCandidate {
 	return &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{ID: id}}}
 }
 
-func streamRequest(stream bool) *llm.Request {
-	return &llm.Request{Stream: &stream}
+// modelRequest names the model being asked for, which is the dimension the ceiling
+// looks the statistic up by.
+func modelRequest(model string) *llm.Request {
+	return &llm.Request{Model: model}
 }
+
+func streamingModelRequest(model string, stream bool) *llm.Request {
+	return &llm.Request{Model: model, Stream: &stream}
+}
+
+const (
+	modelA = "model-a"
+	modelB = "model-b"
+	modelC = "model-c"
+)
 
 func TestFirstTokenLatencySelectorFiltersKnownSlowCandidates(t *testing.T) {
 	fast := latencyCandidate(1)
@@ -87,14 +100,14 @@ func TestFirstTokenLatencySelectorFiltersKnownSlowCandidates(t *testing.T) {
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{fast, slow}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			allScope(1, true): window(250, 4),
-			allScope(2, true): window(900, 4),
+			allScope(1, modelA): window(250, 4),
+			allScope(2, modelA): window(900, 4),
 		}),
 		500,
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Same(t, fast, candidates[0])
@@ -110,13 +123,13 @@ func TestFirstTokenLatencySelectorKeepsChannelsAbsentFromTheWindow(t *testing.T)
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{knownSlow, absent}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			allScope(1, true): window(900, 4),
+			allScope(1, modelA): window(900, 4),
 		}),
 		500,
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Same(t, absent, candidates[0])
@@ -129,13 +142,13 @@ func TestFirstTokenLatencySelectorIgnoresWindowsBelowSampleFloor(t *testing.T) {
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{thin}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			allScope(1, true): window(9_000, MinimumLatencyThresholdSamples-1),
+			allScope(1, modelA): window(9_000, biz.ChannelLatencyGateMinimumSamples-1),
 		}),
 		500,
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Same(t, thin, candidates[0])
@@ -149,14 +162,14 @@ func TestFirstTokenLatencySelectorFallsBackWhenAllKnownCandidatesFail(t *testing
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{first, second}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			allScope(1, false): window(900, 4),
-			allScope(2, false): window(800, 4),
+			allScope(1, modelA): window(900, 4),
+			allScope(2, modelA): window(800, 4),
 		}),
 		500,
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(false))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Equal(t, []*ChannelModelsCandidate{first, second}, candidates)
 }
@@ -171,7 +184,7 @@ func TestFirstTokenLatencySelectorKeepsCandidatesWithoutAProvider(t *testing.T) 
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Equal(t, []*ChannelModelsCandidate{first, second}, candidates)
 }
@@ -189,14 +202,14 @@ func TestFirstTokenLatencySelectorJudgesByTheMeanNotTheTail(t *testing.T) {
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{tailHeavyButUsuallyFast, uniformlySlow}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			allScope(1, true): {AvgMs: 300, P95Ms: 32_500, SampleCount: 50},
-			allScope(2, true): {AvgMs: 900, P95Ms: 1_000, SampleCount: 50},
+			allScope(1, modelA): {AvgMs: 300, P95Ms: 32_500, SampleCount: 50},
+			allScope(2, modelA): {AvgMs: 900, P95Ms: 1_000, SampleCount: 50},
 		}),
 		500,
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Same(t, tailHeavyButUsuallyFast, candidates[0])
@@ -211,14 +224,14 @@ func TestFirstTokenLatencySelectorTreatsAMissingMeanAsUnknown(t *testing.T) {
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{noMean, latencyCandidate(2)}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			allScope(1, true): {AvgMs: 0, P95Ms: 9_000, SampleCount: 50},
-			allScope(2, true): {AvgMs: 100, P95Ms: 200, SampleCount: 50},
+			allScope(1, modelA): {AvgMs: 0, P95Ms: 9_000, SampleCount: 50},
+			allScope(2, modelA): {AvgMs: 100, P95Ms: 200, SampleCount: 50},
 		}),
 		500,
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Len(t, candidates, 2)
 }
@@ -233,16 +246,16 @@ func TestFirstTokenLatencySelectorProbeOnlyReadsTheProbeScopedWindow(t *testing.
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{slowTrafficFastProbes, slowProbes}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			probeScope(1, true): window(100, 50),
-			allScope(1, true):   window(9_000, 50),
-			probeScope(2, true): window(9_000, 50),
-			allScope(2, true):   window(100, 50),
+			probeScope(1, modelA): window(100, 50),
+			allScope(1, modelA):   window(9_000, 50),
+			probeScope(2, modelA): window(9_000, 50),
+			allScope(2, modelA):   window(100, 50),
 		}),
 		500,
 		false,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Same(t, slowTrafficFastProbes, candidates[0])
@@ -256,95 +269,104 @@ func TestFirstTokenLatencySelectorCountingTrafficReadsTheAllScopedWindow(t *test
 	selector := WithFirstTokenLatencySelector(
 		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{slowTrafficFastProbes, slowProbesFastTraffic}},
 		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			probeScope(1, true): window(100, 50),
-			allScope(1, true):   window(9_000, 50),
-			probeScope(2, true): window(9_000, 50),
-			allScope(2, true):   window(100, 50),
+			probeScope(1, modelA): window(100, 50),
+			allScope(1, modelA):   window(9_000, 50),
+			probeScope(2, modelA): window(9_000, 50),
+			allScope(2, modelA):   window(100, 50),
 		}),
 		500,
 		true,
 	)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
+	candidates, err := selector.Select(context.Background(), modelRequest(modelA))
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Same(t, slowProbesFastTraffic, candidates[0])
 }
 
-func TestFirstTokenLatencySelectorPrefersTheMatchingStreamingWindow(t *testing.T) {
-	// Streaming rows measure a first-token boundary and non-streaming rows a total
-	// response time, so when both windows exist the request's own mode decides. Here
-	// the streaming window breaches the ceiling and the non-streaming one does not.
-	candidate := latencyCandidate(1)
+func TestFirstTokenLatencySelectorJudgesEachModelByItsOwnWindow(t *testing.T) {
+	// The whole point of keying on the model: one channel, two models, opposite
+	// verdicts. Whichever model the request names is the one measured.
+	//
+	// This is the guard against a per-channel figure. Collapse the two windows into
+	// one and both requests get the same answer, which means one of the two models is
+	// being judged by measurements of the other.
+	channel := latencyCandidate(1)
 	samples := map[latencyStatsKey]biz.ChannelLatencySample{
-		allScope(1, true):  window(9_000, 50),
-		allScope(1, false): window(100, 50),
+		allScope(1, modelA): window(100, 50),
+		allScope(1, modelB): window(9_000, 50),
 	}
 
-	nonStreaming, err := WithFirstTokenLatencySelector(
-		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{candidate}},
+	askingForA, known := latencySignalForCandidate(channel, modelRequest(modelA), latencyStats(samples), true)
+	require.True(t, known)
+	require.InDelta(t, 100.0, askingForA, 0.001)
+
+	askingForB, known := latencySignalForCandidate(channel, modelRequest(modelB), latencyStats(samples), true)
+	require.True(t, known)
+	require.InDelta(t, 9_000.0, askingForB, 0.001)
+}
+
+func TestFirstTokenLatencySelectorLeavesAnUnmeasuredModelUnjudged(t *testing.T) {
+	// A model with no window of its own -- never probed, no real traffic -- is UNKNOWN,
+	// so the candidate is kept and the ordering is left to the rest of the chain.
+	// Borrowing the sibling model's number would exclude this channel on evidence
+	// about a different model.
+	channel := latencyCandidate(1)
+	samples := map[latencyStatsKey]biz.ChannelLatencySample{
+		allScope(1, modelA): window(9_000, 50),
+	}
+
+	_, known := latencySignalForCandidate(channel, modelRequest(modelC), latencyStats(samples), true)
+	require.False(t, known)
+
+	// And end to end: asking for the unmeasured model keeps both candidates, while
+	// asking for the measured one excludes the slow channel.
+	unmeasured, err := WithFirstTokenLatencySelector(
+		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{channel, latencyCandidate(2)}},
 		latencyStats(samples),
 		500,
 		true,
-	).Select(context.Background(), streamRequest(false))
+	).Select(context.Background(), modelRequest(modelC))
 	require.NoError(t, err)
-	require.Len(t, nonStreaming, 1)
-	require.Same(t, candidate, nonStreaming[0])
-
-	// The same channel, judged as streaming, is over the ceiling -- and with only one
-	// candidate the best-effort fallback returns it anyway, so assert the signal
-	// directly rather than the filtered list.
-	latencyMs, known := latencySignalForCandidate(candidate, streamRequest(true), latencyStats(samples), true)
-	require.True(t, known)
-	require.InDelta(t, 9_000.0, latencyMs, 0.001)
+	require.Len(t, unmeasured, 2)
 }
 
-func TestFirstTokenLatencySelectorFallsBackToTheOtherModeWindow(t *testing.T) {
-	// The default configuration runs probes NON-streaming, so a streaming request
-	// finds the probe-scoped streaming window empty. Falling back to the other mode
-	// keeps the ceiling working; without it the ceiling would silently pass every
-	// channel, which is how a limit quietly stops existing.
-	slowProbes := latencyCandidate(1)
-	fastProbes := latencyCandidate(2)
-	selector := WithFirstTokenLatencySelector(
-		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{slowProbes, fastProbes}},
-		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			probeScope(1, false): window(9_000, 50),
-			probeScope(2, false): window(100, 50),
-		}),
-		500,
-		false,
-	)
+func TestFirstTokenLatencySelectorTreatsAnUnnamedModelAsUnknown(t *testing.T) {
+	// A request with no model names no window, so it cannot be judged. The empty
+	// string must not become a bucket that every unnamed request shares.
+	channel := latencyCandidate(1)
 
-	candidates, err := selector.Select(context.Background(), streamRequest(true))
-	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Same(t, fastProbes, candidates[0])
+	_, known := latencySignalForCandidate(channel, modelRequest(""), latencyStats(
+		map[latencyStatsKey]biz.ChannelLatencySample{
+			allScope(1, ""): window(9_000, 50),
+		},
+	), true)
+	require.False(t, known)
 }
 
-func TestFirstTokenLatencySelectorUsesStreamingWindowWhenThePolicyForcesStreaming(t *testing.T) {
-	// A require-stream channel is called upstream in streaming mode whatever the
-	// caller asked for, so its streaming window is the comparable one. Channel 1 holds
-	// both windows and only the streaming one breaches, so reading the wrong one would
-	// keep it.
+func TestFirstTokenLatencySelectorIgnoresStreamingMode(t *testing.T) {
+	// Streaming mode is NOT part of the key. One window per channel and model serves
+	// both modes, so the same request judged streaming and non-streaming gets the same
+	// verdict -- including on a require-stream channel, whose upstream call is always
+	// streaming whatever the caller asked for.
+	//
+	// Re-introducing the split would make this fail: the fixture holds one window, and
+	// a mode-keyed lookup would miss it for at least one of the three requests.
 	forced := &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{
 		ID:       1,
 		Policies: objects.ChannelPolicies{Stream: objects.CapabilityPolicyRequire},
 	}}}
-	other := latencyCandidate(2)
-	selector := WithFirstTokenLatencySelector(
-		&staticCandidateSelector{candidates: []*ChannelModelsCandidate{forced, other}},
-		latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
-			allScope(1, true):  window(9_000, 50),
-			allScope(1, false): window(100, 50),
-			allScope(2, false): window(100, 50),
-		}),
-		500,
-		true,
-	)
+	samples := latencyStats(map[latencyStatsKey]biz.ChannelLatencySample{
+		allScope(1, modelA): window(9_000, 50),
+	})
 
-	candidates, err := selector.Select(context.Background(), streamRequest(false))
-	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Same(t, other, candidates[0])
+	for _, req := range []*llm.Request{
+		modelRequest(modelA),
+		streamingModelRequest(modelA, true),
+		streamingModelRequest(modelA, false),
+	} {
+		latencyMs, known := latencySignalForCandidate(forced, req, samples, true)
+		require.True(t, known)
+		require.InDelta(t, 9_000.0, latencyMs, 0.001)
+	}
 }

@@ -53,15 +53,6 @@ export function firstTokenMsOf(run: ActiveChannelHealthProbeRun | null | undefin
   return value == null || !Number.isFinite(value) ? null : value;
 }
 
-export function median(values: number[]): number | null {
-  if (values.length === 0) {
-    return null;
-  }
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 /**
  * Built-in latency bands for health grading, in milliseconds.
  *
@@ -112,31 +103,68 @@ export function primaryModelOf(channel: ChannelHealthProbeChannel): ChannelHealt
   return channel.models.find((model) => model.enabled) ?? null;
 }
 
-function primaryRunsOf(channel: ChannelHealthProbeChannel): ActiveChannelHealthProbeRun[] {
+/**
+ * Runs for the channel's primary model, optionally bounded to a recency window.
+ *
+ * The window is not cosmetic. `recentRuns` is "the newest 15 rows" with no time
+ * bound at all, and a channel the priority chain mostly skips accumulates few real
+ * samples among those rows -- so an unbounded figure can be computed from probes
+ * hours old and still be read as the channel's CURRENT speed, with nothing on screen
+ * saying so. Bounding by the routing gate's own window makes the displayed number
+ * answer the same question the gate answers, and an empty window renders "-" rather
+ * than a stale value.
+ *
+ * Omit windowMs for the recent-probe strip, which is explicitly a history view. The
+ * grade is NOT a history view and always takes the window.
+ */
+function primaryRunsOf(channel: ChannelHealthProbeChannel, windowMs?: number): ActiveChannelHealthProbeRun[] {
   const model = primaryModelOf(channel);
   if (!model) {
     return [];
   }
-  return (channel.recentRuns ?? []).filter((run) => run.modelID === model.modelID);
-}
 
-/** P50 of successful recent probes (skipped runs excluded), for display/sorting only. */
-export function channelP50(channel: ChannelHealthProbeChannel): number | null {
-  const values = primaryRunsOf(channel)
-    .filter((run) => run.status === 'healthy')
-    .map(firstTokenMsOf)
-    .filter((value): value is number => value != null);
-  return median(values);
+  const runs = (channel.recentRuns ?? []).filter((run) => run.modelID === model.modelID);
+  if (windowMs == null || !Number.isFinite(windowMs) || windowMs <= 0) {
+    return runs;
+  }
+
+  const cutoff = Date.now() - windowMs;
+
+  return runs.filter((run) => {
+    const startedAt = Date.parse(run.startedAt);
+    // An unparseable timestamp must not silently drop a sample; keep it and let the
+    // value show rather than claiming there is no measurement.
+    return !Number.isFinite(startedAt) || startedAt >= cutoff;
+  });
 }
 
 /**
- * First-token latency of the latest actual probe. Returns null when that probe
- * has no first-token metric, so the UI renders "-" instead of passing an older
- * run's latency off as the latest one.
+ * The number the routing ceiling judges this channel's primary model by.
+ *
+ * This is what the page displays, rather than a figure computed here. A locally
+ * recomputed mean would only be *close* to the ceiling's; this is the same value,
+ * because the backend already applied the ceiling's window, scope and sample floor.
+ * Null means the ceiling reads UNKNOWN and would keep this channel whatever the limit
+ * is -- so it must render as "no measurement", never as fast.
  */
-export function channelLatestFirst(channel: ChannelHealthProbeChannel): number | null {
-  const probes = primaryRunsOf(channel).filter((run) => run.status === 'healthy' || run.status === 'unhealthy');
+export function channelGateAvgMs(channel: ChannelHealthProbeChannel): number | null {
+  return primaryModelOf(channel)?.gateAvgMs ?? null;
+}
+
+/** How many samples the gate window held, even when it was too few to act on. */
+export function channelGateSampleCount(channel: ChannelHealthProbeChannel): number {
+  return primaryModelOf(channel)?.gateSampleCount ?? 0;
+}
+
+/**
+ * First-token latency of the latest actual probe inside the window. Returns null when
+ * that probe has no first-token metric, or when the window holds no probe at all, so
+ * the UI renders "-" instead of passing an older run's latency off as the latest one.
+ */
+export function channelLatestFirst(channel: ChannelHealthProbeChannel, windowMs?: number): number | null {
+  const probes = primaryRunsOf(channel, windowMs).filter((run) => run.status === 'healthy' || run.status === 'unhealthy');
   const latest = probes[probes.length - 1];
+
   return latest?.status === 'healthy' ? firstTokenMsOf(latest) : null;
 }
 
@@ -145,17 +173,49 @@ export function channelP95(channel: ChannelHealthProbeChannel): number | null {
   return primaryModelOf(channel)?.p95Ms ?? null;
 }
 
-/** Aggregate the channel-level grade from the recent probe strip. */
-export function gradeOfChannel(channel: ChannelHealthProbeChannel): ChannelGrade {
+/**
+ * Aggregate the channel-level grade, bounded to the routing gate's own window.
+ *
+ * Both halves of this grade used the wrong time range before. The success rate read
+ * "the newest 15 rows", which is a COUNT and not a window: a channel the priority
+ * chain mostly skips holds few real samples among those rows, so the verdict could be
+ * built from probes hours old with nothing on screen saying so. The latency tier read
+ * the dashboard's 24-hour P95, so a channel that slowed down last night and has since
+ * recovered kept reading "degraded" for up to a day after the number beside it had
+ * already recovered.
+ *
+ * Now both read the same window as the big figure and as the ceiling, so a row
+ * recovers as one thing instead of the number recovering in minutes and the chip an
+ * hour later.
+ *
+ * Insufficient data is UNKNOWN, never healthy: an empty window means nothing was
+ * measured, which is exactly what a stopped process looks like.
+ *
+ * The sample floor applies to LATENCY only. A failed probe is direct evidence of a
+ * problem and is graded however few there are -- withholding "error" because only two
+ * probes ran would hide a real outage behind "unknown".
+ */
+export function gradeOfChannel(channel: ChannelHealthProbeChannel, windowMs?: number): ChannelGrade {
   if (!channel.enabled) {
     return 'disabled';
   }
   if (primaryModelOf(channel) == null) {
     return 'unconfigured';
   }
-  const runs = primaryRunsOf(channel);
+  // A channel opted out of scheduled probing has no rows written for it at all -- not
+  // even skipped ones -- so once its old rows age out its window is empty forever.
+  // Reporting that as "no metric" would pool a deliberate opt-out with channels whose
+  // scheduler has actually stopped, which is the one thing this window exists to make
+  // visible. The page's own filter already honours probeEnabled; the grade is its twin.
+  if (!channel.probeEnabled) {
+    return 'skipped';
+  }
+  const runs = primaryRunsOf(channel, windowMs);
   if (runs.length === 0) {
-    return 'never';
+    // Decide "never probed" from the unbounded list, not from whether a window was
+    // passed: every production caller passes one, so keying off the parameter made
+    // 'never' unreachable and reported a never-probed channel as "no metric".
+    return primaryRunsOf(channel).length === 0 ? 'never' : 'unknown';
   }
   if (runs[runs.length - 1].status === 'pending') {
     return 'pending';
@@ -175,17 +235,19 @@ export function gradeOfChannel(channel: ChannelHealthProbeChannel): ChannelGrade
   if (fails > 0) {
     return 'degraded';
   }
-  const latestProbe = probes[probes.length - 1];
-  if (firstTokenMsOf(latestProbe) == null) {
+  // Every probe in the window succeeded, so the grade now turns on speed -- and the
+  // number it turns on must be the one the ceiling uses, not a second opinion.
+  const gateAvgMs = channelGateAvgMs(channel);
+  if (gateAvgMs == null) {
     return 'unknown';
   }
-  const p95 = channelP95(channel);
-  if (p95 != null && p95 > FLUENT_LATENCY_MAX_MS) {
+  if (gateAvgMs > FLUENT_LATENCY_MAX_MS) {
     return 'degraded';
   }
-  if (p95 != null && p95 > HEALTH_LATENCY_MAX_MS) {
+  if (gateAvgMs > HEALTH_LATENCY_MAX_MS) {
     return 'fluent';
   }
+
   return 'health';
 }
 

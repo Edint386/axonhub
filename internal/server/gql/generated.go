@@ -453,14 +453,16 @@ type ComplexityRoot struct {
 	}
 
 	ChannelHealthProbeModelOverview struct {
-		Enabled      func(childComplexity int) int
-		FirstTokenMs func(childComplexity int) int
-		LastProbedAt func(childComplexity int) int
-		LatestRun    func(childComplexity int) int
-		ModelID      func(childComplexity int) int
-		P95Ms        func(childComplexity int) int
-		SampleCount  func(childComplexity int) int
-		Stream       func(childComplexity int) int
+		Enabled         func(childComplexity int) int
+		FirstTokenMs    func(childComplexity int) int
+		GateAvgMs       func(childComplexity int) int
+		GateSampleCount func(childComplexity int) int
+		LastProbedAt    func(childComplexity int) int
+		LatestRun       func(childComplexity int) int
+		ModelID         func(childComplexity int) int
+		P95Ms           func(childComplexity int) int
+		SampleCount     func(childComplexity int) int
+		Stream          func(childComplexity int) int
 	}
 
 	ChannelHealthProbePolicy struct {
@@ -469,6 +471,7 @@ type ComplexityRoot struct {
 		AvailableModels              func(childComplexity int) int
 		Enabled                      func(childComplexity int) int
 		ExtraChannels                func(childComplexity int) int
+		GateWindowMinutes            func(childComplexity int) int
 		IntervalMinutes              func(childComplexity int) int
 		Models                       func(childComplexity int) int
 		P95LookbackHours             func(childComplexity int) int
@@ -4090,6 +4093,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelHealthProbeModelOverview.FirstTokenMs(childComplexity), true
+	case "ChannelHealthProbeModelOverview.gateAvgMs":
+		if e.complexity.ChannelHealthProbeModelOverview.GateAvgMs == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModelOverview.GateAvgMs(childComplexity), true
+	case "ChannelHealthProbeModelOverview.gateSampleCount":
+		if e.complexity.ChannelHealthProbeModelOverview.GateSampleCount == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbeModelOverview.GateSampleCount(childComplexity), true
 	case "ChannelHealthProbeModelOverview.lastProbedAt":
 		if e.complexity.ChannelHealthProbeModelOverview.LastProbedAt == nil {
 			break
@@ -4157,6 +4172,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelHealthProbePolicy.ExtraChannels(childComplexity), true
+	case "ChannelHealthProbePolicy.gateWindowMinutes":
+		if e.complexity.ChannelHealthProbePolicy.GateWindowMinutes == nil {
+			break
+		}
+
+		return e.complexity.ChannelHealthProbePolicy.GateWindowMinutes(childComplexity), true
 	case "ChannelHealthProbePolicy.intervalMinutes":
 		if e.complexity.ChannelHealthProbePolicy.IntervalMinutes == nil {
 			break
@@ -23394,6 +23415,10 @@ func (ec *executionContext) fieldContext_ChannelHealthProbeChannel_models(_ cont
 				return ec.fieldContext_ChannelHealthProbeModelOverview_firstTokenMs(ctx, field)
 			case "p95Ms":
 				return ec.fieldContext_ChannelHealthProbeModelOverview_p95Ms(ctx, field)
+			case "gateAvgMs":
+				return ec.fieldContext_ChannelHealthProbeModelOverview_gateAvgMs(ctx, field)
+			case "gateSampleCount":
+				return ec.fieldContext_ChannelHealthProbeModelOverview_gateSampleCount(ctx, field)
 			case "lastProbedAt":
 				return ec.fieldContext_ChannelHealthProbeModelOverview_lastProbedAt(ctx, field)
 			case "sampleCount":
@@ -23633,6 +23658,64 @@ func (ec *executionContext) fieldContext_ChannelHealthProbeModelOverview_p95Ms(_
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModelOverview_gateAvgMs(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeModelOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModelOverview_gateAvgMs,
+		func(ctx context.Context) (any, error) {
+			return obj.GateAvgMs, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModelOverview_gateAvgMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModelOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbeModelOverview_gateSampleCount(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbeModelOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbeModelOverview_gateSampleCount,
+		func(ctx context.Context) (any, error) {
+			return obj.GateSampleCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbeModelOverview_gateSampleCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbeModelOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -23915,6 +23998,35 @@ func (ec *executionContext) _ChannelHealthProbePolicy_p95LookbackHours(ctx conte
 }
 
 func (ec *executionContext) fieldContext_ChannelHealthProbePolicy_p95LookbackHours(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelHealthProbePolicy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelHealthProbePolicy_gateWindowMinutes(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelHealthProbePolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelHealthProbePolicy_gateWindowMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.GateWindowMinutes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelHealthProbePolicy_gateWindowMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ChannelHealthProbePolicy",
 		Field:      field,
@@ -40760,6 +40872,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelHealthProbePolicy
 				return ec.fieldContext_ChannelHealthProbePolicy_extraChannels(ctx, field)
 			case "p95LookbackHours":
 				return ec.fieldContext_ChannelHealthProbePolicy_p95LookbackHours(ctx, field)
+			case "gateWindowMinutes":
+				return ec.fieldContext_ChannelHealthProbePolicy_gateWindowMinutes(ctx, field)
 			case "apiKeyMaxFirstTokenLatencyMs":
 				return ec.fieldContext_ChannelHealthProbePolicy_apiKeyMaxFirstTokenLatencyMs(ctx, field)
 			case "availableModels":
@@ -50554,6 +50668,8 @@ func (ec *executionContext) fieldContext_Query_channelHealthProbePolicy(_ contex
 				return ec.fieldContext_ChannelHealthProbePolicy_extraChannels(ctx, field)
 			case "p95LookbackHours":
 				return ec.fieldContext_ChannelHealthProbePolicy_p95LookbackHours(ctx, field)
+			case "gateWindowMinutes":
+				return ec.fieldContext_ChannelHealthProbePolicy_gateWindowMinutes(ctx, field)
 			case "apiKeyMaxFirstTokenLatencyMs":
 				return ec.fieldContext_ChannelHealthProbePolicy_apiKeyMaxFirstTokenLatencyMs(ctx, field)
 			case "availableModels":
@@ -89382,7 +89498,7 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbePolicyInput(ct
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"enabled", "intervalMinutes", "stream", "acceptableLatencyMs", "extraChannels", "p95LookbackHours", "models"}
+	fieldsInOrder := [...]string{"enabled", "intervalMinutes", "stream", "acceptableLatencyMs", "extraChannels", "p95LookbackHours", "gateWindowMinutes", "models"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -89431,6 +89547,13 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbePolicyInput(ct
 				return it, err
 			}
 			it.P95LookbackHours = data
+		case "gateWindowMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("gateWindowMinutes"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GateWindowMinutes = data
 		case "models":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("models"))
 			data, err := ec.unmarshalOActiveHealthProbeModelSettingInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐActiveHealthProbeModelSettingInputᚄ(ctx, v)
@@ -98461,6 +98584,13 @@ func (ec *executionContext) _ChannelHealthProbeModelOverview(ctx context.Context
 			out.Values[i] = ec._ChannelHealthProbeModelOverview_firstTokenMs(ctx, field, obj)
 		case "p95Ms":
 			out.Values[i] = ec._ChannelHealthProbeModelOverview_p95Ms(ctx, field, obj)
+		case "gateAvgMs":
+			out.Values[i] = ec._ChannelHealthProbeModelOverview_gateAvgMs(ctx, field, obj)
+		case "gateSampleCount":
+			out.Values[i] = ec._ChannelHealthProbeModelOverview_gateSampleCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "lastProbedAt":
 			out.Values[i] = ec._ChannelHealthProbeModelOverview_lastProbedAt(ctx, field, obj)
 		case "sampleCount":
@@ -98562,6 +98692,11 @@ func (ec *executionContext) _ChannelHealthProbePolicy(ctx context.Context, sel a
 			}
 		case "p95LookbackHours":
 			out.Values[i] = ec._ChannelHealthProbePolicy_p95LookbackHours(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "gateWindowMinutes":
+			out.Values[i] = ec._ChannelHealthProbePolicy_gateWindowMinutes(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

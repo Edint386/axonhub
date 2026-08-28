@@ -391,8 +391,8 @@ func TestChannelHealthProbePrimaryModelFollowsGlobalOrder(t *testing.T) {
 		DefaultTestModel: "model-2",
 	}
 
-	first := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels, false)
-	second := buildChannelHealthProbeOverview(channelTwo, nil, nil, recentRuns, globalModels, false)
+	first := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels, false, nil)
+	second := buildChannelHealthProbeOverview(channelTwo, nil, nil, recentRuns, globalModels, false, nil)
 	require.Equal(t, "model-1", *first.PrimaryModelID)
 	require.Equal(t, []string{"model-1", "model-2"}, modelOverviewIDs(first.Models))
 	require.Equal(t, []string{"model-1"}, runModelIDs(first.RecentRuns))
@@ -401,8 +401,61 @@ func TestChannelHealthProbePrimaryModelFollowsGlobalOrder(t *testing.T) {
 	require.Equal(t, []string{"model-2"}, runModelIDs(second.RecentRuns))
 
 	globalModels[0].Enabled = false
-	disabledFirst := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels, false)
+	disabledFirst := buildChannelHealthProbeOverview(channelOne, nil, nil, recentRuns, globalModels, false, nil)
 	require.Equal(t, "model-2", *disabledFirst.PrimaryModelID)
+}
+
+// The dashboard must show the number the routing ceiling judges by, and must not show
+// one the ceiling is ignoring. Below the sample floor the value is withheld while the
+// COUNT survives, which is what lets the page say "not measured enough yet" instead of
+// either inventing a figure or claiming the channel was never measured.
+func TestChannelHealthProbeOverviewCarriesTheGateStatistic(t *testing.T) {
+	ch := &ent.Channel{
+		ID:               1,
+		Status:           channel.StatusEnabled,
+		SupportedModels:  []string{"model-usable", "model-thin", "model-absent"},
+		DefaultTestModel: "model-usable",
+	}
+	globalModels := []ActiveHealthProbeModelSetting{
+		{ModelID: "model-usable", Enabled: true},
+		{ModelID: "model-thin", Enabled: true},
+		{ModelID: "model-absent", Enabled: true},
+	}
+
+	gateStats := func(_ int, modelID string) (ChannelLatencySample, bool) {
+		switch modelID {
+		case "model-usable":
+			return ChannelLatencySample{AvgMs: 4_200, P95Ms: 32_500, SampleCount: 6}, true
+		case "model-thin":
+			return ChannelLatencySample{AvgMs: 9_000, P95Ms: 9_000, SampleCount: ChannelLatencyGateMinimumSamples - 1}, true
+		default:
+			return ChannelLatencySample{}, false
+		}
+	}
+
+	overview := buildChannelHealthProbeOverview(ch, nil, nil, nil, globalModels, false, gateStats)
+	byModel := make(map[string]*ChannelHealthProbeModelOverview, len(overview.Models))
+
+	for _, model := range overview.Models {
+		byModel[model.ModelID] = model
+	}
+
+	usable := byModel["model-usable"]
+	require.NotNil(t, usable.GateAvgMs)
+	require.InDelta(t, 4_200.0, *usable.GateAvgMs, 0.001)
+	require.Equal(t, 6, usable.GateSampleCount)
+
+	// The mean, not the tail: the fixture's P95 is an order of magnitude higher, so
+	// this also fails if the surfaced figure ever switches to the percentile.
+	require.Less(t, *usable.GateAvgMs, 10_000.0)
+
+	thin := byModel["model-thin"]
+	require.Nil(t, thin.GateAvgMs, "below the floor the ceiling ignores the value, so the page must not show it")
+	require.Equal(t, int(ChannelLatencyGateMinimumSamples-1), thin.GateSampleCount)
+
+	absent := byModel["model-absent"]
+	require.Nil(t, absent.GateAvgMs)
+	require.Zero(t, absent.GateSampleCount, "never measured is distinguishable from measured too little")
 }
 
 func modelOverviewIDs(models []*ChannelHealthProbeModelOverview) []string {
@@ -419,6 +472,72 @@ func runModelIDs(runs []*ChannelHealthProbeRunRecord) []string {
 		result = append(result, run.ModelID)
 	}
 	return result
+}
+
+// The production wiring, not just the builder.
+//
+// TestChannelHealthProbeOverviewCarriesTheGateStatistic injects gateStats directly, and
+// every other Overview test builds the service with a nil channelService -- so replacing
+// svc.gateLatencyLookup() with nil at both call sites left the whole suite green. This
+// one goes through Overview with a real ChannelService carrying a published snapshot, so
+// the lookup has to actually be handed over.
+func TestChannelHealthProbeOverviewWiresTheGateLookupThroughOverview(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-gate-wiring?mode=memory&_fk=0")
+	defer client.Close()
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+
+	ch := createHealthProbeTestChannel(t, ctx, client, "wired", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
+
+	policy := ActiveHealthProbeScanSetting{
+		Enabled:         true,
+		IntervalMinutes: 5,
+		Models:          []ActiveHealthProbeModelSetting{{ModelID: "gpt-4", Enabled: true}},
+	}
+	systemService, systemClient := setupTestSystemService(t, xcache.Config{Mode: xcache.ModeMemory})
+
+	defer systemClient.Close()
+	require.NoError(t, systemService.UpdateChannelSetting(ctx, UpdateSystemChannelSettings{
+		ActiveHealthProbeScan: &policy,
+	}))
+
+	channelService := &ChannelService{AbstractService: &AbstractService{db: client}}
+	channelService.channelLatencyStats.Store(&channelLatencyStatsSnapshot{
+		computedAt: time.Now().UTC(),
+		lookback:   30 * time.Minute,
+		samples: map[channelLatencyStatsKey]ChannelLatencySample{
+			// Probe-scoped, which is what the page shows.
+			{channelID: ch.ID, modelID: "gpt-4", includeRealTraffic: false}: {
+				AvgMs:       4_200,
+				P95Ms:       32_500,
+				SampleCount: 6,
+			},
+		},
+	})
+
+	svc := &ChannelHealthProbeService{
+		AbstractService: &AbstractService{db: client},
+		channelService:  channelService,
+		systemService:   systemService,
+	}
+
+	overview, err := svc.Overview(ctx)
+	require.NoError(t, err)
+	require.Len(t, overview, 1)
+
+	var probed *ChannelHealthProbeModelOverview
+
+	for _, model := range overview[0].Models {
+		if model.ModelID == "gpt-4" {
+			probed = model
+		}
+	}
+
+	require.NotNil(t, probed, "the channel's own model must appear in the overview")
+	require.NotNil(t, probed.GateAvgMs, "Overview must hand the gate lookup to the builder")
+	require.InDelta(t, 4_200.0, *probed.GateAvgMs, 0.001)
+	require.Equal(t, 6, probed.GateSampleCount)
+	// The mean, not the tail -- the fixture's P95 is an order of magnitude higher.
+	require.Less(t, *probed.GateAvgMs, 10_000.0)
 }
 
 func TestChannelHealthProbeOverviewIncludesP95AndLatestFirstToken(t *testing.T) {
@@ -762,6 +881,13 @@ func TestChannelHealthProbeService_ReapStalePendingRuns(t *testing.T) {
 	require.Equal(t, channelhealthproberun.StatusUnhealthy, closed.Status)
 	require.NotNil(t, closed.CompletedAt, "a closed run must carry a completion time")
 	require.NotEmpty(t, closed.ErrorMessage, "the row must say why it was closed")
+	// A reaped row is evidence that a probe vanished, NOT a measurement. Inventing one
+	// would feed the P95 and the health grade a fabricated latency, so the sweep must
+	// leave every metric untouched -- and 0 total_ms is inert because every consumer
+	// filters on status = healthy first.
+	require.Nil(t, closed.TtfbMs, "a reaped run must not carry a first-token metric")
+	require.Nil(t, closed.TtftMs, "a reaped run must not carry a first-token metric")
+	require.Zero(t, closed.TotalMs, "a reaped run must not carry a latency")
 
 	require.Equal(t, channelhealthproberun.StatusPending, client.ChannelHealthProbeRun.GetX(ctx, fresh).Status)
 	require.Equal(t, channelhealthproberun.StatusHealthy, client.ChannelHealthProbeRun.GetX(ctx, done).Status)

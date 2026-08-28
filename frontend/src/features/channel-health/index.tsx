@@ -18,7 +18,7 @@ import { ChannelMatrixTable } from './components/channel-matrix-table';
 import { HistoryPanel } from './components/history-panel';
 import { KpiCards, type KpiFilter } from './components/kpi-cards';
 import { PolicySummaryBar } from './components/policy-summary-bar';
-import { ProbeSettingsSheet } from './components/probe-settings-sheet';
+import { ProbeSettingsDialog } from './components/probe-settings-dialog';
 import { useChannelHealthProbeOverview, type ChannelHealthProbePolicy } from './data/channel-health';
 import { OTHER_GRADES, PROBLEM_GRADES, gradeOfChannel, type ChannelGrade } from './probe-grade';
 import { useProbeActions } from './use-probe-actions';
@@ -78,6 +78,7 @@ export default function ChannelHealthPage() {
           acceptableLatencyMs: 60_000,
           extraChannels: 1,
           p95LookbackHours: 24,
+          gateWindowMinutes: 30,
           availableModels: [],
           models: [],
         }
@@ -86,6 +87,14 @@ export default function ChannelHealthPage() {
   );
 
   const probeActions = useProbeActions();
+  // One window for the whole page: the big figure, the status chip, the KPI counts and
+  // the filters must all describe the same period, or a row disagrees with itself.
+  //
+  // Every child prop is in MINUTES, the unit the policy itself uses, and each derives
+  // milliseconds locally. Two siblings taking one concept in two units would both be
+  // typed `number`, so a mis-wire would be a silent 60000x error.
+  const gateWindowMinutes = policy?.gateWindowMinutes ?? 30;
+  const gateWindowMs = gateWindowMinutes * 60_000;
   const [detailChannelID, setDetailChannelID] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -102,7 +111,7 @@ export default function ChannelHealthPage() {
     let abnormal = 0;
     let error = 0;
     for (const channel of channels) {
-      const grade = gradeOfChannel(channel);
+      const grade = gradeOfChannel(channel, gateWindowMs);
       if (grade === 'abnormal') {
         abnormal++;
       } else if (grade === 'error') {
@@ -110,12 +119,12 @@ export default function ChannelHealthPage() {
       }
     }
     return { abnormal, error };
-  }, [channels]);
+  }, [channels, gateWindowMs]);
 
   const filteredChannels = useMemo(() => {
     const keyword = debouncedQuery.trim().toLowerCase();
     return channels.filter((channel) => {
-      const grade = gradeOfChannel(channel);
+      const grade = gradeOfChannel(channel, gateWindowMs);
       // On this page "enabled" means "actually being probed", which needs BOTH the
       // channel's own status and its per-channel probe opt-in. Without probeEnabled
       // here, a channel you switch off stays on screen under every filter option.
@@ -151,7 +160,7 @@ export default function ChannelHealthPage() {
       }
       return true;
     });
-  }, [channels, channelStatusFilter, statusFilter, modelFilter, debouncedQuery]);
+  }, [channels, channelStatusFilter, statusFilter, modelFilter, debouncedQuery, gateWindowMs]);
 
   const allModels = useMemo(
     () =>
@@ -205,7 +214,7 @@ export default function ChannelHealthPage() {
             <Skeleton className='h-96 rounded-xl' />
           </div>
         ) : overview.error || !policy ? (
-          <Alert variant='destructive'>
+          <Alert variant='destructive' className='items-center [&>svg]:translate-y-0'>
             <AlertTriangle className='size-4' />
             <AlertDescription className='flex items-center gap-3'>
               {overview.error?.message ?? t('channelHealth.messages.loadFailed')}
@@ -231,7 +240,12 @@ export default function ChannelHealthPage() {
             ) : null}
 
             {problemCounts.abnormal + problemCounts.error > 0 ? (
-              <Alert variant='destructive'>
+              // items-center + no svg nudge: the Alert primitive pins its icon to the
+              // TOP of the grid (items-start, translate-y-0.5), which is right when the
+              // description is a paragraph. Here the row is a single line whose height
+              // is set by the button next to it, so the top-pinned icon sat visibly
+              // above the text. Centering both grid cells lines them up.
+              <Alert variant='destructive' className='items-center [&>svg]:translate-y-0'>
                 <AlertTriangle className='size-4' />
                 <AlertDescription className='flex flex-wrap items-center gap-2'>
                   <span>
@@ -249,6 +263,7 @@ export default function ChannelHealthPage() {
 
             <KpiCards
               channels={channels}
+              gateWindowMinutes={gateWindowMinutes}
               active={statusFilter}
               onSelect={(filter) => {
                 setStatusFilter(filter);
@@ -324,6 +339,8 @@ export default function ChannelHealthPage() {
                   canWrite={canWrite}
                   onOpenDetail={(channel) => setDetailChannelID(channel.channelID)}
                   probeActions={probeActions}
+                  gateWindowMinutes={gateWindowMinutes}
+                  p95LookbackHours={policy.p95LookbackHours}
                 />
               </TabsContent>
               <TabsContent value='history' className='pt-3'>
@@ -343,11 +360,12 @@ export default function ChannelHealthPage() {
           }
         }}
         thresholdMs={routingCeilingMs}
+        gateWindowMinutes={gateWindowMinutes}
         onProbeAll={(channel) => void probeActions.probeChannel(channel)}
         probing={detailChannel != null && probeActions.isChannelProbing(detailChannel.channelID)}
         canWrite={canWrite}
       />
-      {policy ? <ProbeSettingsSheet open={settingsOpen} onOpenChange={setSettingsOpen} policy={policy} /> : null}
+      {policy ? <ProbeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} policy={policy} /> : null}
     </div>
   );
 }

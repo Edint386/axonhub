@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Loader2 } from 'lucide-react';
+import { GripVertical, Loader2, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import {
   useUpdateChannelHealthProbePolicy,
@@ -69,7 +69,15 @@ function syncedModels(policy: ChannelHealthProbePolicy): ActiveHealthProbeModelS
   return [...policy.models, ...appended.map((modelID) => ({ modelID, enabled: false }))];
 }
 
-export function ProbeSettingsSheet({
+/**
+ * Probe policy editor.
+ *
+ * A centered Dialog rather than a side Sheet: across this app a Sheet is a
+ * read-only viewer (request body, trace, test history) while every settings
+ * surface that WRITES configuration is a Dialog — see the channels and models
+ * settings dialogs this one is modelled on.
+ */
+export function ProbeSettingsDialog({
   open,
   onOpenChange,
   policy,
@@ -86,6 +94,7 @@ export function ProbeSettingsSheet({
   const [latencySeconds, setLatencySeconds] = useState(String(policy.acceptableLatencyMs / 1000));
   const [extraChannels, setExtraChannels] = useState(String(policy.extraChannels));
   const [p95LookbackHours, setP95LookbackHours] = useState(String(policy.p95LookbackHours));
+  const [gateWindowMinutes, setGateWindowMinutes] = useState(String(policy.gateWindowMinutes));
   const [models, setModels] = useState<ActiveHealthProbeModelSetting[]>(() => syncedModels(policy));
 
   const initialModels = useMemo(() => syncedModels(policy), [policy]);
@@ -100,6 +109,7 @@ export function ProbeSettingsSheet({
     setLatencySeconds(String(policy.acceptableLatencyMs / 1000));
     setExtraChannels(String(policy.extraChannels));
     setP95LookbackHours(String(policy.p95LookbackHours));
+    setGateWindowMinutes(String(policy.gateWindowMinutes));
     setModels(initialModels);
   }, [open, policy, initialModels]);
 
@@ -107,8 +117,20 @@ export function ProbeSettingsSheet({
   const parsedLatencySeconds = Number(latencySeconds);
   const parsedExtraChannels = Number(extraChannels);
   const parsedP95LookbackHours = Number(p95LookbackHours);
+  const parsedGateWindowMinutes = Number(gateWindowMinutes);
   const acceptableLatencyMs = Math.round(parsedLatencySeconds * 1000);
   const hasDuplicateModels = new Set(models.map((model) => model.modelID)).size !== models.length;
+
+  /**
+   * A gate window shorter than interval x 3 holds fewer than the ceiling's minimum
+   * sample count, so the statistic reads UNKNOWN and the ceiling silently passes
+   * every channel. Not an error -- a shorter window is a legitimate choice when real
+   * traffic supplies the samples -- so this warns rather than blocking the save.
+   */
+  const minimumUsefulGateWindow = Number.isInteger(parsedIntervalMinutes) && parsedIntervalMinutes >= 1 ? parsedIntervalMinutes * 3 : 0;
+  const gateWindowTooShortForProbes =
+    Number.isInteger(parsedGateWindowMinutes) && parsedGateWindowMinutes >= 1 && parsedGateWindowMinutes < minimumUsefulGateWindow;
+
   const isValid =
     Number.isInteger(parsedIntervalMinutes) &&
     parsedIntervalMinutes >= 1 &&
@@ -123,6 +145,9 @@ export function ProbeSettingsSheet({
     Number.isInteger(parsedP95LookbackHours) &&
     parsedP95LookbackHours >= 1 &&
     parsedP95LookbackHours <= 720 &&
+    Number.isInteger(parsedGateWindowMinutes) &&
+    parsedGateWindowMinutes >= 1 &&
+    parsedGateWindowMinutes <= 1440 &&
     !hasDuplicateModels &&
     (!enabled || models.some((model) => model.enabled));
 
@@ -154,6 +179,7 @@ export function ProbeSettingsSheet({
         acceptableLatencyMs,
         extraChannels: parsedExtraChannels,
         p95LookbackHours: parsedP95LookbackHours,
+        gateWindowMinutes: parsedGateWindowMinutes,
         models,
       },
       {
@@ -167,12 +193,17 @@ export function ProbeSettingsSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent aria-describedby={undefined} className='flex w-full flex-col sm:max-w-xl'>
-        <SheetHeader>
-          <SheetTitle>{t('channelHealth.settings.title')}</SheetTitle>
-        </SheetHeader>
-        <div className='flex-1 space-y-6 overflow-y-auto px-4 pb-4'>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className='flex max-h-[90vh] w-full max-w-full flex-col overflow-hidden sm:max-w-[720px]'>
+        <DialogHeader className='shrink-0'>
+          <DialogTitle className='flex items-center gap-2'>
+            <Settings2 className='size-5' />
+            {t('channelHealth.settings.title')}
+          </DialogTitle>
+          <DialogDescription>{t('channelHealth.settings.description')}</DialogDescription>
+        </DialogHeader>
+
+        <div className='min-h-0 flex-1 space-y-6 overflow-y-auto pr-1'>
           <div className='flex items-center justify-between gap-3'>
             <span className='text-sm font-medium'>{t('channelHealth.settings.masterSwitch')}</span>
             <Switch checked={enabled} onCheckedChange={setEnabled} disabled={updatePolicy.isPending} />
@@ -201,6 +232,36 @@ export function ProbeSettingsSheet({
               />
               <span className='text-muted-foreground text-sm'>{t('channelHealth.settings.intervalUnit')}</span>
             </div>
+            <p className='text-muted-foreground text-xs'>{t('channelHealth.settings.intervalDescription')}</p>
+          </div>
+
+          <div className='space-y-2'>
+            <label htmlFor='probe-gate-window' className='text-sm font-medium'>
+              {t('channelHealth.settings.gateWindow')}
+            </label>
+            <div className='flex items-center gap-2'>
+              <Input
+                id='probe-gate-window'
+                type='number'
+                min='1'
+                max='1440'
+                step='1'
+                className='w-36'
+                value={gateWindowMinutes}
+                onChange={(event) => setGateWindowMinutes(event.target.value)}
+                disabled={updatePolicy.isPending}
+              />
+              <span className='text-muted-foreground text-sm'>{t('channelHealth.settings.gateWindowUnit')}</span>
+            </div>
+            <p className='text-muted-foreground text-xs'>{t('channelHealth.settings.gateWindowDescription')}</p>
+            {gateWindowTooShortForProbes ? (
+              <p className='text-[var(--grade-degraded)] text-xs'>
+                {t('channelHealth.settings.gateWindowTooShort', {
+                  minutes: minimumUsefulGateWindow,
+                  interval: parsedIntervalMinutes,
+                })}
+              </p>
+            ) : null}
           </div>
 
           <div className='space-y-2'>
@@ -296,16 +357,17 @@ export function ProbeSettingsSheet({
             )}
           </div>
         </div>
-        <div className='flex gap-2 border-t px-4 py-3'>
+
+        <DialogFooter className='shrink-0'>
+          <Button variant='outline' onClick={() => onOpenChange(false)} disabled={updatePolicy.isPending}>
+            {t('common.buttons.cancel')}
+          </Button>
           <Button onClick={handleSave} disabled={!isValid || updatePolicy.isPending}>
             {updatePolicy.isPending ? <Loader2 className='size-4 animate-spin' /> : null}
             {t('channelHealth.settings.save')}
           </Button>
-          <Button variant='ghost' onClick={() => onOpenChange(false)}>
-            {t('common.buttons.cancel')}
-          </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

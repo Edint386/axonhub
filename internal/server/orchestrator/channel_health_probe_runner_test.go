@@ -94,3 +94,17 @@ func TestChannelHealthProbeRunIsAcceptableUsesModeSpecificFirstTokenMetric(t *te
 		TotalMs: 150,
 	}, 100))
 }
+
+// The reaper's patience must exceed a probe's whole budget, and nothing in the type
+// system says so: the threshold lives in biz and the budget lives here.
+//
+// Break the inequality and the sweep starts closing runs that are still executing. The
+// probe then finishes and CompleteRun's `Where(status == pending)` matches zero rows, so
+// a genuine result is discarded behind a generic persist error -- a silent loss that
+// looks like a write failure. This assertion is the only thing tying the two packages.
+func TestChannelHealthProbeStaleThresholdExceedsTheProbeBudget(t *testing.T) {
+	budget := channelHealthProbeTimeout + channelHealthProbePersistTimeout
+
+	require.Greater(t, biz.ChannelHealthProbeStaleAfter, budget,
+		"a probe can legitimately hold a pending row for %s; reaping earlier than that discards real results", budget)
+}

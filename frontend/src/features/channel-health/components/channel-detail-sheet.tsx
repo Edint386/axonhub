@@ -30,6 +30,7 @@ export function ChannelDetailSheet({
   open,
   onOpenChange,
   thresholdMs,
+  gateWindowMinutes,
   onProbeAll,
   probing,
   canWrite,
@@ -38,6 +39,8 @@ export function ChannelDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   thresholdMs: number;
+  /** Same window the matrix and the routing ceiling use, for labelling the gate figure. */
+  gateWindowMinutes: number;
   onProbeAll: (channel: ChannelHealthProbeChannel) => void;
   probing: boolean;
   canWrite: boolean;
@@ -203,6 +206,18 @@ export function ChannelDetailSheet({
                       <td className='px-3 py-2 font-mono text-xs tabular-nums'>
                         {model.firstTokenMs != null ? formatDuration(model.firstTokenMs) : '-'}{' '}
                         <span className='text-muted-foreground text-[10.5px]'>{t('channelHealth.detail.latestLabel')}</span>
+                      </td>
+                      {/*
+                        The routing ceiling's own number, per model. Without it this panel
+                        showed a confident "latest" figure and a 24-hour P95 while the row
+                        that opened it displayed neither -- the one number that decides
+                        routing was absent from the drill-down.
+                      */}
+                      <td className='px-3 py-2 font-mono text-xs tabular-nums'>
+                        {model.gateAvgMs != null ? formatDuration(model.gateAvgMs) : '-'}{' '}
+                        <span className='text-muted-foreground text-[10.5px]'>
+                          {t('channelHealth.detail.gateAvgLabel', { minutes: gateWindowMinutes })}
+                        </span>
                       </td>
                       <td className='px-3 py-2 font-mono text-xs tabular-nums'>
                         {model.p95Ms != null ? formatDuration(model.p95Ms) : '-'}{' '}

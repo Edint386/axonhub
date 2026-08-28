@@ -18,7 +18,7 @@ func TestBuildChannelLatencyStatsQueryPostgresUsesPercentileAggregate(t *testing
 	// is needed at all on PostgreSQL.
 	require.Contains(t, query, "PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY latency_ms)")
 	require.NotContains(t, query, "ROW_NUMBER()")
-	require.Contains(t, query, "GROUP BY channel_id, is_stream")
+	require.Contains(t, query, "GROUP BY channel_id, model_id")
 
 	require.Contains(t, query, "se.created_at >= $1")
 	require.Contains(t, query, "se.created_at < $2")
@@ -36,7 +36,7 @@ func TestBuildChannelLatencyStatsQuerySQLiteUsesNearestRankFallback(t *testing.T
 	// the same partition. The rank must be integer-ceiling arithmetic rather than
 	// CEIL(), which is a compile-time option in SQLite.
 	require.NotContains(t, query, "PERCENTILE_DISC")
-	require.Contains(t, query, "ROW_NUMBER() OVER (PARTITION BY channel_id, is_stream ORDER BY latency_ms)")
+	require.Contains(t, query, "ROW_NUMBER() OVER (PARTITION BY channel_id, model_id ORDER BY latency_ms)")
 	require.Contains(t, query, "WHERE latency_rank = (sample_count * 95 + 99) / 100")
 	require.NotContains(t, query, "CEIL")
 
@@ -59,13 +59,18 @@ func TestBuildChannelLatencyStatsQueryScopeControlsTheSourceFilter(t *testing.T)
 		})
 
 		// The entire difference between "probe only" and "probe plus real traffic" is
-		// one join and one predicate -- this is what replaced merging two averages.
+		// one predicate -- this is what replaced merging two averages. The join itself
+		// is unconditional now: it supplies the model, which is a grouping key.
 		require.Contains(t, probeScoped, "JOIN requests r ON r.id = se.request_id")
-		require.Contains(t, probeScoped, "AND r.source = 'test'")
+		require.Contains(t, probeScoped, "AND r.source = 'test'\n")
 
-		// The all-sources scope needs nothing from requests, so it stays single-table.
-		require.NotContains(t, allScoped, "JOIN requests")
-		require.NotContains(t, allScoped, "r.source")
+		require.Contains(t, allScoped, "JOIN requests r ON r.id = se.request_id")
+		// The all-sources scope must not carry the scope filter. It still mentions
+		// r.source inside the row-eligibility clause, which admits a probe's total
+		// latency as a first-token stand-in, so assert on the filter line itself rather
+		// than on the column name.
+		require.NotContains(t, allScoped, "AND r.source = 'test'\n")
+		require.Contains(t, allScoped, "AND (se.metrics_first_token_latency_ms IS NOT NULL OR r.source = 'test')")
 	}
 }
 
@@ -81,18 +86,25 @@ func TestBuildChannelLatencyStatsQuerySharesSampleEligibility(t *testing.T) {
 
 		require.Contains(t, query, "AND se.status = 'completed'")
 		require.Contains(t, query, "AND se.channel_id IS NOT NULL")
-		// First-token latency, falling back to total latency for non-streaming rows.
+		// First-token latency, falling back to total latency ONLY for probes: the
+		// fallback is sound for a length-capped probe and wrong for real traffic, where
+		// total latency is completion time and a verbose answer would read as a slow
+		// first token.
 		require.Contains(t, query, "COALESCE(se.metrics_first_token_latency_ms, se.metrics_latency_ms) AS latency_ms")
+		require.Contains(t, query, "AND (se.metrics_first_token_latency_ms IS NOT NULL OR r.source = 'test')")
 		// A missing or zero metric leaves the pair unknown instead of adding a fast sample.
 		require.Contains(t, query, "AND COALESCE(se.metrics_first_token_latency_ms, se.metrics_latency_ms) > 0")
-		// Streaming mode is projected as an integer so one scan works on both dialects.
-		require.Contains(t, query, "CASE WHEN se.stream THEN 1 ELSE 0 END AS is_stream")
+		// The model the request asked for is the grouping dimension, and streaming mode
+		// is deliberately not one -- a mode column reappearing here means the split that
+		// judged model B by model A's samples has come back.
+		require.Contains(t, query, "r.model_id AS model_id")
+		require.NotContains(t, query, "is_stream")
 	}
 }
 
 func TestBuildChannelLatencyStatsQueryColumnOrderMatchesAcrossDialects(t *testing.T) {
 	// One Go scan reads either dialect's rows, so the select list order is part of the
-	// contract: channel_id, is_stream, sample_count, avg_ms, p95_ms.
+	// contract: channel_id, model_id, sample_count, avg_ms, p95_ms.
 	postgres := BuildChannelLatencyStatsQuery(ChannelLatencyStatsQuery{
 		UseDollarPlaceholders:  true,
 		UsePercentileAggregate: true,
@@ -100,7 +112,7 @@ func TestBuildChannelLatencyStatsQueryColumnOrderMatchesAcrossDialects(t *testin
 	})
 	require.Contains(t, postgres, `SELECT
     channel_id,
-    is_stream,
+    model_id,
     COUNT(*) AS sample_count,
     AVG(latency_ms)::double precision AS avg_ms,
     PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms
@@ -111,7 +123,7 @@ FROM samples`)
 	})
 	require.Contains(t, sqlite, `SELECT
     channel_id,
-    is_stream,
+    model_id,
     sample_count,
     avg_ms,
     latency_ms AS p95_ms

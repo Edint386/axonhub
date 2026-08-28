@@ -24,6 +24,13 @@ const channelHealthProbeModelOverviewSchema = z.object({
   stream: z.boolean(),
   firstTokenMs: z.number().nullable().optional(),
   p95Ms: z.number().nullable().optional(),
+  // The number the API-key first-token ceiling actually judges by. Null means the
+  // ceiling reads UNKNOWN for this model, so it must render as "no measurement" and
+  // never as fast. gateSampleCount tells "measured too little" from "never measured".
+  gateAvgMs: z.number().nullable().optional(),
+  // Int! in the schema, so no nullable slack: `?? 0` on a missing field would report
+  // "0 samples" and make "server omitted it" indistinguishable from "never measured".
+  gateSampleCount: z.number(),
   lastProbedAt: z.string().nullable().optional(),
   sampleCount: z.number(),
   latestRun: activeChannelHealthProbeRunSchema.nullable().optional(),
@@ -51,6 +58,7 @@ const channelHealthProbePolicySchema = z.object({
   acceptableLatencyMs: z.number(),
   extraChannels: z.number(),
   p95LookbackHours: z.number(),
+  gateWindowMinutes: z.number(),
   apiKeyMaxFirstTokenLatencyMs: z.number().nullable().optional(),
   availableModels: z.array(z.string()),
   models: z.array(z.object({ modelID: z.string(), enabled: z.boolean() })),
@@ -91,6 +99,7 @@ export interface UpdateChannelHealthProbePolicyInput {
   acceptableLatencyMs: number;
   extraChannels: number;
   p95LookbackHours: number;
+  gateWindowMinutes: number;
   models: ActiveHealthProbeModelSetting[];
 }
 
@@ -143,6 +152,8 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
         stream
         firstTokenMs
         p95Ms
+        gateAvgMs
+        gateSampleCount
         lastProbedAt
         sampleCount
         latestRun {
@@ -157,6 +168,7 @@ const CHANNEL_HEALTH_PROBE_OVERVIEW_QUERY = `
       acceptableLatencyMs
       extraChannels
       p95LookbackHours
+      gateWindowMinutes
       apiKeyMaxFirstTokenLatencyMs
       availableModels
       models {
@@ -197,6 +209,8 @@ const UPDATE_CHANNEL_HEALTH_PROBE_SETTINGS_MUTATION = `
         stream
         firstTokenMs
         p95Ms
+        gateAvgMs
+        gateSampleCount
         lastProbedAt
         sampleCount
         latestRun {
@@ -216,6 +230,7 @@ const UPDATE_CHANNEL_HEALTH_PROBE_POLICY_MUTATION = `
       acceptableLatencyMs
       extraChannels
       p95LookbackHours
+      gateWindowMinutes
       apiKeyMaxFirstTokenLatencyMs
       availableModels
       models {
