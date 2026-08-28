@@ -192,7 +192,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, id int) error {
 			return fmt.Errorf("cannot delete the default Developer role")
 		}
 
-		if err := revokeRoleInvitations(ctx, id); err != nil {
+		if err := s.revokeRoleInvitations(ctx, id); err != nil {
 			return err
 		}
 		if _, err := client.UserRole.Delete().Where(userrole.RoleID(id)).Exec(ctx); err != nil {
@@ -234,7 +234,7 @@ func (s *RoleService) BulkDeleteRoles(ctx context.Context, ids []int) error {
 			}
 		}
 
-		if err := revokeRoleInvitations(ctx, ids...); err != nil {
+		if err := s.revokeRoleInvitations(ctx, ids...); err != nil {
 			return err
 		}
 		if _, err := client.UserRole.Delete().Where(userrole.RoleIDIn(ids...)).Exec(ctx); err != nil {
@@ -255,9 +255,19 @@ func (s *RoleService) BulkDeleteRoles(ctx context.Context, ids []int) error {
 	return nil
 }
 
-func revokeRoleInvitations(ctx context.Context, roleIDs ...int) error {
+// revokeRoleInvitations is a method rather than a free function so it can reach the
+// service's own client fallback.
+//
+// As a free function it used the raw ent.FromContext, which returns nil on a context
+// with no client attached and then panics on the next field access. Both callers today
+// run inside RunInTransaction, which attaches one, so it was not reachable -- but that
+// is exactly the shape of the nil dereference that put a deployment into a restart
+// loop, and it only needed one future caller outside a transaction to come back.
+func (s *RoleService) revokeRoleInvitations(ctx context.Context, roleIDs ...int) error {
+	client := s.entFromContext(ctx)
+
 	_, err := authz.RunWithSystemBypass(ctx, "revoke-role-invitations", func(ctx context.Context) (int, error) {
-		return ent.FromContext(ctx).Invitation.Delete().Where(invitation.RoleIDIn(roleIDs...)).Exec(ctx)
+		return client.Invitation.Delete().Where(invitation.RoleIDIn(roleIDs...)).Exec(ctx)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to revoke role invitations: %w", err)

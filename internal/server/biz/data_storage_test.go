@@ -737,3 +737,56 @@ func TestDataStorageService_CacheExpiration(t *testing.T) {
 		require.Equal(t, ds1.ID, ds2.ID)
 	})
 }
+
+// A context with no ent client must not crash the process.
+//
+// This guards a nil-pointer panic that put a deployment into a systemd restart loop:
+// these calls used the raw ent.FromContext, which returns nil (via a failed type
+// assertion, so silently) whenever the caller built its own context without attaching
+// a client -- as every background worker does. `nil.DataStorage` then dereferences nil
+// and takes the whole process down, which in turn stranded every in-flight probe as a
+// `pending` row for the reaper to fail.
+//
+// Every other access in this package goes through entFromContext, which prefers the
+// context's client (preserving transactions) and falls back to the service's own. Seven
+// call sites here had that fallback available and did not use it, spread across all
+// four exported methods -- so all four are exercised, not just the read that appeared
+// in the crash log. A test covering only that one would leave the writes free to panic
+// again from the next background caller.
+func TestDataStorageService_SurvivesAContextWithoutAnEntClient(t *testing.T) {
+	client, service, ctx := setupDataStorageTest(t)
+	defer client.Close()
+
+	testDS := createTestDataStorage(t, client, ctx, "clientless-ctx", false, datastorage.TypeDatabase)
+
+	// Same authorization, deliberately no ent client attached.
+	clientlessCtx := authz.WithTestBypass(context.Background())
+
+	require.NotPanics(t, func() {
+		ds, err := service.GetDataStorageByID(clientlessCtx, testDS.ID)
+		require.NoError(t, err)
+		require.Equal(t, testDS.ID, ds.ID)
+	}, "GetDataStorageByID must fall back to the service client instead of dereferencing nil")
+
+	// The primary lookup shares the same defect. An error is acceptable here (the
+	// fixture may have no primary row); a panic is not.
+	require.NotPanics(t, func() {
+		_, _ = service.GetPrimaryDataStorage(clientlessCtx)
+	}, "GetPrimaryDataStorage must fall back to the service client instead of dereferencing nil")
+
+	// The writes carry three of the seven converted sites between them -- a uniqueness
+	// probe and a create, then a fetch, a second uniqueness probe and a mutation. An
+	// error is a legitimate outcome for any of them; a panic is not.
+	require.NotPanics(t, func() {
+		_, _ = service.CreateDataStorage(clientlessCtx, &ent.CreateDataStorageInput{
+			Name:     "clientless-create",
+			Type:     datastorage.TypeDatabase,
+			Settings: &objects.DataStorageSettings{},
+		})
+	}, "CreateDataStorage must fall back to the service client instead of dereferencing nil")
+
+	require.NotPanics(t, func() {
+		newName := "clientless-update"
+		_, _ = service.UpdateDataStorage(clientlessCtx, testDS.ID, &ent.UpdateDataStorageInput{Name: &newName})
+	}, "UpdateDataStorage must fall back to the service client instead of dereferencing nil")
+}

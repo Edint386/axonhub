@@ -199,7 +199,7 @@ func (s *DataStorageService) buildFileSystem(ctx context.Context, ds *ent.DataSt
 // CreateDataStorage creates a new data storage record and refreshes relevant caches.
 func (s *DataStorageService) CreateDataStorage(ctx context.Context, input *ent.CreateDataStorageInput) (*ent.DataStorage, error) {
 	// Check for duplicate data storage name
-	exists, err := ent.FromContext(ctx).DataStorage.Query().
+	exists, err := s.entFromContext(ctx).DataStorage.Query().
 		Where(datastorage.Name(input.Name)).
 		Exist(ctx)
 	if err != nil {
@@ -210,7 +210,7 @@ func (s *DataStorageService) CreateDataStorage(ctx context.Context, input *ent.C
 		return nil, xerrors.DuplicateNameError("data storage", input.Name)
 	}
 
-	dataStorage, err := ent.FromContext(ctx).DataStorage.Create().
+	dataStorage, err := s.entFromContext(ctx).DataStorage.Create().
 		SetName(input.Name).
 		SetSettings(input.Settings).
 		SetDescription(input.Description).
@@ -231,14 +231,14 @@ func (s *DataStorageService) CreateDataStorage(ctx context.Context, input *ent.C
 // UpdateDataStorage updates an existing data storage record and refreshes relevant caches.
 func (s *DataStorageService) UpdateDataStorage(ctx context.Context, id int, input *ent.UpdateDataStorageInput) (*ent.DataStorage, error) {
 	// First, get the existing data storage to access current settings
-	existing, err := ent.FromContext(ctx).DataStorage.Get(ctx, id)
+	existing, err := s.entFromContext(ctx).DataStorage.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data storage: %w", err)
 	}
 
 	// Check for duplicate name if being updated
 	if input.Name != nil && *input.Name != existing.Name {
-		exists, err := ent.FromContext(ctx).DataStorage.Query().
+		exists, err := s.entFromContext(ctx).DataStorage.Query().
 			Where(
 				datastorage.Name(*input.Name),
 				datastorage.IDNEQ(id),
@@ -260,7 +260,7 @@ func (s *DataStorageService) UpdateDataStorage(ctx context.Context, id int, inpu
 		updatedSettings = s.mergeSettings(existing.Settings, input.Settings)
 	}
 
-	mutation := ent.FromContext(ctx).DataStorage.
+	mutation := s.entFromContext(ctx).DataStorage.
 		UpdateOneID(id).
 		SetNillableName(input.Name).
 		SetNillableDescription(input.Description).
@@ -294,7 +294,7 @@ func (s *DataStorageService) GetDataStorageByID(ctx context.Context, id int) (*e
 		return &cached, nil
 	}
 
-	ds, err := ent.FromContext(ctx).DataStorage.Get(ctx, id)
+	ds, err := s.entFromContext(ctx).DataStorage.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data storage by ID %d: %w", id, err)
 	}
@@ -317,7 +317,7 @@ func (s *DataStorageService) GetPrimaryDataStorage(ctx context.Context) (*ent.Da
 		return &cached, nil
 	}
 
-	ds, err := ent.FromContext(ctx).DataStorage.Query().
+	ds, err := s.entFromContext(ctx).DataStorage.Query().
 		Where(datastorage.Primary(true)).
 		First(ctx)
 	if err != nil {
