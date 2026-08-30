@@ -89549,7 +89549,7 @@ func (ec *executionContext) unmarshalInputUpdateChannelHealthProbePolicyInput(ct
 			it.P95LookbackHours = data
 		case "gateWindowMinutes":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("gateWindowMinutes"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
 			if err != nil {
 				return it, err
 			}

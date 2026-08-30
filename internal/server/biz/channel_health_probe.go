@@ -19,6 +19,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/predicate"
+	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/scopes"
 )
@@ -94,8 +95,10 @@ type UpdateChannelHealthProbePolicyInput struct {
 	AcceptableLatencyMs int
 	ExtraChannels       int
 	P95LookbackHours    int
-	GateWindowMinutes   int
-	Models              []ActiveHealthProbeModelSetting
+	// GateWindowMinutes is optional so a caller predating the field keeps the stored
+	// window instead of being rejected; every other field here is required.
+	GateWindowMinutes *int
+	Models            []ActiveHealthProbeModelSetting
 }
 
 type ChannelHealthProbePolicy struct {
@@ -394,6 +397,10 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 	if models == nil {
 		models = slices.Clone(current.Models)
 	}
+	gateWindowMinutes := current.GateWindowMinutes
+	if input.GateWindowMinutes != nil {
+		gateWindowMinutes = *input.GateWindowMinutes
+	}
 	policy := ActiveHealthProbeScanSetting{
 		Enabled:             input.Enabled,
 		IntervalMinutes:     input.IntervalMinutes,
@@ -401,7 +408,7 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 		AcceptableLatencyMs: input.AcceptableLatencyMs,
 		ExtraChannels:       input.ExtraChannels,
 		P95LookbackHours:    input.P95LookbackHours,
-		GateWindowMinutes:   input.GateWindowMinutes,
+		GateWindowMinutes:   gateWindowMinutes,
 		Models:              slices.Clone(models),
 	}
 	err = authz.RunWithSystemBypassVoid(ctx, "update-active-channel-health-probe-policy", func(bypassCtx context.Context) error {
@@ -409,6 +416,26 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// The gate window is the window the routing ceiling judges by, and the snapshot
+	// that implements it is only rebuilt on a schedule. Without this the operator
+	// changes the window, the page immediately shows the new one, and the ceiling keeps
+	// judging by the old one until the next tick -- the displayed number and the
+	// deciding number disagreeing again, which is the defect this statistic exists to
+	// remove. Only the window matters here: nothing else on the policy feeds it.
+	if svc.channelService != nil && policy.GateWindowMinutes != current.GateWindowMinutes {
+		if refreshErr := authz.RunWithSystemBypassVoid(
+			ctx,
+			"refresh-channel-latency-stats-after-policy-update",
+			svc.channelService.RefreshChannelLatencyStats,
+		); refreshErr != nil {
+			// The scheduled refresh will retry within a tick, so a failure here must not
+			// fail an otherwise successful policy update.
+			log.Warn(ctx, "failed to refresh channel latency stats after a probe policy update",
+				log.Int("gate_window_minutes", policy.GateWindowMinutes),
+				log.Cause(refreshErr))
+		}
 	}
 
 	return svc.Policy(ctx)

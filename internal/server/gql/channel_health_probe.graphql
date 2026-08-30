@@ -113,7 +113,14 @@ input UpdateChannelHealthProbePolicyInput {
   acceptableLatencyMs: Int!
   extraChannels: Int!
   p95LookbackHours: Int!
-  gateWindowMinutes: Int!
+  """
+  Window the routing ceiling judges by, in minutes.
+
+  Nullable on purpose: this field was added after the mutation shipped, and every
+  other field here is required, so a non-null addition would reject any existing
+  caller that had no way to know about it. Omitting it keeps the stored value.
+  """
+  gateWindowMinutes: Int
   models: [ActiveHealthProbeModelSettingInput!]
 }
 
