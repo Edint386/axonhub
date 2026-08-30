@@ -38,6 +38,16 @@ type ChannelLatencyStatsQuery struct {
 	// same value; see BuildChannelLatencyStatsQuery.
 	UsePercentileAggregate bool
 
+	// UseIntegerDivOperator selects MySQL's `DIV` over `/` for the nearest-rank
+	// arithmetic.
+	//
+	// It is not a style choice. `/` is integer division in SQLite and PostgreSQL but
+	// DECIMAL division in MySQL, and the rank compares against an integer ROW_NUMBER:
+	// (n*95 + 99) / 100 is never a whole number for any n >= 1, so on MySQL the
+	// comparison matched no row at all and the query returned an empty result set --
+	// silently, because an empty set is indistinguishable from "no samples yet".
+	UseIntegerDivOperator bool
+
 	// Scope selects which request sources are counted.
 	Scope ChannelLatencyStatsScope
 
@@ -79,15 +89,16 @@ type ChannelLatencyStatsQuery struct {
 // Two dialect implementations, one definition. PostgreSQL gets PERCENTILE_DISC,
 // which is an ordered-set aggregate: it folds into the existing GROUP BY without
 // numbering rows, and it is the form a Postgres deployment should be running.
-// SQLite has no percentile function at all, so it gets the portable equivalent --
-// ROW_NUMBER over the same partition, picking the nearest-rank row.
+// SQLite and MySQL have no percentile function, so they get the portable equivalent
+// -- ROW_NUMBER over the same partition, picking the nearest-rank row -- differing
+// only in the integer division operator.
 //
 // The two agree by construction because PERCENTILE_DISC is defined as the first
 // value whose cumulative distribution reaches p, i.e. the element at 1-based index
 // ceil(p*n) -- exactly the row the fallback selects via integer-ceiling arithmetic
-// ((n*95 + 99) / 100). That is also the definition the pre-existing in-memory probe
-// P95 uses (ceil(n*0.95) - 1 into a sorted slice), so no consumer sees the
-// statistic change meaning.
+// ((n*95 + 99) / 100, with a dialect-correct integer division operator). That is also
+// the definition the pre-existing in-memory probe P95 uses (ceil(n*0.95) - 1 into a
+// sorted slice), so no consumer sees the statistic change meaning.
 func BuildChannelLatencyStatsQuery(query ChannelLatencyStatsQuery) string {
 	samples := channelLatencySampleSource(query)
 
@@ -95,7 +106,14 @@ func BuildChannelLatencyStatsQuery(query ChannelLatencyStatsQuery) string {
 		return buildChannelLatencyStatsQueryPostgres(samples)
 	}
 
-	return buildChannelLatencyStatsQueryPortable(samples)
+	// MySQL's `/` yields a DECIMAL, which can never equal an integer ROW_NUMBER for
+	// this arithmetic; `DIV` is its integer division operator.
+	integerDiv := "/"
+	if query.UseIntegerDivOperator {
+		integerDiv = "DIV"
+	}
+
+	return buildChannelLatencyStatsQueryPortable(samples, integerDiv)
 }
 
 // channelLatencySampleSource renders the sample projection shared by both dialects,
@@ -168,13 +186,14 @@ ORDER BY channel_id, model_id`, samples, channelLatencyStatsPercentileFraction)
 }
 
 // buildChannelLatencyStatsQueryPortable computes the same nearest-rank percentile
-// without any percentile function, for dialects that have none (SQLite).
+// without any percentile function, for dialects that have none (SQLite, MySQL).
 //
 // The rank is integer-ceiling arithmetic rather than CEIL(n * 0.95): SQLite's math
 // functions are a compile-time option, so relying on CEIL would make the query fail
-// on builds that omit them. Integer division truncates in both dialects, so
-// (n*95 + 99) / 100 is ceil(n * 0.95) for every n >= 1.
-func buildChannelLatencyStatsQueryPortable(samples string) string {
+// on builds that omit them. (n*95 + 99) / 100 is ceil(n * 0.95) for every n >= 1
+// PROVIDED the division truncates, which is why the operator is dialect-supplied:
+// SQLite and PostgreSQL truncate with `/`, MySQL needs `DIV`.
+func buildChannelLatencyStatsQueryPortable(samples string, integerDiv string) string {
 	return fmt.Sprintf(`
 WITH samples AS (
 %s
@@ -195,6 +214,6 @@ SELECT
     avg_ms,
     latency_ms AS p95_ms
 FROM ranked
-WHERE latency_rank = (sample_count * %d + 99) / 100
-ORDER BY channel_id, model_id`, samples, channelLatencyStatsPercentilePercent)
+WHERE latency_rank = (sample_count * %d + 99) %s 100
+ORDER BY channel_id, model_id`, samples, channelLatencyStatsPercentilePercent, integerDiv)
 }

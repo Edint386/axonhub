@@ -45,6 +45,50 @@ func TestBuildChannelLatencyStatsQuerySQLiteUsesNearestRankFallback(t *testing.T
 	require.NotContains(t, query, "$1")
 }
 
+func TestBuildChannelLatencyStatsQueryMySQLUsesIntegerDivision(t *testing.T) {
+	query := BuildChannelLatencyStatsQuery(ChannelLatencyStatsQuery{
+		UseIntegerDivOperator: true,
+		Scope:                 ChannelLatencyStatsScopeAll,
+		ChannelIDFilter:       "AND se.channel_id IN (?,?)",
+	})
+
+	// MySQL shares the portable nearest-rank fallback but NOT its division operator:
+	// `/` is DECIMAL division there, and (n*95 + 99) / 100 is never a whole number for
+	// any n >= 1, so an integer ROW_NUMBER could never equal it and the query returned
+	// nothing at all -- with no error, because an empty result set looks exactly like
+	// "no samples in the window yet".
+	require.Contains(t, query, "WHERE latency_rank = (sample_count * 95 + 99) DIV 100")
+	require.NotContains(t, query, "+ 99) / 100")
+	require.NotContains(t, query, "PERCENTILE_DISC")
+	require.Contains(t, query, "ROW_NUMBER() OVER (PARTITION BY channel_id, model_id ORDER BY latency_ms)")
+
+	require.Contains(t, query, "se.created_at >= ?")
+	require.NotContains(t, query, "$1")
+}
+
+// The nearest-rank row must be the same one on every dialect, which is only true
+// while the division truncates. This is the arithmetic that broke on MySQL.
+func TestChannelLatencyStatsNearestRankArithmeticTruncates(t *testing.T) {
+	for n := 1; n <= 200; n++ {
+		truncated := (n*channelLatencyStatsPercentilePercent + 99) / 100
+
+		// ceil(n * 0.95) computed without floating point.
+		expected := (n * channelLatencyStatsPercentilePercent) / 100
+		if (n*channelLatencyStatsPercentilePercent)%100 != 0 {
+			expected++
+		}
+
+		require.Equal(t, expected, truncated, "rank for n=%d", n)
+		require.LessOrEqual(t, truncated, n, "rank must stay inside the partition for n=%d", n)
+		require.Positive(t, truncated, "rank must be 1-based for n=%d", n)
+
+		// And the reason a DECIMAL result can never match an integer rank: the exact
+		// quotient is fractional for every n, so `/` on MySQL matches no row.
+		require.NotZero(t, (n*channelLatencyStatsPercentilePercent+99)%100,
+			"exact quotient is unexpectedly integral for n=%d", n)
+	}
+}
+
 func TestBuildChannelLatencyStatsQueryScopeControlsTheSourceFilter(t *testing.T) {
 	for _, useAggregate := range []bool{true, false} {
 		probeScoped := BuildChannelLatencyStatsQuery(ChannelLatencyStatsQuery{
