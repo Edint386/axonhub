@@ -1,13 +1,23 @@
 import type { ActiveChannelHealthProbeRun, ChannelHealthProbeChannel } from './data/channel-health';
 
 /**
- * Channel-level grades aggregated from the recent probe strip:
- *   health   全部成功且 P95 ≤ 阈值的 50%（快且稳）
- *   fluent   全部成功且 P95 ≤ 阈值（达标顺滑）
- *   degraded 成功率 ≥ 80%，但 P95 超阈值或最近一次失败（能用但不稳定/变慢）
+ * Channel-level grades over the gate window.
+ *
+ * Failures are graded first, then speed. Speed reads the SAME number the routing
+ * ceiling reads -- the mean over the gate window, with the ceiling's own sample floor
+ * already applied -- and compares it against fixed bands rather than against any
+ * configured threshold:
+ *   error    窗口内探测全部失败（渠道不可用）
  *   abnormal 成功率 < 80%（频繁失败）
- *   error    近期探测全部失败（渠道不可用）
- * plus auxiliary states: pending / skipped / never.
+ *   degraded 有失败但成功率 ≥ 80%，或全部成功而 gate 均值 > 30s
+ *   fluent   全部成功且 gate 均值 ≤ 30s（可用）
+ *   health   全部成功且 gate 均值 ≤ 10s（快）
+ *   unknown  全部成功但窗口样本不足，上限也读不到值（未判定）
+ * plus auxiliary states: pending / skipped / never / disabled / unconfigured.
+ *
+ * The bands are deliberately NOT the routing threshold: that threshold is per API key,
+ * so grading by it would make one channel render differently for each key, and a
+ * channel no key restricts would have nothing to grade against at all.
  */
 export type ChannelGrade =
   | 'health'

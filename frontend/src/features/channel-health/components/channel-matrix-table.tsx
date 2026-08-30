@@ -199,6 +199,13 @@ export function ChannelMatrixTable({
               (!Number.isFinite(latestRunStartedAt) || latestRunStartedAt >= Date.now() - gateWindowMs);
             const latest = channelLatestFirst(channel, gateWindowMs);
             const gateAvgMs = channelGateAvgMs(channel);
+            // Being INSIDE the window is not enough. The backend withholds gateAvgMs
+            // until the window holds enough samples for the routing ceiling to act on,
+            // so a window with one or two probes still grades the channel 'unknown' --
+            // and grading the raw run beside it reproduced the same contradictory row
+            // one rung lower: green model chip, "no metric" channel chip, "-" latency.
+            // When the channel figure is unknown the model chip has to say so too.
+            const gradeModelRun = latestRunInWindow && primaryModel?.latestRun != null && gateAvgMs != null;
             const p95 = channelP95(channel);
             const isProbing = probeActions.isChannelProbing(channel.channelID);
             const isExpanded = expanded.has(channel.channelID);
@@ -252,7 +259,7 @@ export function ChannelMatrixTable({
                   <TableCell className={BODY_CELL}>
                     <div className='space-y-1'>
                       <span className='mx-auto block max-w-40 truncate font-mono text-[11px]'>{primaryModel?.modelID ?? '-'}</span>
-                      <ProbeStatusChip status={latestRunInWindow && primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun) : grade} />
+                      <ProbeStatusChip status={gradeModelRun && primaryModel?.latestRun ? gradeOfRun(primaryModel.latestRun) : grade} />
                     </div>
                   </TableCell>
                   <TableCell className={BODY_CELL}>
