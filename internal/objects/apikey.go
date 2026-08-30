@@ -33,9 +33,13 @@ type APIKeyProfile struct {
 	// CountRealTrafficLatency chooses which measurements MaxFirstTokenLatencyMs may
 	// judge a channel by. False (the default) reads synthetic probe latency only:
 	// probes measure every channel the same way on one global cadence, so the numbers
-	// are comparable against a single ceiling. True additionally admits this channel's
-	// real-traffic latency and takes the worse of the two, which is stricter but is
-	// shaped by whatever this key's callers happened to send.
+	// are comparable against a single ceiling. True widens the same window to every
+	// source, so probes and this key's own real traffic are averaged TOGETHER into one
+	// mean -- it is a wider sample, not a second opinion, and it is not necessarily
+	// stricter: steady probe samples can pull the mean down below a slow stretch of
+	// real traffic, just as they can pull it up. Choose it when this key's callers
+	// generate enough traffic for their own latency to be the more representative
+	// signal.
 	//
 	// Profiles are a stored JSON blob, so an absent key unmarshals to false and no
 	// migration is needed.
