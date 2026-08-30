@@ -9,6 +9,8 @@ import (
 	"github.com/samber/lo"
 	"github.com/viterin/partial"
 
+	"github.com/looplj/axonhub/internal/contexts"
+	entrequest "github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/server/biz"
 )
@@ -219,7 +221,21 @@ func (lb *LoadBalancer) SortWithoutTracking(ctx context.Context, candidates []*C
 }
 
 // TrackSelection records a selected channel.
-func (lb *LoadBalancer) TrackSelection(candidate *ChannelModelsCandidate) {
+//
+// Synthetic probe traffic is refused. RequestCount is a REAL-traffic aggregate that
+// feeds the round-robin load score, and a probe that moved it would make a channel
+// look busier than its callers made it. The recording side (biz.RecordPerformance)
+// leaves the same counter alone for a probe, so the two ends agree: probe traffic
+// never enters this counter and nothing has to be undone later.
+//
+// The probe pipeline does not reach this today -- SpecifiedChannelSelector yields one
+// candidate and sort returns early for one candidate -- but the guard belongs here
+// rather than in that arithmetic, so a future selector cannot reintroduce the drift.
+func (lb *LoadBalancer) TrackSelection(ctx context.Context, candidate *ChannelModelsCandidate) {
+	if contexts.GetSourceOrDefault(ctx, entrequest.DefaultSource) == entrequest.SourceTest {
+		return
+	}
+
 	if candidate != nil && candidate.Channel != nil && lb.selectionTracker != nil {
 		lb.selectionTracker.IncrementChannelSelection(candidate.Channel.ID)
 	}
@@ -325,7 +341,7 @@ func (lb *LoadBalancer) sortProduction(
 	// Increment selection count for the top candidate to ensure subsequent
 	// concurrent requests see the updated count and select different channels
 	if trackSelection && len(result) > 0 {
-		lb.TrackSelection(result[0])
+		lb.TrackSelection(ctx, result[0])
 	}
 
 	return result
@@ -462,7 +478,7 @@ func (lb *LoadBalancer) sortWithDebug(
 	// Increment selection count for the top candidate to ensure subsequent
 	// concurrent requests see the updated count and select different channels
 	if trackSelection && len(result) > 0 {
-		lb.TrackSelection(result[0])
+		lb.TrackSelection(ctx, result[0])
 	}
 
 	return result

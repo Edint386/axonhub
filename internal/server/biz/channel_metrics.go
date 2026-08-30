@@ -395,24 +395,15 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 	// still reaches the routing ceiling, but through the windowed statistic computed
 	// from the requests table, where the source column keeps the two separable.
 	//
-	// RequestCount cannot simply be left untouched. IncrementChannelSelection already
-	// counted this request at SELECTION time, and the sliding-window cleanup only ever
-	// subtracts SLOT counts from the aggregate -- so skipping the slot increment while
-	// leaving the aggregate alone makes it drift upward by one per probe, forever.
-	// Undo the selection increment and skip the slot entirely, exactly as the Canceled
-	// branch below does.
+	// RequestCount is left ALONE, in both directions. A probe never reaches
+	// LoadBalancer.TrackSelection -- the source guard there refuses it, and the probe
+	// pipeline could not reach it anyway because SpecifiedChannelSelector yields a
+	// single candidate and LoadBalancer.sort returns early for one candidate -- so
+	// there is no selection increment to undo. Decrementing here instead subtracted
+	// from the REAL traffic aggregate the two share, once per probe, driving it
+	// negative; a negative count reads as zero load in the round-robin strategy and
+	// pins the probed channel at "least loaded" forever.
 	if perf.IsSynthetic() {
-		svc.channelPerfMetricsLock.Lock()
-
-		// Absent metrics mean no selection increment was ever recorded (a probe that
-		// never reached the load balancer), so there is nothing to undo and creating an
-		// entry here would only drive the count negative.
-		if cm, exists := svc.channelPerfMetrics[perf.ChannelID]; exists {
-			cm.aggregatedMetrics.RequestCount--
-		}
-
-		svc.channelPerfMetricsLock.Unlock()
-
 		return
 	}
 

@@ -757,7 +757,7 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 			result := append([]*ChannelModelsCandidate{stickyCandidate}, fallbackCandidates...)
 
 			if loadBalancer != nil {
-				loadBalancer.TrackSelection(stickyCandidate)
+				loadBalancer.TrackSelection(ctx, stickyCandidate)
 			}
 
 			return result, nil
