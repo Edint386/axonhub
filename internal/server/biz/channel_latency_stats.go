@@ -3,6 +3,7 @@ package biz
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -154,6 +155,14 @@ func (svc *ChannelService) ChannelLatencyStatsComputedAt() (time.Time, time.Dura
 // -- P95(probe ∪ traffic) is not derivable from P95(probe) and P95(traffic) -- and
 // both statistics are published per scope. Each aggregation is a single batch query
 // over all channels, so channel count does not change the query count.
+//
+// One scope failing does not discard the other. Returning early published nothing at
+// all, which left the ROUTING CEILING reading a snapshot that never expired for as
+// long as the error lasted -- a stale number presented as current, which is the exact
+// failure mode the windowed statistic was introduced to remove. Instead every scope
+// that succeeded is published, a failed scope carries its previous values forward only
+// while they still overlap the current window, and the error is returned so the
+// scheduler logs it.
 func (svc *ChannelService) RefreshChannelLatencyStats(ctx context.Context) error {
 	now := xtime.UTCNow()
 
@@ -167,6 +176,8 @@ func (svc *ChannelService) RefreshChannelLatencyStats(ctx context.Context) error
 	// only a starting size.
 	samples := make(map[channelLatencyStatsKey]ChannelLatencySample, len(channelIDs)*2)
 
+	var scopeErrs error
+
 	if len(channelIDs) > 0 {
 		since := now.Add(-lookback)
 
@@ -174,12 +185,16 @@ func (svc *ChannelService) RefreshChannelLatencyStats(ctx context.Context) error
 			qb.ChannelLatencyStatsScopeProbe,
 			qb.ChannelLatencyStatsScopeAll,
 		} {
+			includeRealTraffic := scope == qb.ChannelLatencyStatsScopeAll
+
 			rows, err := svc.queryChannelLatencyStats(ctx, scope, channelIDs, since, now)
 			if err != nil {
-				return err
+				scopeErrs = errors.Join(scopeErrs, fmt.Errorf("scope %s: %w", scope, err))
+				svc.carryForwardLatencyScope(samples, includeRealTraffic, now, lookback)
+
+				continue
 			}
 
-			includeRealTraffic := scope == qb.ChannelLatencyStatsScopeAll
 			for _, row := range rows {
 				samples[channelLatencyStatsKey{
 					channelID:          row.channelID,
@@ -200,7 +215,36 @@ func (svc *ChannelService) RefreshChannelLatencyStats(ctx context.Context) error
 		samples:    samples,
 	})
 
-	return nil
+	return scopeErrs
+}
+
+// carryForwardLatencyScope copies one scope's previous values into the snapshot being
+// built, for a scope whose query just failed.
+//
+// The carry-forward is BOUNDED by the lookback: once the previous snapshot is older
+// than one window, the samples it holds describe a period that has entirely passed, so
+// dropping them is the honest answer. A dropped entry reads as UNKNOWN, which keeps
+// the candidate eligible -- an admitted absence rather than a silent wrong answer.
+func (svc *ChannelService) carryForwardLatencyScope(
+	samples map[channelLatencyStatsKey]ChannelLatencySample,
+	includeRealTraffic bool,
+	now time.Time,
+	lookback time.Duration,
+) {
+	previous := svc.channelLatencyStats.Load()
+	if previous == nil || previous.computedAt.IsZero() {
+		return
+	}
+
+	if now.Sub(previous.computedAt) > lookback {
+		return
+	}
+
+	for key, sample := range previous.samples {
+		if key.includeRealTraffic == includeRealTraffic {
+			samples[key] = sample
+		}
+	}
 }
 
 // runChannelLatencyStatsPeriodically is the scheduled entry point.
@@ -276,9 +320,13 @@ func (svc *ChannelService) queryChannelLatencyStats(
 		return nil, fmt.Errorf("failed to get underlying SQL driver for channel latency stats")
 	}
 
-	// PostgreSQL takes $N placeholders and has PERCENTILE_DISC; every other dialect
-	// we support (SQLite) takes ? and needs the portable nearest-rank fallback.
+	// PostgreSQL takes $N placeholders and has PERCENTILE_DISC. SQLite and MySQL/TiDB
+	// both take ? and need the portable nearest-rank fallback, but they disagree on
+	// integer division: SQLite truncates with `/`, MySQL returns a DECIMAL and needs
+	// `DIV`, without which the rank comparison matches no row and the whole statistic
+	// silently comes back empty.
 	postgres := sqlDriver.Dialect() == dialect.Postgres
+	mysql := sqlDriver.Dialect() == dialect.MySQL
 
 	args := make([]any, 0, len(channelIDs)+2)
 	args = append(args, since.UTC(), until.UTC())
@@ -299,6 +347,7 @@ func (svc *ChannelService) queryChannelLatencyStats(
 	query := qb.BuildChannelLatencyStatsQuery(qb.ChannelLatencyStatsQuery{
 		UseDollarPlaceholders:  postgres,
 		UsePercentileAggregate: postgres,
+		UseIntegerDivOperator:  mysql,
 		Scope:                  scope,
 		ChannelIDFilter:        fmt.Sprintf("AND se.channel_id IN (%s)", strings.Join(placeholders, ",")),
 	})
