@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/apikey"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/user"
@@ -177,6 +178,21 @@ func (_c *APIKeyCreate) AddRequests(v ...*Request) *APIKeyCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddRequestIDs(ids...)
+}
+
+// AddChannelCallerACLMemberIDs adds the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (_c *APIKeyCreate) AddChannelCallerACLMemberIDs(ids ...int) *APIKeyCreate {
+	_c.mutation.AddChannelCallerACLMemberIDs(ids...)
+	return _c
+}
+
+// AddChannelCallerACLMembers adds the "channel_caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_c *APIKeyCreate) AddChannelCallerACLMembers(v ...*ChannelCallerACLMember) *APIKeyCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddChannelCallerACLMemberIDs(ids...)
 }
 
 // Mutation returns the APIKeyMutation object of the builder.
@@ -404,6 +420,22 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(request.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ChannelCallerACLMembersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.ChannelCallerACLMembersTable,
+			Columns: []string{apikey.ChannelCallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

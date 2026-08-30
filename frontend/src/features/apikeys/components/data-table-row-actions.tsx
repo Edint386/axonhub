@@ -1,12 +1,27 @@
 import React from 'react';
 import { DotsHorizontalIcon } from '@radix-ui/react-icons';
 import { Row } from '@tanstack/react-table';
-import { IconUserOff, IconUserCheck, IconEdit, IconSettings, IconArchive, IconCheck, IconRefresh } from '@tabler/icons-react';
+import {
+  IconUserOff,
+  IconUserCheck,
+  IconEdit,
+  IconSettings,
+  IconArchive,
+  IconCheck,
+  IconRefresh,
+  IconShieldLock,
+} from '@tabler/icons-react';
 import { BarChart3 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useApiKeysContext } from '../context/apikeys-context';
 import { ApiKey } from '../data/schema';
 import { ApiKeyTokenChartDialog } from './api-key-token-chart-dialog';
@@ -18,7 +33,7 @@ interface DataTableRowActionsProps {
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useTranslation();
   const { openDialog } = useApiKeysContext();
-  const { apiKeyPermissions } = usePermissions();
+  const { apiKeyPermissions, hasSystemScope } = usePermissions();
   const apiKey = row.original;
   const [open, setOpen] = React.useState(false);
   const [chartOpen, setChartOpen] = React.useState(false);
@@ -62,6 +77,11 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setTimeout(() => openDialog('rotate', apiKey), 0);
   };
 
+  const handleChannelAccess = (apiKey: ApiKey) => {
+    setOpen(false);
+    setTimeout(() => openDialog('channelAccess', apiKey), 0);
+  };
+
   return (
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -76,6 +96,12 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <BarChart3 className='mr-2 h-4 w-4' />
             {t('apikeys.actions.viewTokenChart')}
           </DropdownMenuItem>
+          {hasSystemScope('read_api_keys') && hasSystemScope('read_channels') && (
+            <DropdownMenuItem onClick={() => handleChannelAccess(apiKey)}>
+              <IconShieldLock className='mr-2 h-4 w-4' />
+              {t('apikeys.actions.channelAccess')}
+            </DropdownMenuItem>
+          )}
           {apiKeyPermissions.canWrite && (
             <>
               <DropdownMenuSeparator />
@@ -107,7 +133,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                   )}
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={() => handleArchive(apiKey)} className={apiKey.status === 'archived' ? 'text-green-600' : 'text-orange-600'}>
+              <DropdownMenuItem
+                onClick={() => handleArchive(apiKey)}
+                className={apiKey.status === 'archived' ? 'text-green-600' : 'text-orange-600'}
+              >
                 {apiKey.status === 'archived' ? <IconCheck className='mr-2 h-4 w-4' /> : <IconArchive className='mr-2 h-4 w-4' />}
                 {apiKey.status === 'archived' ? t('common.buttons.restore') : t('common.buttons.archive')}
               </DropdownMenuItem>

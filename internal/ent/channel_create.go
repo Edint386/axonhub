@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
@@ -286,6 +287,20 @@ func (_c *ChannelCreate) SetEndpoints(v []objects.ChannelEndpoint) *ChannelCreat
 	return _c
 }
 
+// SetCallerAccessMode sets the "caller_access_mode" field.
+func (_c *ChannelCreate) SetCallerAccessMode(v channel.CallerAccessMode) *ChannelCreate {
+	_c.mutation.SetCallerAccessMode(v)
+	return _c
+}
+
+// SetNillableCallerAccessMode sets the "caller_access_mode" field if the given value is not nil.
+func (_c *ChannelCreate) SetNillableCallerAccessMode(v *channel.CallerAccessMode) *ChannelCreate {
+	if v != nil {
+		_c.SetCallerAccessMode(*v)
+	}
+	return _c
+}
+
 // AddRequestIDs adds the "requests" edge to the Request entity by IDs.
 func (_c *ChannelCreate) AddRequestIDs(ids ...int) *ChannelCreate {
 	_c.mutation.AddRequestIDs(ids...)
@@ -395,6 +410,21 @@ func (_c *ChannelCreate) SetProviderQuotaStatus(v *ProviderQuotaStatus) *Channel
 	return _c.SetProviderQuotaStatusID(v.ID)
 }
 
+// AddCallerACLMemberIDs adds the "caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (_c *ChannelCreate) AddCallerACLMemberIDs(ids ...int) *ChannelCreate {
+	_c.mutation.AddCallerACLMemberIDs(ids...)
+	return _c
+}
+
+// AddCallerACLMembers adds the "caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_c *ChannelCreate) AddCallerACLMembers(v ...*ChannelCallerACLMember) *ChannelCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddCallerACLMemberIDs(ids...)
+}
+
 // Mutation returns the ChannelMutation object of the builder.
 func (_c *ChannelCreate) Mutation() *ChannelMutation {
 	return _c.mutation
@@ -498,6 +528,10 @@ func (_c *ChannelCreate) defaults() error {
 		v := channel.DefaultEndpoints
 		_c.mutation.SetEndpoints(v)
 	}
+	if _, ok := _c.mutation.CallerAccessMode(); !ok {
+		v := channel.DefaultCallerAccessMode
+		_c.mutation.SetCallerAccessMode(v)
+	}
 	return nil
 }
 
@@ -550,6 +584,14 @@ func (_c *ChannelCreate) check() error {
 	}
 	if _, ok := _c.mutation.Priority(); !ok {
 		return &ValidationError{Name: "priority", err: errors.New(`ent: missing required field "Channel.priority"`)}
+	}
+	if _, ok := _c.mutation.CallerAccessMode(); !ok {
+		return &ValidationError{Name: "caller_access_mode", err: errors.New(`ent: missing required field "Channel.caller_access_mode"`)}
+	}
+	if v, ok := _c.mutation.CallerAccessMode(); ok {
+		if err := channel.CallerAccessModeValidator(v); err != nil {
+			return &ValidationError{Name: "caller_access_mode", err: fmt.Errorf(`ent: validator failed for field "Channel.caller_access_mode": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -674,6 +716,10 @@ func (_c *ChannelCreate) createSpec() (*Channel, *sqlgraph.CreateSpec) {
 		_spec.SetField(channel.FieldEndpoints, field.TypeJSON, value)
 		_node.Endpoints = value
 	}
+	if value, ok := _c.mutation.CallerAccessMode(); ok {
+		_spec.SetField(channel.FieldCallerAccessMode, field.TypeEnum, value)
+		_node.CallerAccessMode = value
+	}
 	if nodes := _c.mutation.RequestsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -779,6 +825,22 @@ func (_c *ChannelCreate) createSpec() (*Channel, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(providerquotastatus.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.CallerACLMembersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.CallerACLMembersTable,
+			Columns: []string{channel.CallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1201,6 +1263,18 @@ func (u *ChannelUpsert) UpdateEndpoints() *ChannelUpsert {
 // ClearEndpoints clears the value of the "endpoints" field.
 func (u *ChannelUpsert) ClearEndpoints() *ChannelUpsert {
 	u.SetNull(channel.FieldEndpoints)
+	return u
+}
+
+// SetCallerAccessMode sets the "caller_access_mode" field.
+func (u *ChannelUpsert) SetCallerAccessMode(v channel.CallerAccessMode) *ChannelUpsert {
+	u.Set(channel.FieldCallerAccessMode, v)
+	return u
+}
+
+// UpdateCallerAccessMode sets the "caller_access_mode" field to the value that was provided on create.
+func (u *ChannelUpsert) UpdateCallerAccessMode() *ChannelUpsert {
+	u.SetExcluded(channel.FieldCallerAccessMode)
 	return u
 }
 
@@ -1673,6 +1747,20 @@ func (u *ChannelUpsertOne) UpdateEndpoints() *ChannelUpsertOne {
 func (u *ChannelUpsertOne) ClearEndpoints() *ChannelUpsertOne {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearEndpoints()
+	})
+}
+
+// SetCallerAccessMode sets the "caller_access_mode" field.
+func (u *ChannelUpsertOne) SetCallerAccessMode(v channel.CallerAccessMode) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetCallerAccessMode(v)
+	})
+}
+
+// UpdateCallerAccessMode sets the "caller_access_mode" field to the value that was provided on create.
+func (u *ChannelUpsertOne) UpdateCallerAccessMode() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateCallerAccessMode()
 	})
 }
 
@@ -2311,6 +2399,20 @@ func (u *ChannelUpsertBulk) UpdateEndpoints() *ChannelUpsertBulk {
 func (u *ChannelUpsertBulk) ClearEndpoints() *ChannelUpsertBulk {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearEndpoints()
+	})
+}
+
+// SetCallerAccessMode sets the "caller_access_mode" field.
+func (u *ChannelUpsertBulk) SetCallerAccessMode(v channel.CallerAccessMode) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetCallerAccessMode(v)
+	})
+}
+
+// UpdateCallerAccessMode sets the "caller_access_mode" field to the value that was provided on create.
+func (u *ChannelUpsertBulk) UpdateCallerAccessMode() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateCallerAccessMode()
 	})
 }
 

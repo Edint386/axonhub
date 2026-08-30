@@ -9,6 +9,7 @@ type ApiKeyDialogType =
   | 'view'
   | 'profiles'
   | 'profileTemplates'
+  | 'channelAccess'
   | 'archive'
   | 'bulkDisable'
   | 'bulkArchive'
@@ -40,6 +41,7 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
     view: false,
     profiles: false,
     profileTemplates: false,
+    channelAccess: false,
     archive: false,
     bulkDisable: false,
     bulkArchive: false,
@@ -62,7 +64,16 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
   const closeDialog = (type?: ApiKeyDialogType) => {
     if (type) {
       setIsDialogOpen((prev) => ({ ...prev, [type]: false }));
-      if (type === 'delete' || type === 'edit' || type === 'view' || type === 'archive' || type === 'status' || type === 'profiles' || type === 'rotate') {
+      if (
+        type === 'delete' ||
+        type === 'edit' ||
+        type === 'view' ||
+        type === 'archive' ||
+        type === 'status' ||
+        type === 'profiles' ||
+        type === 'channelAccess' ||
+        type === 'rotate'
+      ) {
         setSelectedApiKey(null);
       }
       if (type === 'bulkDisable' || type === 'bulkArchive' || type === 'bulkEnable') {
@@ -78,6 +89,7 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
         view: false,
         profiles: false,
         profileTemplates: false,
+        channelAccess: false,
         archive: false,
         bulkDisable: false,
         bulkArchive: false,

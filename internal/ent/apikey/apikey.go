@@ -49,6 +49,8 @@ const (
 	EdgeProject = "project"
 	// EdgeRequests holds the string denoting the requests edge name in mutations.
 	EdgeRequests = "requests"
+	// EdgeChannelCallerACLMembers holds the string denoting the channel_caller_acl_members edge name in mutations.
+	EdgeChannelCallerACLMembers = "channel_caller_acl_members"
 	// Table holds the table name of the apikey in the database.
 	Table = "api_keys"
 	// UserTable is the table that holds the user relation/edge.
@@ -72,6 +74,13 @@ const (
 	RequestsInverseTable = "requests"
 	// RequestsColumn is the table column denoting the requests relation/edge.
 	RequestsColumn = "api_key_id"
+	// ChannelCallerACLMembersTable is the table that holds the channel_caller_acl_members relation/edge.
+	ChannelCallerACLMembersTable = "channel_caller_acl_members"
+	// ChannelCallerACLMembersInverseTable is the table name for the ChannelCallerACLMember entity.
+	// It exists in this package in order to avoid circular dependency with the "channelcalleraclmember" package.
+	ChannelCallerACLMembersInverseTable = "channel_caller_acl_members"
+	// ChannelCallerACLMembersColumn is the table column denoting the channel_caller_acl_members relation/edge.
+	ChannelCallerACLMembersColumn = "api_key_id"
 )
 
 // Columns holds all SQL columns for apikey fields.
@@ -263,6 +272,20 @@ func ByRequests(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newRequestsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByChannelCallerACLMembersCount orders the results by channel_caller_acl_members count.
+func ByChannelCallerACLMembersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newChannelCallerACLMembersStep(), opts...)
+	}
+}
+
+// ByChannelCallerACLMembers orders the results by channel_caller_acl_members terms.
+func ByChannelCallerACLMembers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newChannelCallerACLMembersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -282,6 +305,13 @@ func newRequestsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(RequestsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, RequestsTable, RequestsColumn),
+	)
+}
+func newChannelCallerACLMembersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ChannelCallerACLMembersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ChannelCallerACLMembersTable, ChannelCallerACLMembersColumn),
 	)
 }
 

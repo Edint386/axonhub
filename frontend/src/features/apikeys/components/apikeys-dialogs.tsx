@@ -1,3 +1,4 @@
+import { APIKeyChannelAccessDrawer } from '@/features/channel-access';
 import { useApiKeysContext } from '../context/apikeys-context';
 import { useApiKey, useUpdateApiKeyProfiles } from '../data/apikeys';
 import { type UpdateApiKeyProfilesInput } from '../data/schema';
@@ -29,7 +30,20 @@ export function ApiKeysDialogs() {
       <ApiKeysBulkArchiveDialog />
       <ApiKeysBulkEnableDialog />
       <ApiKeysRotateDialog />
+      <ApiKeysChannelAccessDrawerWrapper />
     </>
+  );
+}
+
+function ApiKeysChannelAccessDrawerWrapper() {
+  const { isDialogOpen, closeDialog, selectedApiKey } = useApiKeysContext();
+
+  return (
+    <APIKeyChannelAccessDrawer
+      open={isDialogOpen.channelAccess}
+      onOpenChange={(open) => !open && closeDialog('channelAccess')}
+      apiKey={selectedApiKey}
+    />
   );
 }
 

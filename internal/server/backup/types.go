@@ -19,6 +19,7 @@ type BackupData struct {
 	Models             []*BackupModel             `json:"models"`
 	ChannelModelPrices []*BackupChannelModelPrice `json:"channel_model_prices,omitempty"`
 	APIKeys            []*BackupAPIKey            `json:"api_keys,omitempty"`
+	ChannelCallerACL   []*BackupChannelCallerACL  `json:"channel_caller_acl"`
 	UsageRequests      []*BackupUsageRequest      `json:"usage_requests,omitempty"`
 	UsageLogs          []*BackupUsageLog          `json:"usage_logs,omitempty"`
 }
@@ -49,6 +50,14 @@ type BackupAPIKey struct {
 	ent.APIKey
 
 	ProjectName string `json:"project_name"`
+}
+
+// BackupChannelCallerACL stores one Channel caller ACL membership using IDs
+// from the source backup. Restore resolves both IDs through the Channel and
+// API-key ID maps before creating the target relationship.
+type BackupChannelCallerACL struct {
+	SourceChannelID int `json:"source_channel_id"`
+	SourceAPIKeyID  int `json:"source_api_key_id"`
 }
 
 type BackupChannelModelPrice struct {
@@ -199,7 +208,8 @@ func (l BackupUsageLog) MarshalJSON() ([]byte, error) {
 }
 
 const (
-	BackupVersion   = "1.5"
+	BackupVersion   = "1.6"
+	BackupVersionV6 = "1.5"
 	BackupVersionV5 = "1.4"
 	BackupVersionV4 = "1.3"
 	BackupVersionV1 = "1.0"

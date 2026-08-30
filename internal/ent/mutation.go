@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
@@ -53,6 +54,7 @@ const (
 	TypeAPIKey                   = "APIKey"
 	TypeAPIKeyProfileTemplate    = "APIKeyProfileTemplate"
 	TypeChannel                  = "Channel"
+	TypeChannelCallerACLMember   = "ChannelCallerACLMember"
 	TypeChannelHealthProbeRun    = "ChannelHealthProbeRun"
 	TypeChannelModelPrice        = "ChannelModelPrice"
 	TypeChannelModelPriceVersion = "ChannelModelPriceVersion"
@@ -81,33 +83,36 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *int
-	created_at        *time.Time
-	updated_at        *time.Time
-	deleted_at        *int
-	adddeleted_at     *int
-	key               *string
-	name              *string
-	_type             *apikey.Type
-	status            *apikey.Status
-	scopes            *[]string
-	appendscopes      []string
-	profiles          **objects.APIKeyProfiles
-	allowed_ips       *[]string
-	appendallowed_ips []string
-	clearedFields     map[string]struct{}
-	user              *int
-	cleareduser       bool
-	project           *int
-	clearedproject    bool
-	requests          map[int]struct{}
-	removedrequests   map[int]struct{}
-	clearedrequests   bool
-	done              bool
-	oldValue          func(context.Context) (*APIKey, error)
-	predicates        []predicate.APIKey
+	op                                Op
+	typ                               string
+	id                                *int
+	created_at                        *time.Time
+	updated_at                        *time.Time
+	deleted_at                        *int
+	adddeleted_at                     *int
+	key                               *string
+	name                              *string
+	_type                             *apikey.Type
+	status                            *apikey.Status
+	scopes                            *[]string
+	appendscopes                      []string
+	profiles                          **objects.APIKeyProfiles
+	allowed_ips                       *[]string
+	appendallowed_ips                 []string
+	clearedFields                     map[string]struct{}
+	user                              *int
+	cleareduser                       bool
+	project                           *int
+	clearedproject                    bool
+	requests                          map[int]struct{}
+	removedrequests                   map[int]struct{}
+	clearedrequests                   bool
+	channel_caller_acl_members        map[int]struct{}
+	removedchannel_caller_acl_members map[int]struct{}
+	clearedchannel_caller_acl_members bool
+	done                              bool
+	oldValue                          func(context.Context) (*APIKey, error)
+	predicates                        []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -852,6 +857,60 @@ func (m *APIKeyMutation) ResetRequests() {
 	m.removedrequests = nil
 }
 
+// AddChannelCallerACLMemberIDs adds the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity by ids.
+func (m *APIKeyMutation) AddChannelCallerACLMemberIDs(ids ...int) {
+	if m.channel_caller_acl_members == nil {
+		m.channel_caller_acl_members = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.channel_caller_acl_members[ids[i]] = struct{}{}
+	}
+}
+
+// ClearChannelCallerACLMembers clears the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity.
+func (m *APIKeyMutation) ClearChannelCallerACLMembers() {
+	m.clearedchannel_caller_acl_members = true
+}
+
+// ChannelCallerACLMembersCleared reports if the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity was cleared.
+func (m *APIKeyMutation) ChannelCallerACLMembersCleared() bool {
+	return m.clearedchannel_caller_acl_members
+}
+
+// RemoveChannelCallerACLMemberIDs removes the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (m *APIKeyMutation) RemoveChannelCallerACLMemberIDs(ids ...int) {
+	if m.removedchannel_caller_acl_members == nil {
+		m.removedchannel_caller_acl_members = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.channel_caller_acl_members, ids[i])
+		m.removedchannel_caller_acl_members[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedChannelCallerACLMembers returns the removed IDs of the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity.
+func (m *APIKeyMutation) RemovedChannelCallerACLMembersIDs() (ids []int) {
+	for id := range m.removedchannel_caller_acl_members {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ChannelCallerACLMembersIDs returns the "channel_caller_acl_members" edge IDs in the mutation.
+func (m *APIKeyMutation) ChannelCallerACLMembersIDs() (ids []int) {
+	for id := range m.channel_caller_acl_members {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetChannelCallerACLMembers resets all changes to the "channel_caller_acl_members" edge.
+func (m *APIKeyMutation) ResetChannelCallerACLMembers() {
+	m.channel_caller_acl_members = nil
+	m.clearedchannel_caller_acl_members = false
+	m.removedchannel_caller_acl_members = nil
+}
+
 // Where appends a list predicates to the APIKeyMutation builder.
 func (m *APIKeyMutation) Where(ps ...predicate.APIKey) {
 	m.predicates = append(m.predicates, ps...)
@@ -1214,7 +1273,7 @@ func (m *APIKeyMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *APIKeyMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.user != nil {
 		edges = append(edges, apikey.EdgeUser)
 	}
@@ -1223,6 +1282,9 @@ func (m *APIKeyMutation) AddedEdges() []string {
 	}
 	if m.requests != nil {
 		edges = append(edges, apikey.EdgeRequests)
+	}
+	if m.channel_caller_acl_members != nil {
+		edges = append(edges, apikey.EdgeChannelCallerACLMembers)
 	}
 	return edges
 }
@@ -1245,15 +1307,24 @@ func (m *APIKeyMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case apikey.EdgeChannelCallerACLMembers:
+		ids := make([]ent.Value, 0, len(m.channel_caller_acl_members))
+		for id := range m.channel_caller_acl_members {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *APIKeyMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedrequests != nil {
 		edges = append(edges, apikey.EdgeRequests)
+	}
+	if m.removedchannel_caller_acl_members != nil {
+		edges = append(edges, apikey.EdgeChannelCallerACLMembers)
 	}
 	return edges
 }
@@ -1268,13 +1339,19 @@ func (m *APIKeyMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case apikey.EdgeChannelCallerACLMembers:
+		ids := make([]ent.Value, 0, len(m.removedchannel_caller_acl_members))
+		for id := range m.removedchannel_caller_acl_members {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *APIKeyMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.cleareduser {
 		edges = append(edges, apikey.EdgeUser)
 	}
@@ -1283,6 +1360,9 @@ func (m *APIKeyMutation) ClearedEdges() []string {
 	}
 	if m.clearedrequests {
 		edges = append(edges, apikey.EdgeRequests)
+	}
+	if m.clearedchannel_caller_acl_members {
+		edges = append(edges, apikey.EdgeChannelCallerACLMembers)
 	}
 	return edges
 }
@@ -1297,6 +1377,8 @@ func (m *APIKeyMutation) EdgeCleared(name string) bool {
 		return m.clearedproject
 	case apikey.EdgeRequests:
 		return m.clearedrequests
+	case apikey.EdgeChannelCallerACLMembers:
+		return m.clearedchannel_caller_acl_members
 	}
 	return false
 }
@@ -1327,6 +1409,9 @@ func (m *APIKeyMutation) ResetEdge(name string) error {
 		return nil
 	case apikey.EdgeRequests:
 		m.ResetRequests()
+		return nil
+	case apikey.EdgeChannelCallerACLMembers:
+		m.ResetChannelCallerACLMembers()
 		return nil
 	}
 	return fmt.Errorf("unknown APIKey edge %s", name)
@@ -2133,6 +2218,7 @@ type ChannelMutation struct {
 	remark                       *string
 	endpoints                    *[]objects.ChannelEndpoint
 	appendendpoints              []objects.ChannelEndpoint
+	caller_access_mode           *channel.CallerAccessMode
 	clearedFields                map[string]struct{}
 	requests                     map[int]struct{}
 	removedrequests              map[int]struct{}
@@ -2154,6 +2240,9 @@ type ChannelMutation struct {
 	clearedchannel_model_prices  bool
 	provider_quota_status        *int
 	clearedprovider_quota_status bool
+	caller_acl_members           map[int]struct{}
+	removedcaller_acl_members    map[int]struct{}
+	clearedcaller_acl_members    bool
 	done                         bool
 	oldValue                     func(context.Context) (*Channel, error)
 	predicates                   []predicate.Channel
@@ -3423,6 +3512,42 @@ func (m *ChannelMutation) ResetEndpoints() {
 	delete(m.clearedFields, channel.FieldEndpoints)
 }
 
+// SetCallerAccessMode sets the "caller_access_mode" field.
+func (m *ChannelMutation) SetCallerAccessMode(cam channel.CallerAccessMode) {
+	m.caller_access_mode = &cam
+}
+
+// CallerAccessMode returns the value of the "caller_access_mode" field in the mutation.
+func (m *ChannelMutation) CallerAccessMode() (r channel.CallerAccessMode, exists bool) {
+	v := m.caller_access_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCallerAccessMode returns the old "caller_access_mode" field's value of the Channel entity.
+// If the Channel object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMutation) OldCallerAccessMode(ctx context.Context) (v channel.CallerAccessMode, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCallerAccessMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCallerAccessMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCallerAccessMode: %w", err)
+	}
+	return oldValue.CallerAccessMode, nil
+}
+
+// ResetCallerAccessMode resets all changes to the "caller_access_mode" field.
+func (m *ChannelMutation) ResetCallerAccessMode() {
+	m.caller_access_mode = nil
+}
+
 // AddRequestIDs adds the "requests" edge to the Request entity by ids.
 func (m *ChannelMutation) AddRequestIDs(ids ...int) {
 	if m.requests == nil {
@@ -3786,6 +3911,60 @@ func (m *ChannelMutation) ResetProviderQuotaStatus() {
 	m.clearedprovider_quota_status = false
 }
 
+// AddCallerACLMemberIDs adds the "caller_acl_members" edge to the ChannelCallerACLMember entity by ids.
+func (m *ChannelMutation) AddCallerACLMemberIDs(ids ...int) {
+	if m.caller_acl_members == nil {
+		m.caller_acl_members = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.caller_acl_members[ids[i]] = struct{}{}
+	}
+}
+
+// ClearCallerACLMembers clears the "caller_acl_members" edge to the ChannelCallerACLMember entity.
+func (m *ChannelMutation) ClearCallerACLMembers() {
+	m.clearedcaller_acl_members = true
+}
+
+// CallerACLMembersCleared reports if the "caller_acl_members" edge to the ChannelCallerACLMember entity was cleared.
+func (m *ChannelMutation) CallerACLMembersCleared() bool {
+	return m.clearedcaller_acl_members
+}
+
+// RemoveCallerACLMemberIDs removes the "caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (m *ChannelMutation) RemoveCallerACLMemberIDs(ids ...int) {
+	if m.removedcaller_acl_members == nil {
+		m.removedcaller_acl_members = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.caller_acl_members, ids[i])
+		m.removedcaller_acl_members[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedCallerACLMembers returns the removed IDs of the "caller_acl_members" edge to the ChannelCallerACLMember entity.
+func (m *ChannelMutation) RemovedCallerACLMembersIDs() (ids []int) {
+	for id := range m.removedcaller_acl_members {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// CallerACLMembersIDs returns the "caller_acl_members" edge IDs in the mutation.
+func (m *ChannelMutation) CallerACLMembersIDs() (ids []int) {
+	for id := range m.caller_acl_members {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetCallerACLMembers resets all changes to the "caller_acl_members" edge.
+func (m *ChannelMutation) ResetCallerACLMembers() {
+	m.caller_acl_members = nil
+	m.clearedcaller_acl_members = false
+	m.removedcaller_acl_members = nil
+}
+
 // Where appends a list predicates to the ChannelMutation builder.
 func (m *ChannelMutation) Where(ps ...predicate.Channel) {
 	m.predicates = append(m.predicates, ps...)
@@ -3820,7 +3999,7 @@ func (m *ChannelMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.created_at != nil {
 		fields = append(fields, channel.FieldCreatedAt)
 	}
@@ -3893,6 +4072,9 @@ func (m *ChannelMutation) Fields() []string {
 	if m.endpoints != nil {
 		fields = append(fields, channel.FieldEndpoints)
 	}
+	if m.caller_access_mode != nil {
+		fields = append(fields, channel.FieldCallerAccessMode)
+	}
 	return fields
 }
 
@@ -3949,6 +4131,8 @@ func (m *ChannelMutation) Field(name string) (ent.Value, bool) {
 		return m.Remark()
 	case channel.FieldEndpoints:
 		return m.Endpoints()
+	case channel.FieldCallerAccessMode:
+		return m.CallerAccessMode()
 	}
 	return nil, false
 }
@@ -4006,6 +4190,8 @@ func (m *ChannelMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldRemark(ctx)
 	case channel.FieldEndpoints:
 		return m.OldEndpoints(ctx)
+	case channel.FieldCallerAccessMode:
+		return m.OldCallerAccessMode(ctx)
 	}
 	return nil, fmt.Errorf("unknown Channel field %s", name)
 }
@@ -4182,6 +4368,13 @@ func (m *ChannelMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEndpoints(v)
+		return nil
+	case channel.FieldCallerAccessMode:
+		v, ok := value.(channel.CallerAccessMode)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCallerAccessMode(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Channel field %s", name)
@@ -4424,13 +4617,16 @@ func (m *ChannelMutation) ResetField(name string) error {
 	case channel.FieldEndpoints:
 		m.ResetEndpoints()
 		return nil
+	case channel.FieldCallerAccessMode:
+		m.ResetCallerAccessMode()
+		return nil
 	}
 	return fmt.Errorf("unknown Channel field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ChannelMutation) AddedEdges() []string {
-	edges := make([]string, 0, 7)
+	edges := make([]string, 0, 8)
 	if m.requests != nil {
 		edges = append(edges, channel.EdgeRequests)
 	}
@@ -4451,6 +4647,9 @@ func (m *ChannelMutation) AddedEdges() []string {
 	}
 	if m.provider_quota_status != nil {
 		edges = append(edges, channel.EdgeProviderQuotaStatus)
+	}
+	if m.caller_acl_members != nil {
+		edges = append(edges, channel.EdgeCallerACLMembers)
 	}
 	return edges
 }
@@ -4499,13 +4698,19 @@ func (m *ChannelMutation) AddedIDs(name string) []ent.Value {
 		if id := m.provider_quota_status; id != nil {
 			return []ent.Value{*id}
 		}
+	case channel.EdgeCallerACLMembers:
+		ids := make([]ent.Value, 0, len(m.caller_acl_members))
+		for id := range m.caller_acl_members {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ChannelMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 7)
+	edges := make([]string, 0, 8)
 	if m.removedrequests != nil {
 		edges = append(edges, channel.EdgeRequests)
 	}
@@ -4523,6 +4728,9 @@ func (m *ChannelMutation) RemovedEdges() []string {
 	}
 	if m.removedchannel_model_prices != nil {
 		edges = append(edges, channel.EdgeChannelModelPrices)
+	}
+	if m.removedcaller_acl_members != nil {
+		edges = append(edges, channel.EdgeCallerACLMembers)
 	}
 	return edges
 }
@@ -4567,13 +4775,19 @@ func (m *ChannelMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case channel.EdgeCallerACLMembers:
+		ids := make([]ent.Value, 0, len(m.removedcaller_acl_members))
+		for id := range m.removedcaller_acl_members {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ChannelMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 7)
+	edges := make([]string, 0, 8)
 	if m.clearedrequests {
 		edges = append(edges, channel.EdgeRequests)
 	}
@@ -4594,6 +4808,9 @@ func (m *ChannelMutation) ClearedEdges() []string {
 	}
 	if m.clearedprovider_quota_status {
 		edges = append(edges, channel.EdgeProviderQuotaStatus)
+	}
+	if m.clearedcaller_acl_members {
+		edges = append(edges, channel.EdgeCallerACLMembers)
 	}
 	return edges
 }
@@ -4616,6 +4833,8 @@ func (m *ChannelMutation) EdgeCleared(name string) bool {
 		return m.clearedchannel_model_prices
 	case channel.EdgeProviderQuotaStatus:
 		return m.clearedprovider_quota_status
+	case channel.EdgeCallerACLMembers:
+		return m.clearedcaller_acl_members
 	}
 	return false
 }
@@ -4656,8 +4875,602 @@ func (m *ChannelMutation) ResetEdge(name string) error {
 	case channel.EdgeProviderQuotaStatus:
 		m.ResetProviderQuotaStatus()
 		return nil
+	case channel.EdgeCallerACLMembers:
+		m.ResetCallerACLMembers()
+		return nil
 	}
 	return fmt.Errorf("unknown Channel edge %s", name)
+}
+
+// ChannelCallerACLMemberMutation represents an operation that mutates the ChannelCallerACLMember nodes in the graph.
+type ChannelCallerACLMemberMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int
+	created_at     *time.Time
+	updated_at     *time.Time
+	clearedFields  map[string]struct{}
+	channel        *int
+	clearedchannel bool
+	api_key        *int
+	clearedapi_key bool
+	done           bool
+	oldValue       func(context.Context) (*ChannelCallerACLMember, error)
+	predicates     []predicate.ChannelCallerACLMember
+}
+
+var _ ent.Mutation = (*ChannelCallerACLMemberMutation)(nil)
+
+// channelcalleraclmemberOption allows management of the mutation configuration using functional options.
+type channelcalleraclmemberOption func(*ChannelCallerACLMemberMutation)
+
+// newChannelCallerACLMemberMutation creates new mutation for the ChannelCallerACLMember entity.
+func newChannelCallerACLMemberMutation(c config, op Op, opts ...channelcalleraclmemberOption) *ChannelCallerACLMemberMutation {
+	m := &ChannelCallerACLMemberMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeChannelCallerACLMember,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withChannelCallerACLMemberID sets the ID field of the mutation.
+func withChannelCallerACLMemberID(id int) channelcalleraclmemberOption {
+	return func(m *ChannelCallerACLMemberMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ChannelCallerACLMember
+		)
+		m.oldValue = func(ctx context.Context) (*ChannelCallerACLMember, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ChannelCallerACLMember.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withChannelCallerACLMember sets the old ChannelCallerACLMember of the mutation.
+func withChannelCallerACLMember(node *ChannelCallerACLMember) channelcalleraclmemberOption {
+	return func(m *ChannelCallerACLMemberMutation) {
+		m.oldValue = func(context.Context) (*ChannelCallerACLMember, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ChannelCallerACLMemberMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ChannelCallerACLMemberMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ChannelCallerACLMemberMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ChannelCallerACLMemberMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ChannelCallerACLMember.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ChannelCallerACLMemberMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ChannelCallerACLMemberMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ChannelCallerACLMember entity.
+// If the ChannelCallerACLMember object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelCallerACLMemberMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ChannelCallerACLMemberMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ChannelCallerACLMemberMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ChannelCallerACLMemberMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ChannelCallerACLMember entity.
+// If the ChannelCallerACLMember object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelCallerACLMemberMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ChannelCallerACLMemberMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetChannelID sets the "channel_id" field.
+func (m *ChannelCallerACLMemberMutation) SetChannelID(i int) {
+	m.channel = &i
+}
+
+// ChannelID returns the value of the "channel_id" field in the mutation.
+func (m *ChannelCallerACLMemberMutation) ChannelID() (r int, exists bool) {
+	v := m.channel
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChannelID returns the old "channel_id" field's value of the ChannelCallerACLMember entity.
+// If the ChannelCallerACLMember object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelCallerACLMemberMutation) OldChannelID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChannelID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChannelID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChannelID: %w", err)
+	}
+	return oldValue.ChannelID, nil
+}
+
+// ResetChannelID resets all changes to the "channel_id" field.
+func (m *ChannelCallerACLMemberMutation) ResetChannelID() {
+	m.channel = nil
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *ChannelCallerACLMemberMutation) SetAPIKeyID(i int) {
+	m.api_key = &i
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *ChannelCallerACLMemberMutation) APIKeyID() (r int, exists bool) {
+	v := m.api_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the ChannelCallerACLMember entity.
+// If the ChannelCallerACLMember object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelCallerACLMemberMutation) OldAPIKeyID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *ChannelCallerACLMemberMutation) ResetAPIKeyID() {
+	m.api_key = nil
+}
+
+// ClearChannel clears the "channel" edge to the Channel entity.
+func (m *ChannelCallerACLMemberMutation) ClearChannel() {
+	m.clearedchannel = true
+	m.clearedFields[channelcalleraclmember.FieldChannelID] = struct{}{}
+}
+
+// ChannelCleared reports if the "channel" edge to the Channel entity was cleared.
+func (m *ChannelCallerACLMemberMutation) ChannelCleared() bool {
+	return m.clearedchannel
+}
+
+// ChannelIDs returns the "channel" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ChannelID instead. It exists only for internal usage by the builders.
+func (m *ChannelCallerACLMemberMutation) ChannelIDs() (ids []int) {
+	if id := m.channel; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetChannel resets all changes to the "channel" edge.
+func (m *ChannelCallerACLMemberMutation) ResetChannel() {
+	m.channel = nil
+	m.clearedchannel = false
+}
+
+// ClearAPIKey clears the "api_key" edge to the APIKey entity.
+func (m *ChannelCallerACLMemberMutation) ClearAPIKey() {
+	m.clearedapi_key = true
+	m.clearedFields[channelcalleraclmember.FieldAPIKeyID] = struct{}{}
+}
+
+// APIKeyCleared reports if the "api_key" edge to the APIKey entity was cleared.
+func (m *ChannelCallerACLMemberMutation) APIKeyCleared() bool {
+	return m.clearedapi_key
+}
+
+// APIKeyIDs returns the "api_key" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// APIKeyID instead. It exists only for internal usage by the builders.
+func (m *ChannelCallerACLMemberMutation) APIKeyIDs() (ids []int) {
+	if id := m.api_key; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetAPIKey resets all changes to the "api_key" edge.
+func (m *ChannelCallerACLMemberMutation) ResetAPIKey() {
+	m.api_key = nil
+	m.clearedapi_key = false
+}
+
+// Where appends a list predicates to the ChannelCallerACLMemberMutation builder.
+func (m *ChannelCallerACLMemberMutation) Where(ps ...predicate.ChannelCallerACLMember) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ChannelCallerACLMemberMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ChannelCallerACLMemberMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ChannelCallerACLMember, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ChannelCallerACLMemberMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ChannelCallerACLMemberMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ChannelCallerACLMember).
+func (m *ChannelCallerACLMemberMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ChannelCallerACLMemberMutation) Fields() []string {
+	fields := make([]string, 0, 4)
+	if m.created_at != nil {
+		fields = append(fields, channelcalleraclmember.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, channelcalleraclmember.FieldUpdatedAt)
+	}
+	if m.channel != nil {
+		fields = append(fields, channelcalleraclmember.FieldChannelID)
+	}
+	if m.api_key != nil {
+		fields = append(fields, channelcalleraclmember.FieldAPIKeyID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ChannelCallerACLMemberMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case channelcalleraclmember.FieldCreatedAt:
+		return m.CreatedAt()
+	case channelcalleraclmember.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case channelcalleraclmember.FieldChannelID:
+		return m.ChannelID()
+	case channelcalleraclmember.FieldAPIKeyID:
+		return m.APIKeyID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ChannelCallerACLMemberMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case channelcalleraclmember.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case channelcalleraclmember.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case channelcalleraclmember.FieldChannelID:
+		return m.OldChannelID(ctx)
+	case channelcalleraclmember.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	}
+	return nil, fmt.Errorf("unknown ChannelCallerACLMember field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ChannelCallerACLMemberMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case channelcalleraclmember.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case channelcalleraclmember.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case channelcalleraclmember.FieldChannelID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChannelID(v)
+		return nil
+	case channelcalleraclmember.FieldAPIKeyID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelCallerACLMember field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ChannelCallerACLMemberMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ChannelCallerACLMemberMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ChannelCallerACLMemberMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown ChannelCallerACLMember numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ChannelCallerACLMemberMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ChannelCallerACLMemberMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ChannelCallerACLMemberMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown ChannelCallerACLMember nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ChannelCallerACLMemberMutation) ResetField(name string) error {
+	switch name {
+	case channelcalleraclmember.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case channelcalleraclmember.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case channelcalleraclmember.FieldChannelID:
+		m.ResetChannelID()
+		return nil
+	case channelcalleraclmember.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelCallerACLMember field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ChannelCallerACLMemberMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.channel != nil {
+		edges = append(edges, channelcalleraclmember.EdgeChannel)
+	}
+	if m.api_key != nil {
+		edges = append(edges, channelcalleraclmember.EdgeAPIKey)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ChannelCallerACLMemberMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case channelcalleraclmember.EdgeChannel:
+		if id := m.channel; id != nil {
+			return []ent.Value{*id}
+		}
+	case channelcalleraclmember.EdgeAPIKey:
+		if id := m.api_key; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ChannelCallerACLMemberMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ChannelCallerACLMemberMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ChannelCallerACLMemberMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedchannel {
+		edges = append(edges, channelcalleraclmember.EdgeChannel)
+	}
+	if m.clearedapi_key {
+		edges = append(edges, channelcalleraclmember.EdgeAPIKey)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ChannelCallerACLMemberMutation) EdgeCleared(name string) bool {
+	switch name {
+	case channelcalleraclmember.EdgeChannel:
+		return m.clearedchannel
+	case channelcalleraclmember.EdgeAPIKey:
+		return m.clearedapi_key
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ChannelCallerACLMemberMutation) ClearEdge(name string) error {
+	switch name {
+	case channelcalleraclmember.EdgeChannel:
+		m.ClearChannel()
+		return nil
+	case channelcalleraclmember.EdgeAPIKey:
+		m.ClearAPIKey()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelCallerACLMember unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ChannelCallerACLMemberMutation) ResetEdge(name string) error {
+	switch name {
+	case channelcalleraclmember.EdgeChannel:
+		m.ResetChannel()
+		return nil
+	case channelcalleraclmember.EdgeAPIKey:
+		m.ResetAPIKey()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelCallerACLMember edge %s", name)
 }
 
 // ChannelHealthProbeRunMutation represents an operation that mutates the ChannelHealthProbeRun nodes in the graph.

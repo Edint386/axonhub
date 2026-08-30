@@ -9,6 +9,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
@@ -217,6 +218,21 @@ func init() {
 	channelDescEndpoints := channelFields[20].Descriptor()
 	// channel.DefaultEndpoints holds the default value on creation for the endpoints field.
 	channel.DefaultEndpoints = channelDescEndpoints.Default.([]objects.ChannelEndpoint)
+	channelcalleraclmemberMixin := schema.ChannelCallerACLMember{}.Mixin()
+	channelcalleraclmemberMixinFields0 := channelcalleraclmemberMixin[0].Fields()
+	_ = channelcalleraclmemberMixinFields0
+	channelcalleraclmemberFields := schema.ChannelCallerACLMember{}.Fields()
+	_ = channelcalleraclmemberFields
+	// channelcalleraclmemberDescCreatedAt is the schema descriptor for created_at field.
+	channelcalleraclmemberDescCreatedAt := channelcalleraclmemberMixinFields0[0].Descriptor()
+	// channelcalleraclmember.DefaultCreatedAt holds the default value on creation for the created_at field.
+	channelcalleraclmember.DefaultCreatedAt = channelcalleraclmemberDescCreatedAt.Default.(func() time.Time)
+	// channelcalleraclmemberDescUpdatedAt is the schema descriptor for updated_at field.
+	channelcalleraclmemberDescUpdatedAt := channelcalleraclmemberMixinFields0[1].Descriptor()
+	// channelcalleraclmember.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	channelcalleraclmember.DefaultUpdatedAt = channelcalleraclmemberDescUpdatedAt.Default.(func() time.Time)
+	// channelcalleraclmember.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	channelcalleraclmember.UpdateDefaultUpdatedAt = channelcalleraclmemberDescUpdatedAt.UpdateDefault.(func() time.Time)
 	channelhealthproberunMixin := schema.ChannelHealthProbeRun{}.Mixin()
 	channelhealthproberun.Policy = privacy.NewPolicies(schema.ChannelHealthProbeRun{})
 	channelhealthproberun.Hooks[0] = func(next ent.Mutator) ent.Mutator {

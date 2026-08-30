@@ -18,6 +18,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
@@ -54,6 +55,8 @@ type Client struct {
 	APIKeyProfileTemplate *APIKeyProfileTemplateClient
 	// Channel is the client for interacting with the Channel builders.
 	Channel *ChannelClient
+	// ChannelCallerACLMember is the client for interacting with the ChannelCallerACLMember builders.
+	ChannelCallerACLMember *ChannelCallerACLMemberClient
 	// ChannelHealthProbeRun is the client for interacting with the ChannelHealthProbeRun builders.
 	ChannelHealthProbeRun *ChannelHealthProbeRunClient
 	// ChannelModelPrice is the client for interacting with the ChannelModelPrice builders.
@@ -116,6 +119,7 @@ func (c *Client) init() {
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.APIKeyProfileTemplate = NewAPIKeyProfileTemplateClient(c.config)
 	c.Channel = NewChannelClient(c.config)
+	c.ChannelCallerACLMember = NewChannelCallerACLMemberClient(c.config)
 	c.ChannelHealthProbeRun = NewChannelHealthProbeRunClient(c.config)
 	c.ChannelModelPrice = NewChannelModelPriceClient(c.config)
 	c.ChannelModelPriceVersion = NewChannelModelPriceVersionClient(c.config)
@@ -234,6 +238,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		APIKey:                   NewAPIKeyClient(cfg),
 		APIKeyProfileTemplate:    NewAPIKeyProfileTemplateClient(cfg),
 		Channel:                  NewChannelClient(cfg),
+		ChannelCallerACLMember:   NewChannelCallerACLMemberClient(cfg),
 		ChannelHealthProbeRun:    NewChannelHealthProbeRunClient(cfg),
 		ChannelModelPrice:        NewChannelModelPriceClient(cfg),
 		ChannelModelPriceVersion: NewChannelModelPriceVersionClient(cfg),
@@ -279,6 +284,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		APIKey:                   NewAPIKeyClient(cfg),
 		APIKeyProfileTemplate:    NewAPIKeyProfileTemplateClient(cfg),
 		Channel:                  NewChannelClient(cfg),
+		ChannelCallerACLMember:   NewChannelCallerACLMemberClient(cfg),
 		ChannelHealthProbeRun:    NewChannelHealthProbeRunClient(cfg),
 		ChannelModelPrice:        NewChannelModelPriceClient(cfg),
 		ChannelModelPriceVersion: NewChannelModelPriceVersionClient(cfg),
@@ -331,12 +337,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelHealthProbeRun,
-		c.ChannelModelPrice, c.ChannelModelPriceVersion, c.ChannelOverrideTemplate,
-		c.ChannelProbe, c.DataStorage, c.Invitation, c.Model, c.OIDCIdentity,
-		c.Project, c.Prompt, c.PromptProtectionRule, c.ProviderQuotaStatus, c.Request,
-		c.RequestExecution, c.Role, c.System, c.Thread, c.Trace, c.UsageLog, c.User,
-		c.UserProject, c.UserRole,
+		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelCallerACLMember,
+		c.ChannelHealthProbeRun, c.ChannelModelPrice, c.ChannelModelPriceVersion,
+		c.ChannelOverrideTemplate, c.ChannelProbe, c.DataStorage, c.Invitation,
+		c.Model, c.OIDCIdentity, c.Project, c.Prompt, c.PromptProtectionRule,
+		c.ProviderQuotaStatus, c.Request, c.RequestExecution, c.Role, c.System,
+		c.Thread, c.Trace, c.UsageLog, c.User, c.UserProject, c.UserRole,
 	} {
 		n.Use(hooks...)
 	}
@@ -346,12 +352,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelHealthProbeRun,
-		c.ChannelModelPrice, c.ChannelModelPriceVersion, c.ChannelOverrideTemplate,
-		c.ChannelProbe, c.DataStorage, c.Invitation, c.Model, c.OIDCIdentity,
-		c.Project, c.Prompt, c.PromptProtectionRule, c.ProviderQuotaStatus, c.Request,
-		c.RequestExecution, c.Role, c.System, c.Thread, c.Trace, c.UsageLog, c.User,
-		c.UserProject, c.UserRole,
+		c.APIKey, c.APIKeyProfileTemplate, c.Channel, c.ChannelCallerACLMember,
+		c.ChannelHealthProbeRun, c.ChannelModelPrice, c.ChannelModelPriceVersion,
+		c.ChannelOverrideTemplate, c.ChannelProbe, c.DataStorage, c.Invitation,
+		c.Model, c.OIDCIdentity, c.Project, c.Prompt, c.PromptProtectionRule,
+		c.ProviderQuotaStatus, c.Request, c.RequestExecution, c.Role, c.System,
+		c.Thread, c.Trace, c.UsageLog, c.User, c.UserProject, c.UserRole,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -366,6 +372,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.APIKeyProfileTemplate.mutate(ctx, m)
 	case *ChannelMutation:
 		return c.Channel.mutate(ctx, m)
+	case *ChannelCallerACLMemberMutation:
+		return c.ChannelCallerACLMember.mutate(ctx, m)
 	case *ChannelHealthProbeRunMutation:
 		return c.ChannelHealthProbeRun.mutate(ctx, m)
 	case *ChannelModelPriceMutation:
@@ -566,6 +574,22 @@ func (c *APIKeyClient) QueryRequests(_m *APIKey) *RequestQuery {
 			sqlgraph.From(apikey.Table, apikey.FieldID, id),
 			sqlgraph.To(request.Table, request.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, apikey.RequestsTable, apikey.RequestsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryChannelCallerACLMembers queries the channel_caller_acl_members edge of a APIKey.
+func (c *APIKeyClient) QueryChannelCallerACLMembers(_m *APIKey) *ChannelCallerACLMemberQuery {
+	query := (&ChannelCallerACLMemberClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, id),
+			sqlgraph.To(channelcalleraclmember.Table, channelcalleraclmember.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, apikey.ChannelCallerACLMembersTable, apikey.ChannelCallerACLMembersColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -971,6 +995,22 @@ func (c *ChannelClient) QueryProviderQuotaStatus(_m *Channel) *ProviderQuotaStat
 	return query
 }
 
+// QueryCallerACLMembers queries the caller_acl_members edge of a Channel.
+func (c *ChannelClient) QueryCallerACLMembers(_m *Channel) *ChannelCallerACLMemberQuery {
+	query := (&ChannelCallerACLMemberClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(channel.Table, channel.FieldID, id),
+			sqlgraph.To(channelcalleraclmember.Table, channelcalleraclmember.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, channel.CallerACLMembersTable, channel.CallerACLMembersColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *ChannelClient) Hooks() []Hook {
 	hooks := c.hooks.Channel
@@ -995,6 +1035,171 @@ func (c *ChannelClient) mutate(ctx context.Context, m *ChannelMutation) (Value, 
 		return (&ChannelDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Channel mutation op: %q", m.Op())
+	}
+}
+
+// ChannelCallerACLMemberClient is a client for the ChannelCallerACLMember schema.
+type ChannelCallerACLMemberClient struct {
+	config
+}
+
+// NewChannelCallerACLMemberClient returns a client for the ChannelCallerACLMember from the given config.
+func NewChannelCallerACLMemberClient(c config) *ChannelCallerACLMemberClient {
+	return &ChannelCallerACLMemberClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `channelcalleraclmember.Hooks(f(g(h())))`.
+func (c *ChannelCallerACLMemberClient) Use(hooks ...Hook) {
+	c.hooks.ChannelCallerACLMember = append(c.hooks.ChannelCallerACLMember, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `channelcalleraclmember.Intercept(f(g(h())))`.
+func (c *ChannelCallerACLMemberClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ChannelCallerACLMember = append(c.inters.ChannelCallerACLMember, interceptors...)
+}
+
+// Create returns a builder for creating a ChannelCallerACLMember entity.
+func (c *ChannelCallerACLMemberClient) Create() *ChannelCallerACLMemberCreate {
+	mutation := newChannelCallerACLMemberMutation(c.config, OpCreate)
+	return &ChannelCallerACLMemberCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ChannelCallerACLMember entities.
+func (c *ChannelCallerACLMemberClient) CreateBulk(builders ...*ChannelCallerACLMemberCreate) *ChannelCallerACLMemberCreateBulk {
+	return &ChannelCallerACLMemberCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ChannelCallerACLMemberClient) MapCreateBulk(slice any, setFunc func(*ChannelCallerACLMemberCreate, int)) *ChannelCallerACLMemberCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ChannelCallerACLMemberCreateBulk{err: fmt.Errorf("calling to ChannelCallerACLMemberClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ChannelCallerACLMemberCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ChannelCallerACLMemberCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ChannelCallerACLMember.
+func (c *ChannelCallerACLMemberClient) Update() *ChannelCallerACLMemberUpdate {
+	mutation := newChannelCallerACLMemberMutation(c.config, OpUpdate)
+	return &ChannelCallerACLMemberUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ChannelCallerACLMemberClient) UpdateOne(_m *ChannelCallerACLMember) *ChannelCallerACLMemberUpdateOne {
+	mutation := newChannelCallerACLMemberMutation(c.config, OpUpdateOne, withChannelCallerACLMember(_m))
+	return &ChannelCallerACLMemberUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ChannelCallerACLMemberClient) UpdateOneID(id int) *ChannelCallerACLMemberUpdateOne {
+	mutation := newChannelCallerACLMemberMutation(c.config, OpUpdateOne, withChannelCallerACLMemberID(id))
+	return &ChannelCallerACLMemberUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ChannelCallerACLMember.
+func (c *ChannelCallerACLMemberClient) Delete() *ChannelCallerACLMemberDelete {
+	mutation := newChannelCallerACLMemberMutation(c.config, OpDelete)
+	return &ChannelCallerACLMemberDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ChannelCallerACLMemberClient) DeleteOne(_m *ChannelCallerACLMember) *ChannelCallerACLMemberDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ChannelCallerACLMemberClient) DeleteOneID(id int) *ChannelCallerACLMemberDeleteOne {
+	builder := c.Delete().Where(channelcalleraclmember.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ChannelCallerACLMemberDeleteOne{builder}
+}
+
+// Query returns a query builder for ChannelCallerACLMember.
+func (c *ChannelCallerACLMemberClient) Query() *ChannelCallerACLMemberQuery {
+	return &ChannelCallerACLMemberQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeChannelCallerACLMember},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ChannelCallerACLMember entity by its id.
+func (c *ChannelCallerACLMemberClient) Get(ctx context.Context, id int) (*ChannelCallerACLMember, error) {
+	return c.Query().Where(channelcalleraclmember.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ChannelCallerACLMemberClient) GetX(ctx context.Context, id int) *ChannelCallerACLMember {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryChannel queries the channel edge of a ChannelCallerACLMember.
+func (c *ChannelCallerACLMemberClient) QueryChannel(_m *ChannelCallerACLMember) *ChannelQuery {
+	query := (&ChannelClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(channelcalleraclmember.Table, channelcalleraclmember.FieldID, id),
+			sqlgraph.To(channel.Table, channel.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, channelcalleraclmember.ChannelTable, channelcalleraclmember.ChannelColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIKey queries the api_key edge of a ChannelCallerACLMember.
+func (c *ChannelCallerACLMemberClient) QueryAPIKey(_m *ChannelCallerACLMember) *APIKeyQuery {
+	query := (&APIKeyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(channelcalleraclmember.Table, channelcalleraclmember.FieldID, id),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, channelcalleraclmember.APIKeyTable, channelcalleraclmember.APIKeyColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ChannelCallerACLMemberClient) Hooks() []Hook {
+	return c.hooks.ChannelCallerACLMember
+}
+
+// Interceptors returns the client interceptors.
+func (c *ChannelCallerACLMemberClient) Interceptors() []Interceptor {
+	return c.inters.ChannelCallerACLMember
+}
+
+func (c *ChannelCallerACLMemberClient) mutate(ctx context.Context, m *ChannelCallerACLMemberMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ChannelCallerACLMemberCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ChannelCallerACLMemberUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ChannelCallerACLMemberUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ChannelCallerACLMemberDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ChannelCallerACLMember mutation op: %q", m.Op())
 	}
 }
 
@@ -4973,17 +5178,19 @@ func (c *UserRoleClient) mutate(ctx context.Context, m *UserRoleMutation) (Value
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, APIKeyProfileTemplate, Channel, ChannelHealthProbeRun,
-		ChannelModelPrice, ChannelModelPriceVersion, ChannelOverrideTemplate,
-		ChannelProbe, DataStorage, Invitation, Model, OIDCIdentity, Project, Prompt,
-		PromptProtectionRule, ProviderQuotaStatus, Request, RequestExecution, Role,
-		System, Thread, Trace, UsageLog, User, UserProject, UserRole []ent.Hook
+		APIKey, APIKeyProfileTemplate, Channel, ChannelCallerACLMember,
+		ChannelHealthProbeRun, ChannelModelPrice, ChannelModelPriceVersion,
+		ChannelOverrideTemplate, ChannelProbe, DataStorage, Invitation, Model,
+		OIDCIdentity, Project, Prompt, PromptProtectionRule, ProviderQuotaStatus,
+		Request, RequestExecution, Role, System, Thread, Trace, UsageLog, User,
+		UserProject, UserRole []ent.Hook
 	}
 	inters struct {
-		APIKey, APIKeyProfileTemplate, Channel, ChannelHealthProbeRun,
-		ChannelModelPrice, ChannelModelPriceVersion, ChannelOverrideTemplate,
-		ChannelProbe, DataStorage, Invitation, Model, OIDCIdentity, Project, Prompt,
-		PromptProtectionRule, ProviderQuotaStatus, Request, RequestExecution, Role,
-		System, Thread, Trace, UsageLog, User, UserProject, UserRole []ent.Interceptor
+		APIKey, APIKeyProfileTemplate, Channel, ChannelCallerACLMember,
+		ChannelHealthProbeRun, ChannelModelPrice, ChannelModelPriceVersion,
+		ChannelOverrideTemplate, ChannelProbe, DataStorage, Invitation, Model,
+		OIDCIdentity, Project, Prompt, PromptProtectionRule, ProviderQuotaStatus,
+		Request, RequestExecution, Role, System, Thread, Trace, UsageLog, User,
+		UserProject, UserRole []ent.Interceptor
 	}
 )

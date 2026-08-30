@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
@@ -428,6 +429,20 @@ func (_u *ChannelUpdate) ClearEndpoints() *ChannelUpdate {
 	return _u
 }
 
+// SetCallerAccessMode sets the "caller_access_mode" field.
+func (_u *ChannelUpdate) SetCallerAccessMode(v channel.CallerAccessMode) *ChannelUpdate {
+	_u.mutation.SetCallerAccessMode(v)
+	return _u
+}
+
+// SetNillableCallerAccessMode sets the "caller_access_mode" field if the given value is not nil.
+func (_u *ChannelUpdate) SetNillableCallerAccessMode(v *channel.CallerAccessMode) *ChannelUpdate {
+	if v != nil {
+		_u.SetCallerAccessMode(*v)
+	}
+	return _u
+}
+
 // AddRequestIDs adds the "requests" edge to the Request entity by IDs.
 func (_u *ChannelUpdate) AddRequestIDs(ids ...int) *ChannelUpdate {
 	_u.mutation.AddRequestIDs(ids...)
@@ -535,6 +550,21 @@ func (_u *ChannelUpdate) SetNillableProviderQuotaStatusID(id *int) *ChannelUpdat
 // SetProviderQuotaStatus sets the "provider_quota_status" edge to the ProviderQuotaStatus entity.
 func (_u *ChannelUpdate) SetProviderQuotaStatus(v *ProviderQuotaStatus) *ChannelUpdate {
 	return _u.SetProviderQuotaStatusID(v.ID)
+}
+
+// AddCallerACLMemberIDs adds the "caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (_u *ChannelUpdate) AddCallerACLMemberIDs(ids ...int) *ChannelUpdate {
+	_u.mutation.AddCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// AddCallerACLMembers adds the "caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *ChannelUpdate) AddCallerACLMembers(v ...*ChannelCallerACLMember) *ChannelUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCallerACLMemberIDs(ids...)
 }
 
 // Mutation returns the ChannelMutation object of the builder.
@@ -674,6 +704,27 @@ func (_u *ChannelUpdate) ClearProviderQuotaStatus() *ChannelUpdate {
 	return _u
 }
 
+// ClearCallerACLMembers clears all "caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *ChannelUpdate) ClearCallerACLMembers() *ChannelUpdate {
+	_u.mutation.ClearCallerACLMembers()
+	return _u
+}
+
+// RemoveCallerACLMemberIDs removes the "caller_acl_members" edge to ChannelCallerACLMember entities by IDs.
+func (_u *ChannelUpdate) RemoveCallerACLMemberIDs(ids ...int) *ChannelUpdate {
+	_u.mutation.RemoveCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// RemoveCallerACLMembers removes "caller_acl_members" edges to ChannelCallerACLMember entities.
+func (_u *ChannelUpdate) RemoveCallerACLMembers(v ...*ChannelCallerACLMember) *ChannelUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCallerACLMemberIDs(ids...)
+}
+
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *ChannelUpdate) Save(ctx context.Context) (int, error) {
 	if err := _u.defaults(); err != nil {
@@ -731,6 +782,11 @@ func (_u *ChannelUpdate) check() error {
 	if v, ok := _u.mutation.ModelPriceMultiplier(); ok {
 		if err := channel.ModelPriceMultiplierValidator(v); err != nil {
 			return &ValidationError{Name: "model_price_multiplier", err: fmt.Errorf(`ent: validator failed for field "Channel.model_price_multiplier": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CallerAccessMode(); ok {
+		if err := channel.CallerAccessModeValidator(v); err != nil {
+			return &ValidationError{Name: "caller_access_mode", err: fmt.Errorf(`ent: validator failed for field "Channel.caller_access_mode": %w`, err)}
 		}
 	}
 	return nil
@@ -892,6 +948,9 @@ func (_u *ChannelUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.EndpointsCleared() {
 		_spec.ClearField(channel.FieldEndpoints, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.CallerAccessMode(); ok {
+		_spec.SetField(channel.FieldCallerAccessMode, field.TypeEnum, value)
 	}
 	if _u.mutation.RequestsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1185,6 +1244,51 @@ func (_u *ChannelUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(providerquotastatus.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.CallerACLMembersTable,
+			Columns: []string{channel.CallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCallerACLMembersIDs(); len(nodes) > 0 && !_u.mutation.CallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.CallerACLMembersTable,
+			Columns: []string{channel.CallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CallerACLMembersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.CallerACLMembersTable,
+			Columns: []string{channel.CallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1604,6 +1708,20 @@ func (_u *ChannelUpdateOne) ClearEndpoints() *ChannelUpdateOne {
 	return _u
 }
 
+// SetCallerAccessMode sets the "caller_access_mode" field.
+func (_u *ChannelUpdateOne) SetCallerAccessMode(v channel.CallerAccessMode) *ChannelUpdateOne {
+	_u.mutation.SetCallerAccessMode(v)
+	return _u
+}
+
+// SetNillableCallerAccessMode sets the "caller_access_mode" field if the given value is not nil.
+func (_u *ChannelUpdateOne) SetNillableCallerAccessMode(v *channel.CallerAccessMode) *ChannelUpdateOne {
+	if v != nil {
+		_u.SetCallerAccessMode(*v)
+	}
+	return _u
+}
+
 // AddRequestIDs adds the "requests" edge to the Request entity by IDs.
 func (_u *ChannelUpdateOne) AddRequestIDs(ids ...int) *ChannelUpdateOne {
 	_u.mutation.AddRequestIDs(ids...)
@@ -1711,6 +1829,21 @@ func (_u *ChannelUpdateOne) SetNillableProviderQuotaStatusID(id *int) *ChannelUp
 // SetProviderQuotaStatus sets the "provider_quota_status" edge to the ProviderQuotaStatus entity.
 func (_u *ChannelUpdateOne) SetProviderQuotaStatus(v *ProviderQuotaStatus) *ChannelUpdateOne {
 	return _u.SetProviderQuotaStatusID(v.ID)
+}
+
+// AddCallerACLMemberIDs adds the "caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (_u *ChannelUpdateOne) AddCallerACLMemberIDs(ids ...int) *ChannelUpdateOne {
+	_u.mutation.AddCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// AddCallerACLMembers adds the "caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *ChannelUpdateOne) AddCallerACLMembers(v ...*ChannelCallerACLMember) *ChannelUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCallerACLMemberIDs(ids...)
 }
 
 // Mutation returns the ChannelMutation object of the builder.
@@ -1850,6 +1983,27 @@ func (_u *ChannelUpdateOne) ClearProviderQuotaStatus() *ChannelUpdateOne {
 	return _u
 }
 
+// ClearCallerACLMembers clears all "caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *ChannelUpdateOne) ClearCallerACLMembers() *ChannelUpdateOne {
+	_u.mutation.ClearCallerACLMembers()
+	return _u
+}
+
+// RemoveCallerACLMemberIDs removes the "caller_acl_members" edge to ChannelCallerACLMember entities by IDs.
+func (_u *ChannelUpdateOne) RemoveCallerACLMemberIDs(ids ...int) *ChannelUpdateOne {
+	_u.mutation.RemoveCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// RemoveCallerACLMembers removes "caller_acl_members" edges to ChannelCallerACLMember entities.
+func (_u *ChannelUpdateOne) RemoveCallerACLMembers(v ...*ChannelCallerACLMember) *ChannelUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCallerACLMemberIDs(ids...)
+}
+
 // Where appends a list predicates to the ChannelUpdate builder.
 func (_u *ChannelUpdateOne) Where(ps ...predicate.Channel) *ChannelUpdateOne {
 	_u.mutation.Where(ps...)
@@ -1920,6 +2074,11 @@ func (_u *ChannelUpdateOne) check() error {
 	if v, ok := _u.mutation.ModelPriceMultiplier(); ok {
 		if err := channel.ModelPriceMultiplierValidator(v); err != nil {
 			return &ValidationError{Name: "model_price_multiplier", err: fmt.Errorf(`ent: validator failed for field "Channel.model_price_multiplier": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CallerAccessMode(); ok {
+		if err := channel.CallerAccessModeValidator(v); err != nil {
+			return &ValidationError{Name: "caller_access_mode", err: fmt.Errorf(`ent: validator failed for field "Channel.caller_access_mode": %w`, err)}
 		}
 	}
 	return nil
@@ -2098,6 +2257,9 @@ func (_u *ChannelUpdateOne) sqlSave(ctx context.Context) (_node *Channel, err er
 	}
 	if _u.mutation.EndpointsCleared() {
 		_spec.ClearField(channel.FieldEndpoints, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.CallerAccessMode(); ok {
+		_spec.SetField(channel.FieldCallerAccessMode, field.TypeEnum, value)
 	}
 	if _u.mutation.RequestsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2391,6 +2553,51 @@ func (_u *ChannelUpdateOne) sqlSave(ctx context.Context) (_node *Channel, err er
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(providerquotastatus.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.CallerACLMembersTable,
+			Columns: []string{channel.CallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCallerACLMembersIDs(); len(nodes) > 0 && !_u.mutation.CallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.CallerACLMembersTable,
+			Columns: []string{channel.CallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CallerACLMembersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   channel.CallerACLMembersTable,
+			Columns: []string{channel.CallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

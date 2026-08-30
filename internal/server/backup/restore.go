@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
 	"github.com/looplj/axonhub/internal/ent/model"
@@ -34,13 +35,19 @@ func (svc *BackupService) Restore(ctx context.Context, data []byte, opts Restore
 	if !user.IsOwner {
 		return fmt.Errorf("only owners can perform restore operations")
 	}
+	if opts.IncludeAPIKeys {
+		opts.IncludeProjects = true
+		if opts.ProjectConflictStrategy == "" {
+			opts.ProjectConflictStrategy = ConflictStrategySkip
+		}
+	}
 
 	var backupData BackupData
 	if err := json.Unmarshal(data, &backupData); err != nil {
 		return err
 	}
 
-	if !lo.Contains([]string{BackupVersion, BackupVersionV5, BackupVersionV4, BackupVersionV3, BackupVersionV2, BackupVersionV1}, backupData.Version) {
+	if !lo.Contains([]string{BackupVersion, BackupVersionV6, BackupVersionV5, BackupVersionV4, BackupVersionV3, BackupVersionV2, BackupVersionV1}, backupData.Version) {
 		log.Warn(ctx, "backup version mismatch",
 			log.String("expected", BackupVersion),
 			log.String("got", backupData.Version))
@@ -86,9 +93,18 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 			return err
 		}
 	}
-
+	restoreACLChannelIDs := map[int]struct{}{}
 	if opts.IncludeChannels {
-		if err := svc.restoreChannels(ctx, db, backupData.Version, backupData.Channels, opts); err != nil {
+		var err error
+		restoreACLChannelIDs, err = svc.restoreChannels(
+			ctx,
+			db,
+			backupData.Version,
+			backupData.Channels,
+			backupData.ChannelCallerACL != nil,
+			opts,
+		)
+		if err != nil {
 			return err
 		}
 	}
@@ -123,9 +139,31 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 			return err
 		}
 	}
-
 	if opts.IncludeAPIKeys {
 		if err := svc.restoreAPIKeys(ctx, db, backupData.APIKeys, opts, channelIDMap); err != nil {
+			return err
+		}
+	}
+
+	if opts.IncludeChannels {
+		apiKeyIDMap := map[int]int{}
+		if opts.IncludeAPIKeys {
+			apiKeyIDMap, err = svc.buildAPIKeyIDMap(ctx, db, backupData.APIKeys)
+			if err != nil {
+				return err
+			}
+		}
+
+		if err := svc.restoreChannelCallerACL(
+			ctx,
+			db,
+			backupData.Version,
+			backupData.ChannelCallerACL,
+			channelIDMap,
+			apiKeyIDMap,
+			restoreACLChannelIDs,
+			opts.IncludeAPIKeys,
+		); err != nil {
 			return err
 		}
 	}
@@ -203,6 +241,138 @@ func (svc *BackupService) buildChannelIDMap(ctx context.Context, db *ent.Client,
 	}
 
 	return idMap, nil
+}
+
+func (svc *BackupService) buildAPIKeyIDMap(ctx context.Context, db *ent.Client, apiKeys []*BackupAPIKey) (map[int]int, error) {
+	idMap := map[int]int{}
+	if len(apiKeys) == 0 {
+		return idMap, nil
+	}
+
+	type sourceAPIKeyIdentity struct {
+		oldID       int
+		projectName string
+	}
+	keyToSource := make(map[string]sourceAPIKeyIdentity, len(apiKeys))
+	keys := make([]string, 0, len(apiKeys))
+	for _, apiKeyData := range apiKeys {
+		if apiKeyData == nil || apiKeyData.ID == 0 || apiKeyData.Key == "" {
+			continue
+		}
+
+		keyToSource[apiKeyData.Key] = sourceAPIKeyIdentity{oldID: apiKeyData.ID, projectName: apiKeyData.ProjectName}
+		keys = append(keys, apiKeyData.Key)
+	}
+
+	if len(keys) == 0 {
+		return idMap, nil
+	}
+
+	existingAPIKeys, err := db.APIKey.Query().
+		Where(apikey.KeyIn(keys...)).
+		Select(apikey.FieldID, apikey.FieldKey, apikey.FieldName, apikey.FieldProjectID).
+		WithProject().
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build API key restore ID map: %w", err)
+	}
+
+	for _, apiKeyData := range existingAPIKeys {
+		if source, ok := keyToSource[apiKeyData.Key]; ok {
+			projectName := ""
+			if apiKeyData.Edges.Project != nil {
+				projectName = apiKeyData.Edges.Project.Name
+			}
+			if source.projectName == "" || projectName != source.projectName {
+				return nil, fmt.Errorf(
+					"API key %q belongs to project %q on target, expected %q from backup",
+					apiKeyData.Name,
+					projectName,
+					source.projectName,
+				)
+			}
+			idMap[source.oldID] = apiKeyData.ID
+		}
+	}
+
+	return idMap, nil
+}
+
+func (svc *BackupService) restoreChannelCallerACL(
+	ctx context.Context,
+	db *ent.Client,
+	backupVersion string,
+	members []*BackupChannelCallerACL,
+	channelIDMap map[int]int,
+	apiKeyIDMap map[int]int,
+	restoreChannelIDs map[int]struct{},
+	includeAPIKeys bool,
+) error {
+	targetChannelIDs := make([]int, 0, len(restoreChannelIDs))
+	for sourceChannelID := range restoreChannelIDs {
+		if targetChannelID, ok := channelIDMap[sourceChannelID]; ok {
+			targetChannelIDs = append(targetChannelIDs, targetChannelID)
+		}
+	}
+
+	if len(targetChannelIDs) == 0 {
+		return nil
+	}
+
+	if _, err := db.ChannelCallerACLMember.Delete().
+		Where(channelcalleraclmember.ChannelIDIn(targetChannelIDs...)).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to clear restored Channel caller ACL members: %w", err)
+	}
+
+	if backupVersion != BackupVersion || !includeAPIKeys || len(members) == 0 {
+		return nil
+	}
+
+	type aclPair struct {
+		channelID int
+		apiKeyID  int
+	}
+
+	seen := make(map[aclPair]struct{}, len(members))
+	creates := make([]*ent.ChannelCallerACLMemberCreate, 0, len(members))
+	for _, member := range members {
+		if member == nil {
+			continue
+		}
+		if _, ok := restoreChannelIDs[member.SourceChannelID]; !ok {
+			continue
+		}
+
+		targetChannelID, channelOK := channelIDMap[member.SourceChannelID]
+		targetAPIKeyID, apiKeyOK := apiKeyIDMap[member.SourceAPIKeyID]
+		if !channelOK || !apiKeyOK {
+			return fmt.Errorf(
+				"failed to resolve Channel caller ACL member references: source_channel_id=%d source_api_key_id=%d",
+				member.SourceChannelID,
+				member.SourceAPIKeyID,
+			)
+		}
+
+		pair := aclPair{channelID: targetChannelID, apiKeyID: targetAPIKeyID}
+		if _, ok := seen[pair]; ok {
+			continue
+		}
+		seen[pair] = struct{}{}
+		creates = append(creates, db.ChannelCallerACLMember.Create().
+			SetChannelID(targetChannelID).
+			SetAPIKeyID(targetAPIKeyID))
+	}
+
+	if len(creates) == 0 {
+		return nil
+	}
+
+	if _, err := db.ChannelCallerACLMember.CreateBulk(creates...).Save(ctx); err != nil {
+		return fmt.Errorf("failed to restore Channel caller ACL members: %w", err)
+	}
+
+	return nil
 }
 
 type usageRestoreResolver struct {
@@ -604,14 +774,20 @@ func (svc *BackupService) restoreChannels(
 	db *ent.Client,
 	backupVersion string,
 	channels []*BackupChannel,
+	hasCallerACLData bool,
 	opts RestoreOptions,
-) error {
+) (map[int]struct{}, error) {
+	restoreACLChannelIDs := make(map[int]struct{}, len(channels))
 	for _, chData := range channels {
+		if chData == nil {
+			continue
+		}
+
 		existing, err := db.Channel.Query().
 			Where(channel.Name(chData.Name)).
 			First(ctx)
 		if err != nil && !ent.IsNotFound(err) {
-			return err
+			return nil, err
 		}
 
 		credentials := chData.Credentials
@@ -628,7 +804,8 @@ func (svc *BackupService) restoreChannels(
 		// Backups before 1.5 did not contain this field. In that case, leave an
 		// existing channel unchanged or let a new channel use the schema default
 		// instead of interpreting the missing value as a deliberate zero.
-		hasModelPriceMultiplier := backupVersion == BackupVersion
+		hasModelPriceMultiplier := backupVersion == BackupVersion || backupVersion == BackupVersionV6
+		hasCallerAccessPolicy := backupVersion == BackupVersion && hasCallerACLData && opts.IncludeAPIKeys
 
 		if existing != nil {
 			switch opts.ChannelConflictStrategy {
@@ -639,7 +816,7 @@ func (svc *BackupService) restoreChannels(
 				log.Error(ctx, "channel already exists",
 					log.String("channel", chData.Name))
 
-				return fmt.Errorf("channel %s already exists", chData.Name)
+				return nil, fmt.Errorf("channel %s already exists", chData.Name)
 			case ConflictStrategyOverwrite:
 				update := db.Channel.UpdateOneID(existing.ID).
 					SetNillableBaseURL(baseURL).
@@ -657,6 +834,9 @@ func (svc *BackupService) restoreChannels(
 				if hasModelPriceMultiplier {
 					update.SetModelPriceMultiplier(chData.ModelPriceMultiplier)
 				}
+				if hasCallerAccessPolicy {
+					update.SetCallerAccessMode(chData.CallerAccessMode)
+				}
 
 				if chData.Remark != nil {
 					update.SetRemark(*chData.Remark)
@@ -669,10 +849,19 @@ func (svc *BackupService) restoreChannels(
 						log.String("channel", chData.Name),
 						log.Cause(err))
 
-					return fmt.Errorf("failed to restore channel %s: %w", chData.Name, err)
+					return nil, fmt.Errorf("failed to restore channel %s: %w", chData.Name, err)
+				}
+				if hasCallerAccessPolicy {
+					restoreACLChannelIDs[chData.ID] = struct{}{}
 				}
 			}
 		} else {
+			if !hasCallerAccessPolicy && backupVersion == BackupVersion && chData.CallerAccessMode != channel.CallerAccessModePublic {
+				return nil, fmt.Errorf(
+					"cannot restore non-public Channel %s without its API keys and caller ACL members",
+					chData.Name,
+				)
+			}
 			create := db.Channel.Create().
 				SetName(chData.Name).
 				SetType(chData.Type).
@@ -691,6 +880,9 @@ func (svc *BackupService) restoreChannels(
 			if hasModelPriceMultiplier {
 				create.SetModelPriceMultiplier(chData.ModelPriceMultiplier)
 			}
+			if hasCallerAccessPolicy {
+				create.SetCallerAccessMode(chData.CallerAccessMode)
+			}
 
 			if chData.Remark != nil {
 				create.SetRemark(*chData.Remark)
@@ -701,12 +893,15 @@ func (svc *BackupService) restoreChannels(
 					log.String("channel", chData.Name),
 					log.Cause(err))
 
-				return fmt.Errorf("failed to create channel %s: %w", chData.Name, err)
+				return nil, fmt.Errorf("failed to create channel %s: %w", chData.Name, err)
+			}
+			if hasCallerAccessPolicy {
+				restoreACLChannelIDs[chData.ID] = struct{}{}
 			}
 		}
 	}
 
-	return nil
+	return restoreACLChannelIDs, nil
 }
 
 func (svc *BackupService) restoreModels(ctx context.Context, db *ent.Client, models []*BackupModel, opts RestoreOptions, channelIDMap map[int]int) error {

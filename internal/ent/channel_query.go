@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
@@ -38,6 +39,7 @@ type ChannelQuery struct {
 	withChannelProbes           *ChannelProbeQuery
 	withChannelModelPrices      *ChannelModelPriceQuery
 	withProviderQuotaStatus     *ProviderQuotaStatusQuery
+	withCallerACLMembers        *ChannelCallerACLMemberQuery
 	loadTotal                   []func(context.Context, []*Channel) error
 	modifiers                   []func(*sql.Selector)
 	withNamedRequests           map[string]*RequestQuery
@@ -46,6 +48,7 @@ type ChannelQuery struct {
 	withNamedHealthProbeRuns    map[string]*ChannelHealthProbeRunQuery
 	withNamedChannelProbes      map[string]*ChannelProbeQuery
 	withNamedChannelModelPrices map[string]*ChannelModelPriceQuery
+	withNamedCallerACLMembers   map[string]*ChannelCallerACLMemberQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -229,6 +232,28 @@ func (_q *ChannelQuery) QueryProviderQuotaStatus() *ProviderQuotaStatusQuery {
 			sqlgraph.From(channel.Table, channel.FieldID, selector),
 			sqlgraph.To(providerquotastatus.Table, providerquotastatus.FieldID),
 			sqlgraph.Edge(sqlgraph.O2O, false, channel.ProviderQuotaStatusTable, channel.ProviderQuotaStatusColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryCallerACLMembers chains the current query on the "caller_acl_members" edge.
+func (_q *ChannelQuery) QueryCallerACLMembers() *ChannelCallerACLMemberQuery {
+	query := (&ChannelCallerACLMemberClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(channel.Table, channel.FieldID, selector),
+			sqlgraph.To(channelcalleraclmember.Table, channelcalleraclmember.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, channel.CallerACLMembersTable, channel.CallerACLMembersColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -435,6 +460,7 @@ func (_q *ChannelQuery) Clone() *ChannelQuery {
 		withChannelProbes:       _q.withChannelProbes.Clone(),
 		withChannelModelPrices:  _q.withChannelModelPrices.Clone(),
 		withProviderQuotaStatus: _q.withProviderQuotaStatus.Clone(),
+		withCallerACLMembers:    _q.withCallerACLMembers.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -516,6 +542,17 @@ func (_q *ChannelQuery) WithProviderQuotaStatus(opts ...func(*ProviderQuotaStatu
 		opt(query)
 	}
 	_q.withProviderQuotaStatus = query
+	return _q
+}
+
+// WithCallerACLMembers tells the query-builder to eager-load the nodes that are connected to
+// the "caller_acl_members" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ChannelQuery) WithCallerACLMembers(opts ...func(*ChannelCallerACLMemberQuery)) *ChannelQuery {
+	query := (&ChannelCallerACLMemberClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withCallerACLMembers = query
 	return _q
 }
 
@@ -603,7 +640,7 @@ func (_q *ChannelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chan
 	var (
 		nodes       = []*Channel{}
 		_spec       = _q.querySpec()
-		loadedTypes = [7]bool{
+		loadedTypes = [8]bool{
 			_q.withRequests != nil,
 			_q.withExecutions != nil,
 			_q.withUsageLogs != nil,
@@ -611,6 +648,7 @@ func (_q *ChannelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chan
 			_q.withChannelProbes != nil,
 			_q.withChannelModelPrices != nil,
 			_q.withProviderQuotaStatus != nil,
+			_q.withCallerACLMembers != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -686,6 +724,15 @@ func (_q *ChannelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chan
 			return nil, err
 		}
 	}
+	if query := _q.withCallerACLMembers; query != nil {
+		if err := _q.loadCallerACLMembers(ctx, query, nodes,
+			func(n *Channel) { n.Edges.CallerACLMembers = []*ChannelCallerACLMember{} },
+			func(n *Channel, e *ChannelCallerACLMember) {
+				n.Edges.CallerACLMembers = append(n.Edges.CallerACLMembers, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
 	for name, query := range _q.withNamedRequests {
 		if err := _q.loadRequests(ctx, query, nodes,
 			func(n *Channel) { n.appendNamedRequests(name) },
@@ -725,6 +772,13 @@ func (_q *ChannelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Chan
 		if err := _q.loadChannelModelPrices(ctx, query, nodes,
 			func(n *Channel) { n.appendNamedChannelModelPrices(name) },
 			func(n *Channel, e *ChannelModelPrice) { n.appendNamedChannelModelPrices(name, e) }); err != nil {
+			return nil, err
+		}
+	}
+	for name, query := range _q.withNamedCallerACLMembers {
+		if err := _q.loadCallerACLMembers(ctx, query, nodes,
+			func(n *Channel) { n.appendNamedCallerACLMembers(name) },
+			func(n *Channel, e *ChannelCallerACLMember) { n.appendNamedCallerACLMembers(name, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -943,6 +997,36 @@ func (_q *ChannelQuery) loadProviderQuotaStatus(ctx context.Context, query *Prov
 	}
 	return nil
 }
+func (_q *ChannelQuery) loadCallerACLMembers(ctx context.Context, query *ChannelCallerACLMemberQuery, nodes []*Channel, init func(*Channel), assign func(*Channel, *ChannelCallerACLMember)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Channel)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(channelcalleraclmember.FieldChannelID)
+	}
+	query.Where(predicate.ChannelCallerACLMember(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(channel.CallerACLMembersColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ChannelID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "channel_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
 
 func (_q *ChannelQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
@@ -1118,6 +1202,20 @@ func (_q *ChannelQuery) WithNamedChannelModelPrices(name string, opts ...func(*C
 		_q.withNamedChannelModelPrices = make(map[string]*ChannelModelPriceQuery)
 	}
 	_q.withNamedChannelModelPrices[name] = query
+	return _q
+}
+
+// WithNamedCallerACLMembers tells the query-builder to eager-load the nodes that are connected to the "caller_acl_members"
+// edge with the given name. The optional arguments are used to configure the query builder of the edge.
+func (_q *ChannelQuery) WithNamedCallerACLMembers(name string, opts ...func(*ChannelCallerACLMemberQuery)) *ChannelQuery {
+	query := (&ChannelCallerACLMemberClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	if _q.withNamedCallerACLMembers == nil {
+		_q.withNamedCallerACLMembers = make(map[string]*ChannelCallerACLMemberQuery)
+	}
+	_q.withNamedCallerACLMembers[name] = query
 	return _q
 }
 

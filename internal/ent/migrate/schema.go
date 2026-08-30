@@ -120,6 +120,7 @@ var (
 		{Name: "auto_disabled_at", Type: field.TypeTime, Nullable: true},
 		{Name: "remark", Type: field.TypeString, Nullable: true},
 		{Name: "endpoints", Type: field.TypeJSON, Nullable: true},
+		{Name: "caller_access_mode", Type: field.TypeEnum, Enums: []string{"public", "allowlist", "denylist"}, Default: "public"},
 	}
 	// ChannelsTable holds the schema information for the "channels" table.
 	ChannelsTable = &schema.Table{
@@ -131,6 +132,46 @@ var (
 				Name:    "channels_by_name",
 				Unique:  true,
 				Columns: []*schema.Column{ChannelsColumns[6], ChannelsColumns[3]},
+			},
+		},
+	}
+	// ChannelCallerACLMembersColumns holds the columns for the "channel_caller_acl_members" table.
+	ChannelCallerACLMembersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "updated_at", Type: field.TypeTime, Default: schema.Expr("CURRENT_TIMESTAMP")},
+		{Name: "api_key_id", Type: field.TypeInt},
+		{Name: "channel_id", Type: field.TypeInt},
+	}
+	// ChannelCallerACLMembersTable holds the schema information for the "channel_caller_acl_members" table.
+	ChannelCallerACLMembersTable = &schema.Table{
+		Name:       "channel_caller_acl_members",
+		Columns:    ChannelCallerACLMembersColumns,
+		PrimaryKey: []*schema.Column{ChannelCallerACLMembersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "channel_caller_acl_members_api_keys_channel_caller_acl_members",
+				Columns:    []*schema.Column{ChannelCallerACLMembersColumns[3]},
+				RefColumns: []*schema.Column{APIKeysColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "channel_caller_acl_members_channels_caller_acl_members",
+				Columns:    []*schema.Column{ChannelCallerACLMembersColumns[4]},
+				RefColumns: []*schema.Column{ChannelsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "channel_caller_acl_members_by_channel_id_api_key_id",
+				Unique:  true,
+				Columns: []*schema.Column{ChannelCallerACLMembersColumns[4], ChannelCallerACLMembersColumns[3]},
+			},
+			{
+				Name:    "channel_caller_acl_members_by_api_key_id",
+				Unique:  false,
+				Columns: []*schema.Column{ChannelCallerACLMembersColumns[3]},
 			},
 		},
 	}
@@ -1094,6 +1135,7 @@ var (
 		APIKeysTable,
 		APIKeyProfileTemplatesTable,
 		ChannelsTable,
+		ChannelCallerACLMembersTable,
 		ChannelHealthProbeRunsTable,
 		ChannelModelPricesTable,
 		ChannelModelPriceVersionsTable,
@@ -1124,6 +1166,8 @@ func init() {
 	APIKeysTable.ForeignKeys[0].RefTable = ProjectsTable
 	APIKeysTable.ForeignKeys[1].RefTable = UsersTable
 	APIKeyProfileTemplatesTable.ForeignKeys[0].RefTable = ProjectsTable
+	ChannelCallerACLMembersTable.ForeignKeys[0].RefTable = APIKeysTable
+	ChannelCallerACLMembersTable.ForeignKeys[1].RefTable = ChannelsTable
 	ChannelHealthProbeRunsTable.ForeignKeys[0].RefTable = ChannelsTable
 	ChannelModelPricesTable.ForeignKeys[0].RefTable = ChannelsTable
 	ChannelModelPriceVersionsTable.ForeignKeys[0].RefTable = ChannelModelPricesTable

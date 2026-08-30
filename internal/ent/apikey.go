@@ -59,13 +59,16 @@ type APIKeyEdges struct {
 	Project *Project `json:"project,omitempty"`
 	// Requests holds the value of the requests edge.
 	Requests []*Request `json:"requests,omitempty"`
+	// ChannelCallerACLMembers holds the value of the channel_caller_acl_members edge.
+	ChannelCallerACLMembers []*ChannelCallerACLMember `json:"channel_caller_acl_members,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 	// totalCount holds the count of the edges above.
 	totalCount [3]map[string]int
 
-	namedRequests map[string][]*Request
+	namedRequests                map[string][]*Request
+	namedChannelCallerACLMembers map[string][]*ChannelCallerACLMember
 }
 
 // UserOrErr returns the User value or an error if the edge
@@ -97,6 +100,15 @@ func (e APIKeyEdges) RequestsOrErr() ([]*Request, error) {
 		return e.Requests, nil
 	}
 	return nil, &NotLoadedError{edge: "requests"}
+}
+
+// ChannelCallerACLMembersOrErr returns the ChannelCallerACLMembers value or an error if the edge
+// was not loaded in eager-loading.
+func (e APIKeyEdges) ChannelCallerACLMembersOrErr() ([]*ChannelCallerACLMember, error) {
+	if e.loadedTypes[3] {
+		return e.ChannelCallerACLMembers, nil
+	}
+	return nil, &NotLoadedError{edge: "channel_caller_acl_members"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -239,6 +251,11 @@ func (_m *APIKey) QueryRequests() *RequestQuery {
 	return NewAPIKeyClient(_m.config).QueryRequests(_m)
 }
 
+// QueryChannelCallerACLMembers queries the "channel_caller_acl_members" edge of the APIKey entity.
+func (_m *APIKey) QueryChannelCallerACLMembers() *ChannelCallerACLMemberQuery {
+	return NewAPIKeyClient(_m.config).QueryChannelCallerACLMembers(_m)
+}
+
 // Update returns a builder for updating this APIKey.
 // Note that you need to call APIKey.Unwrap() before calling this method if this APIKey
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -322,6 +339,30 @@ func (_m *APIKey) appendNamedRequests(name string, edges ...*Request) {
 		_m.Edges.namedRequests[name] = []*Request{}
 	} else {
 		_m.Edges.namedRequests[name] = append(_m.Edges.namedRequests[name], edges...)
+	}
+}
+
+// NamedChannelCallerACLMembers returns the ChannelCallerACLMembers named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (_m *APIKey) NamedChannelCallerACLMembers(name string) ([]*ChannelCallerACLMember, error) {
+	if _m.Edges.namedChannelCallerACLMembers == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := _m.Edges.namedChannelCallerACLMembers[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (_m *APIKey) appendNamedChannelCallerACLMembers(name string, edges ...*ChannelCallerACLMember) {
+	if _m.Edges.namedChannelCallerACLMembers == nil {
+		_m.Edges.namedChannelCallerACLMembers = make(map[string][]*ChannelCallerACLMember)
+	}
+	if len(edges) == 0 {
+		_m.Edges.namedChannelCallerACLMembers[name] = []*ChannelCallerACLMember{}
+	} else {
+		_m.Edges.namedChannelCallerACLMembers[name] = append(_m.Edges.namedChannelCallerACLMembers[name], edges...)
 	}
 }
 

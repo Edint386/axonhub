@@ -11,6 +11,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/apikeyprofiletemplate"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelhealthproberun"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/channelmodelpriceversion"
@@ -172,6 +173,33 @@ func (f TraverseChannel) Traverse(ctx context.Context, q ent.Query) error {
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.ChannelQuery", q)
+}
+
+// The ChannelCallerACLMemberFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ChannelCallerACLMemberFunc func(context.Context, *ent.ChannelCallerACLMemberQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ChannelCallerACLMemberFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ChannelCallerACLMemberQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ChannelCallerACLMemberQuery", q)
+}
+
+// The TraverseChannelCallerACLMember type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseChannelCallerACLMember func(context.Context, *ent.ChannelCallerACLMemberQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseChannelCallerACLMember) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseChannelCallerACLMember) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ChannelCallerACLMemberQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ChannelCallerACLMemberQuery", q)
 }
 
 // The ChannelHealthProbeRunFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -804,6 +832,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.APIKeyProfileTemplateQuery, predicate.APIKeyProfileTemplate, apikeyprofiletemplate.OrderOption]{typ: ent.TypeAPIKeyProfileTemplate, tq: q}, nil
 	case *ent.ChannelQuery:
 		return &query[*ent.ChannelQuery, predicate.Channel, channel.OrderOption]{typ: ent.TypeChannel, tq: q}, nil
+	case *ent.ChannelCallerACLMemberQuery:
+		return &query[*ent.ChannelCallerACLMemberQuery, predicate.ChannelCallerACLMember, channelcalleraclmember.OrderOption]{typ: ent.TypeChannelCallerACLMember, tq: q}, nil
 	case *ent.ChannelHealthProbeRunQuery:
 		return &query[*ent.ChannelHealthProbeRunQuery, predicate.ChannelHealthProbeRun, channelhealthproberun.OrderOption]{typ: ent.TypeChannelHealthProbeRun, tq: q}, nil
 	case *ent.ChannelModelPriceQuery:

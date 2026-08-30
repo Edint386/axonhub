@@ -19,7 +19,10 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 	err := svc.RunInTransaction(ctx, func(ctx context.Context) error {
 		db := svc.entFromContext(ctx)
 
-		source, err := db.Channel.Get(ctx, sourceID)
+		source, err := db.Channel.Query().
+			Where(channel.IDEQ(sourceID)).
+			WithCallerACLMembers().
+			Only(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get source channel: %w", err)
 		}
@@ -41,9 +44,22 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 		}
 		ch, err = db.Channel.UpdateOne(ch).
 			SetModelPriceMultiplier(source.ModelPriceMultiplier).
+			SetCallerAccessMode(source.CallerAccessMode).
 			Save(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to copy channel model price multiplier: %w", err)
+		}
+
+		if source.CallerAccessMode != channel.CallerAccessModePublic && len(source.Edges.CallerACLMembers) > 0 {
+			builders := make([]*ent.ChannelCallerACLMemberCreate, 0, len(source.Edges.CallerACLMembers))
+			for _, member := range source.Edges.CallerACLMembers {
+				builders = append(builders, db.ChannelCallerACLMember.Create().
+					SetChannelID(ch.ID).
+					SetAPIKeyID(member.APIKeyID))
+			}
+			if _, err := db.ChannelCallerACLMember.CreateBulk(builders...).Save(ctx); err != nil {
+				return fmt.Errorf("failed to copy Channel caller ACL members: %w", err)
+			}
 		}
 
 		prices, err := db.ChannelModelPrice.Query().

@@ -8,6 +8,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
 )
@@ -242,7 +243,20 @@ func (svc *ChannelService) BulkDeleteChannels(ctx context.Context, ids []int) er
 		return nil
 	}
 
-	deleted, err := svc.entFromContext(ctx).Channel.Delete().Where(channel.IDIn(ids...)).Exec(ctx)
+	deleted := 0
+	err := svc.RunInTransaction(ctx, func(txCtx context.Context) error {
+		client := svc.entFromContext(txCtx)
+
+		if _, err := client.ChannelCallerACLMember.Delete().
+			Where(channelcalleraclmember.ChannelIDIn(ids...)).
+			Exec(txCtx); err != nil {
+			return fmt.Errorf("failed to delete Channel caller ACL members: %w", err)
+		}
+
+		var err error
+		deleted, err = client.Channel.Delete().Where(channel.IDIn(ids...)).Exec(txCtx)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to bulk delete channels: %w", err)
 	}

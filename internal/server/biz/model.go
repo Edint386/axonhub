@@ -651,6 +651,10 @@ func (svc *ModelService) ListEnabledModels(ctx context.Context) ([]ModelFacade, 
 	ctx = authz.WithScopeDecision(ctx, scopes.ScopeReadChannels)
 
 	if apiKey, ok := contexts.GetAPIKey(ctx); ok && apiKey != nil {
+		channels = lo.Filter(channels, func(ch *Channel, _ int) bool {
+			return ch.AllowsCallerAPIKey(apiKey.ID)
+		})
+
 		// Project-level profile filtering (upper boundary)
 		if projectProfile := apiKey.Edges.Project.GetActiveProfile(); projectProfile != nil {
 			if len(projectProfile.ChannelIDs) > 0 {

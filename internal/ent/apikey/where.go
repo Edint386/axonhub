@@ -529,6 +529,29 @@ func HasRequestsWith(preds ...predicate.Request) predicate.APIKey {
 	})
 }
 
+// HasChannelCallerACLMembers applies the HasEdge predicate on the "channel_caller_acl_members" edge.
+func HasChannelCallerACLMembers() predicate.APIKey {
+	return predicate.APIKey(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ChannelCallerACLMembersTable, ChannelCallerACLMembersColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasChannelCallerACLMembersWith applies the HasEdge predicate on the "channel_caller_acl_members" edge with a given conditions (other predicates).
+func HasChannelCallerACLMembersWith(preds ...predicate.ChannelCallerACLMember) predicate.APIKey {
+	return predicate.APIKey(func(s *sql.Selector) {
+		step := newChannelCallerACLMembersStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.APIKey) predicate.APIKey {
 	return predicate.APIKey(sql.AndPredicates(predicates...))

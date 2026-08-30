@@ -13,6 +13,7 @@ schema:
   - backup.graphql
   - channel_probe.graphql
   - channel_health_probe.graphql
+  - channel_access.graphql
   - prompt.graphql
   - prompt_protection_rule.graphql
   - price.graphql
@@ -188,6 +189,21 @@ models:
   ChannelCredentialsInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelCredentials
+  ChannelCallerAccessMode:
+    model:
+      - github.com/looplj/axonhub/internal/ent/channel.CallerAccessMode
+  ChannelCallerAccessPolicy:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.ChannelCallerAccessPolicy
+  ChannelCallerAPIKeySummary:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.ChannelCallerAPIKeySummary
+  APIKeyChannelCallerAccess:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.APIKeyChannelCallerAccess
+  SetChannelCallerAccessPolicyInput:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.SetChannelCallerAccessPolicyInput
   OAuthCredentials:
     model:
       - github.com/looplj/axonhub/internal/objects.OAuthCredentials

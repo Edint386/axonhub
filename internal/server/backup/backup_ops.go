@@ -12,6 +12,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/model"
 	"github.com/looplj/axonhub/internal/ent/project"
@@ -54,6 +55,9 @@ func (svc *BackupService) doBackup(ctx context.Context, opts BackupOptions) ([]b
 // the full dataset in memory. Each entity type is processed sequentially in
 // batch-sized pages using an ID-cursor.
 func (svc *BackupService) doBackupToWriter(ctx context.Context, opts BackupOptions, w io.Writer) error {
+	if opts.IncludeAPIKeys {
+		opts.IncludeProjects = true
+	}
 	o := &objWriter{w: w}
 
 	if _, err := w.Write([]byte("{")); err != nil {
@@ -88,6 +92,9 @@ func (svc *BackupService) doBackupToWriter(ctx context.Context, opts BackupOptio
 		return err
 	}
 	if err := svc.streamAPIKeys(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamChannelCallerACL(ctx, o, opts); err != nil {
 		return err
 	}
 	if err := svc.streamUsageRequests(ctx, o, opts); err != nil {
@@ -280,6 +287,41 @@ func (svc *BackupService) streamAPIKeys(ctx context.Context, o *objWriter, opts 
 			b, err := json.Marshal(&BackupAPIKey{
 				APIKey:      *ak,
 				ProjectName: projectName,
+			})
+			return b, true, err
+		},
+	)
+}
+
+func (svc *BackupService) streamChannelCallerACL(
+	ctx context.Context,
+	o *objWriter,
+	opts BackupOptions,
+) error {
+	include := opts.IncludeChannels && opts.IncludeAPIKeys
+	return streamArrayField(o, "channel_caller_acl", include, !include,
+		func(lastID int) ([]*ent.ChannelCallerACLMember, int, error) {
+			rows, err := svc.db.ChannelCallerACLMember.Query().
+				Where(channelcalleraclmember.IDGT(lastID)).
+				Order(ent.Asc(channelcalleraclmember.FieldID)).
+				Limit(backupBatchSize).
+				All(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(member *ent.ChannelCallerACLMember) ([]byte, bool, error) {
+			if member.ChannelID == 0 || member.APIKeyID == 0 {
+				return nil, false, nil
+			}
+			b, err := json.Marshal(&BackupChannelCallerACL{
+				SourceChannelID: member.ChannelID,
+				SourceAPIKeyID:  member.APIKeyID,
 			})
 			return b, true, err
 		},

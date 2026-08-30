@@ -43,6 +43,7 @@ cleanup-db:
 	@sqlite3 axonhub.db "DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'pw-test-%' OR first_name LIKE 'pw-test%');"
 	@sqlite3 axonhub.db "DELETE FROM user_projects WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'pw-test-%' OR first_name LIKE 'pw-test%');"
 	@sqlite3 axonhub.db "DELETE FROM user_projects WHERE project_id IN (SELECT id FROM projects WHERE slug LIKE 'pw-test-%' OR name LIKE 'pw-test-%');"
+	@sqlite3 axonhub.db "DELETE FROM channel_caller_acl_members WHERE api_key_id IN (SELECT id FROM api_keys WHERE name LIKE 'pw-test-%' OR user_id IN (SELECT id FROM users WHERE email LIKE 'pw-test-%' OR first_name LIKE 'pw-test%') OR project_id IN (SELECT id FROM projects WHERE slug LIKE 'pw-test-%' OR name LIKE 'pw-test-%'));"
 	@sqlite3 axonhub.db "DELETE FROM api_keys WHERE name LIKE 'pw-test-%';"
 	@sqlite3 axonhub.db "DELETE FROM api_keys WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'pw-test-%' OR first_name LIKE 'pw-test%');"
 	@sqlite3 axonhub.db "DELETE FROM api_keys WHERE project_id IN (SELECT id FROM projects WHERE slug LIKE 'pw-test-%' OR name LIKE 'pw-test-%');"

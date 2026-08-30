@@ -26,6 +26,9 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 		}
 
 		selector := inbound.state.CandidateSelector
+		if inbound.state.APIKey != nil {
+			selector = WithCallerACLSelector(selector, inbound.state.APIKey.ID)
+		}
 
 		// Project-level profile filtering (upper boundary)
 		if inbound.state.APIKey != nil {

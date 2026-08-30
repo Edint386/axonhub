@@ -32,6 +32,7 @@ type ChannelsDialogType =
   | 'rateLimit'
   | 'availability'
   | 'keyManagement'
+  | 'callerAccess'
   | 'disabledAPIKeys'
   | 'endpoints';
 

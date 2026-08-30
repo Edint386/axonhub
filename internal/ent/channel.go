@@ -68,6 +68,8 @@ type Channel struct {
 	Remark *string `json:"remark,omitempty"`
 	// Outbound API endpoints for this channel. Each endpoint specifies api_format and optional path. When empty, defaults are derived from channel type.
 	Endpoints []objects.ChannelEndpoint `json:"endpoints,omitempty"`
+	// Controls which caller API keys may use this channel.
+	CallerAccessMode channel.CallerAccessMode `json:"caller_access_mode,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ChannelQuery when eager-loading is set.
 	Edges        ChannelEdges `json:"edges"`
@@ -90,9 +92,11 @@ type ChannelEdges struct {
 	ChannelModelPrices []*ChannelModelPrice `json:"channel_model_prices,omitempty"`
 	// ProviderQuotaStatus holds the value of the provider_quota_status edge.
 	ProviderQuotaStatus *ProviderQuotaStatus `json:"provider_quota_status,omitempty"`
+	// CallerACLMembers holds the value of the caller_acl_members edge.
+	CallerACLMembers []*ChannelCallerACLMember `json:"caller_acl_members,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [7]bool
+	loadedTypes [8]bool
 	// totalCount holds the count of the edges above.
 	totalCount [7]map[string]int
 
@@ -102,6 +106,7 @@ type ChannelEdges struct {
 	namedHealthProbeRuns    map[string][]*ChannelHealthProbeRun
 	namedChannelProbes      map[string][]*ChannelProbe
 	namedChannelModelPrices map[string][]*ChannelModelPrice
+	namedCallerACLMembers   map[string][]*ChannelCallerACLMember
 }
 
 // RequestsOrErr returns the Requests value or an error if the edge
@@ -169,6 +174,15 @@ func (e ChannelEdges) ProviderQuotaStatusOrErr() (*ProviderQuotaStatus, error) {
 	return nil, &NotLoadedError{edge: "provider_quota_status"}
 }
 
+// CallerACLMembersOrErr returns the CallerACLMembers value or an error if the edge
+// was not loaded in eager-loading.
+func (e ChannelEdges) CallerACLMembersOrErr() ([]*ChannelCallerACLMember, error) {
+	if e.loadedTypes[7] {
+		return e.CallerACLMembers, nil
+	}
+	return nil, &NotLoadedError{edge: "caller_acl_members"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*Channel) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -182,7 +196,7 @@ func (*Channel) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case channel.FieldID, channel.FieldDeletedAt, channel.FieldOrderingWeight, channel.FieldPriority:
 			values[i] = new(sql.NullInt64)
-		case channel.FieldType, channel.FieldBaseURL, channel.FieldName, channel.FieldStatus, channel.FieldAutoSyncModelPattern, channel.FieldDefaultTestModel, channel.FieldErrorMessage, channel.FieldRemark:
+		case channel.FieldType, channel.FieldBaseURL, channel.FieldName, channel.FieldStatus, channel.FieldAutoSyncModelPattern, channel.FieldDefaultTestModel, channel.FieldErrorMessage, channel.FieldRemark, channel.FieldCallerAccessMode:
 			values[i] = new(sql.NullString)
 		case channel.FieldCreatedAt, channel.FieldUpdatedAt, channel.FieldAutoDisabledAt:
 			values[i] = new(sql.NullTime)
@@ -370,6 +384,12 @@ func (_m *Channel) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field endpoints: %w", err)
 				}
 			}
+		case channel.FieldCallerAccessMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field caller_access_mode", values[i])
+			} else if value.Valid {
+				_m.CallerAccessMode = channel.CallerAccessMode(value.String)
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -416,6 +436,11 @@ func (_m *Channel) QueryChannelModelPrices() *ChannelModelPriceQuery {
 // QueryProviderQuotaStatus queries the "provider_quota_status" edge of the Channel entity.
 func (_m *Channel) QueryProviderQuotaStatus() *ProviderQuotaStatusQuery {
 	return NewChannelClient(_m.config).QueryProviderQuotaStatus(_m)
+}
+
+// QueryCallerACLMembers queries the "caller_acl_members" edge of the Channel entity.
+func (_m *Channel) QueryCallerACLMembers() *ChannelCallerACLMemberQuery {
+	return NewChannelClient(_m.config).QueryCallerACLMembers(_m)
 }
 
 // Update returns a builder for updating this Channel.
@@ -516,6 +541,9 @@ func (_m *Channel) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("endpoints=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Endpoints))
+	builder.WriteString(", ")
+	builder.WriteString("caller_access_mode=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CallerAccessMode))
 	builder.WriteByte(')')
 	return builder.String()
 }
@@ -661,6 +689,30 @@ func (_m *Channel) appendNamedChannelModelPrices(name string, edges ...*ChannelM
 		_m.Edges.namedChannelModelPrices[name] = []*ChannelModelPrice{}
 	} else {
 		_m.Edges.namedChannelModelPrices[name] = append(_m.Edges.namedChannelModelPrices[name], edges...)
+	}
+}
+
+// NamedCallerACLMembers returns the CallerACLMembers named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (_m *Channel) NamedCallerACLMembers(name string) ([]*ChannelCallerACLMember, error) {
+	if _m.Edges.namedCallerACLMembers == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := _m.Edges.namedCallerACLMembers[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (_m *Channel) appendNamedCallerACLMembers(name string, edges ...*ChannelCallerACLMember) {
+	if _m.Edges.namedCallerACLMembers == nil {
+		_m.Edges.namedCallerACLMembers = make(map[string][]*ChannelCallerACLMember)
+	}
+	if len(edges) == 0 {
+		_m.Edges.namedCallerACLMembers[name] = []*ChannelCallerACLMember{}
+	} else {
+		_m.Edges.namedCallerACLMembers[name] = append(_m.Edges.namedCallerACLMembers[name], edges...)
 	}
 }
 

@@ -185,6 +185,13 @@ func (Channel) Fields() []ent.Field {
 			Default([]objects.ChannelEndpoint{}).
 			Optional().
 			Comment("Outbound API endpoints for this channel. Each endpoint specifies api_format and optional path. When empty, defaults are derived from channel type."),
+		field.Enum("caller_access_mode").
+			Values("public", "allowlist", "denylist").
+			Default("public").
+			Comment("Controls which caller API keys may use this channel.").
+			Annotations(
+				entgql.Skip(entgql.SkipAll),
+			),
 	}
 }
 
@@ -223,6 +230,10 @@ func (Channel) Edges() []ent.Edge {
 			Annotations(
 				entgql.Directives(forceResolver()),
 				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput),
+			),
+		edge.To("caller_acl_members", ChannelCallerACLMember.Type).
+			Annotations(
+				entgql.Skip(entgql.SkipAll),
 			),
 	}
 }

@@ -125,11 +125,19 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 		}
 	}
 
+	callerACLMemberIDs := make(map[int]struct{}, len(c.Edges.CallerACLMembers))
+	for _, member := range c.Edges.CallerACLMembers {
+		if member != nil {
+			callerACLMemberIDs[member.APIKeyID] = struct{}{}
+		}
+	}
+
 	ch := &Channel{
-		Channel:              c,
-		HTTPClient:           httpClient,
-		cachedDisabledKeySet: disabledKeySet,
-		cachedEnabledAPIKeys: c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys),
+		Channel:                  c,
+		HTTPClient:               httpClient,
+		cachedDisabledKeySet:     disabledKeySet,
+		cachedEnabledAPIKeys:     c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys),
+		cachedCallerACLMemberIDs: callerACLMemberIDs,
 	}
 	ch.setModelPriceMultiplier(c.ModelPriceMultiplier)
 

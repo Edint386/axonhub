@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/apikey"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/predicate"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/request"
@@ -23,16 +24,18 @@ import (
 // APIKeyQuery is the builder for querying APIKey entities.
 type APIKeyQuery struct {
 	config
-	ctx               *QueryContext
-	order             []apikey.OrderOption
-	inters            []Interceptor
-	predicates        []predicate.APIKey
-	withUser          *UserQuery
-	withProject       *ProjectQuery
-	withRequests      *RequestQuery
-	loadTotal         []func(context.Context, []*APIKey) error
-	modifiers         []func(*sql.Selector)
-	withNamedRequests map[string]*RequestQuery
+	ctx                              *QueryContext
+	order                            []apikey.OrderOption
+	inters                           []Interceptor
+	predicates                       []predicate.APIKey
+	withUser                         *UserQuery
+	withProject                      *ProjectQuery
+	withRequests                     *RequestQuery
+	withChannelCallerACLMembers      *ChannelCallerACLMemberQuery
+	loadTotal                        []func(context.Context, []*APIKey) error
+	modifiers                        []func(*sql.Selector)
+	withNamedRequests                map[string]*RequestQuery
+	withNamedChannelCallerACLMembers map[string]*ChannelCallerACLMemberQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -128,6 +131,28 @@ func (_q *APIKeyQuery) QueryRequests() *RequestQuery {
 			sqlgraph.From(apikey.Table, apikey.FieldID, selector),
 			sqlgraph.To(request.Table, request.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, apikey.RequestsTable, apikey.RequestsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryChannelCallerACLMembers chains the current query on the "channel_caller_acl_members" edge.
+func (_q *APIKeyQuery) QueryChannelCallerACLMembers() *ChannelCallerACLMemberQuery {
+	query := (&ChannelCallerACLMemberClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, selector),
+			sqlgraph.To(channelcalleraclmember.Table, channelcalleraclmember.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, apikey.ChannelCallerACLMembersTable, apikey.ChannelCallerACLMembersColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -322,14 +347,15 @@ func (_q *APIKeyQuery) Clone() *APIKeyQuery {
 		return nil
 	}
 	return &APIKeyQuery{
-		config:       _q.config,
-		ctx:          _q.ctx.Clone(),
-		order:        append([]apikey.OrderOption{}, _q.order...),
-		inters:       append([]Interceptor{}, _q.inters...),
-		predicates:   append([]predicate.APIKey{}, _q.predicates...),
-		withUser:     _q.withUser.Clone(),
-		withProject:  _q.withProject.Clone(),
-		withRequests: _q.withRequests.Clone(),
+		config:                      _q.config,
+		ctx:                         _q.ctx.Clone(),
+		order:                       append([]apikey.OrderOption{}, _q.order...),
+		inters:                      append([]Interceptor{}, _q.inters...),
+		predicates:                  append([]predicate.APIKey{}, _q.predicates...),
+		withUser:                    _q.withUser.Clone(),
+		withProject:                 _q.withProject.Clone(),
+		withRequests:                _q.withRequests.Clone(),
+		withChannelCallerACLMembers: _q.withChannelCallerACLMembers.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -367,6 +393,17 @@ func (_q *APIKeyQuery) WithRequests(opts ...func(*RequestQuery)) *APIKeyQuery {
 		opt(query)
 	}
 	_q.withRequests = query
+	return _q
+}
+
+// WithChannelCallerACLMembers tells the query-builder to eager-load the nodes that are connected to
+// the "channel_caller_acl_members" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *APIKeyQuery) WithChannelCallerACLMembers(opts ...func(*ChannelCallerACLMemberQuery)) *APIKeyQuery {
+	query := (&ChannelCallerACLMemberClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withChannelCallerACLMembers = query
 	return _q
 }
 
@@ -454,10 +491,11 @@ func (_q *APIKeyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*APIKe
 	var (
 		nodes       = []*APIKey{}
 		_spec       = _q.querySpec()
-		loadedTypes = [3]bool{
+		loadedTypes = [4]bool{
 			_q.withUser != nil,
 			_q.withProject != nil,
 			_q.withRequests != nil,
+			_q.withChannelCallerACLMembers != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -500,10 +538,26 @@ func (_q *APIKeyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*APIKe
 			return nil, err
 		}
 	}
+	if query := _q.withChannelCallerACLMembers; query != nil {
+		if err := _q.loadChannelCallerACLMembers(ctx, query, nodes,
+			func(n *APIKey) { n.Edges.ChannelCallerACLMembers = []*ChannelCallerACLMember{} },
+			func(n *APIKey, e *ChannelCallerACLMember) {
+				n.Edges.ChannelCallerACLMembers = append(n.Edges.ChannelCallerACLMembers, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
 	for name, query := range _q.withNamedRequests {
 		if err := _q.loadRequests(ctx, query, nodes,
 			func(n *APIKey) { n.appendNamedRequests(name) },
 			func(n *APIKey, e *Request) { n.appendNamedRequests(name, e) }); err != nil {
+			return nil, err
+		}
+	}
+	for name, query := range _q.withNamedChannelCallerACLMembers {
+		if err := _q.loadChannelCallerACLMembers(ctx, query, nodes,
+			func(n *APIKey) { n.appendNamedChannelCallerACLMembers(name) },
+			func(n *APIKey, e *ChannelCallerACLMember) { n.appendNamedChannelCallerACLMembers(name, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -588,6 +642,36 @@ func (_q *APIKeyQuery) loadRequests(ctx context.Context, query *RequestQuery, no
 	}
 	query.Where(predicate.Request(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(apikey.RequestsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.APIKeyID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "api_key_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *APIKeyQuery) loadChannelCallerACLMembers(ctx context.Context, query *ChannelCallerACLMemberQuery, nodes []*APIKey, init func(*APIKey), assign func(*APIKey, *ChannelCallerACLMember)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*APIKey)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(channelcalleraclmember.FieldAPIKeyID)
+	}
+	query.Where(predicate.ChannelCallerACLMember(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(apikey.ChannelCallerACLMembersColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -714,6 +798,20 @@ func (_q *APIKeyQuery) WithNamedRequests(name string, opts ...func(*RequestQuery
 		_q.withNamedRequests = make(map[string]*RequestQuery)
 	}
 	_q.withNamedRequests[name] = query
+	return _q
+}
+
+// WithNamedChannelCallerACLMembers tells the query-builder to eager-load the nodes that are connected to the "channel_caller_acl_members"
+// edge with the given name. The optional arguments are used to configure the query builder of the edge.
+func (_q *APIKeyQuery) WithNamedChannelCallerACLMembers(name string, opts ...func(*ChannelCallerACLMemberQuery)) *APIKeyQuery {
+	query := (&ChannelCallerACLMemberClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	if _q.withNamedChannelCallerACLMembers == nil {
+		_q.withNamedChannelCallerACLMembers = make(map[string]*ChannelCallerACLMemberQuery)
+	}
+	_q.withNamedChannelCallerACLMembers[name] = query
 	return _q
 }
 

@@ -245,11 +245,12 @@ func TestBackupService_Restore_RemapChannelIDsInModelSettingsAndAPIKeyProfiles(t
 		Channels: []*BackupChannel{
 			{
 				Channel: ent.Channel{
-					ID:      oldChannelID,
-					Type:    channel.TypeOpenai,
-					Name:    "Channel From Backup",
-					BaseURL: "https://api.example.com",
-					Status:  channel.StatusEnabled,
+					ID:               oldChannelID,
+					Type:             channel.TypeOpenai,
+					Name:             "Channel From Backup",
+					BaseURL:          "https://api.example.com",
+					Status:           channel.StatusEnabled,
+					CallerAccessMode: channel.CallerAccessModePublic,
 				},
 				Credentials: objects.ChannelCredentials{APIKey: "backup-api-key"},
 			},
@@ -372,11 +373,12 @@ func TestBackupService_Restore_RemapChannelIDsInProjectProfiles(t *testing.T) {
 		Channels: []*BackupChannel{
 			{
 				Channel: ent.Channel{
-					ID:      oldChannelID,
-					Type:    channel.TypeOpenai,
-					Name:    "Project Channel From Backup",
-					BaseURL: "https://api.example.com",
-					Status:  channel.StatusEnabled,
+					ID:               oldChannelID,
+					Type:             channel.TypeOpenai,
+					Name:             "Project Channel From Backup",
+					BaseURL:          "https://api.example.com",
+					Status:           channel.StatusEnabled,
+					CallerAccessMode: channel.CallerAccessModePublic,
 				},
 				Credentials: objects.ChannelCredentials{APIKey: "backup-api-key"},
 			},
@@ -426,6 +428,7 @@ func TestBackupService_Restore_NewData(t *testing.T) {
 					Tags:                    []string{"new"},
 					DefaultTestModel:        "new-model-1",
 					OrderingWeight:          10,
+					CallerAccessMode:        channel.CallerAccessModePublic,
 				},
 				Credentials: objects.ChannelCredentials{
 					APIKey: "test-api-key",

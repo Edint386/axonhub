@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/apikey"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/predicate"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
@@ -178,6 +179,21 @@ func (_u *APIKeyUpdate) AddRequests(v ...*Request) *APIKeyUpdate {
 	return _u.AddRequestIDs(ids...)
 }
 
+// AddChannelCallerACLMemberIDs adds the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (_u *APIKeyUpdate) AddChannelCallerACLMemberIDs(ids ...int) *APIKeyUpdate {
+	_u.mutation.AddChannelCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// AddChannelCallerACLMembers adds the "channel_caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *APIKeyUpdate) AddChannelCallerACLMembers(v ...*ChannelCallerACLMember) *APIKeyUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddChannelCallerACLMemberIDs(ids...)
+}
+
 // Mutation returns the APIKeyMutation object of the builder.
 func (_u *APIKeyUpdate) Mutation() *APIKeyMutation {
 	return _u.mutation
@@ -202,6 +218,27 @@ func (_u *APIKeyUpdate) RemoveRequests(v ...*Request) *APIKeyUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveRequestIDs(ids...)
+}
+
+// ClearChannelCallerACLMembers clears all "channel_caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *APIKeyUpdate) ClearChannelCallerACLMembers() *APIKeyUpdate {
+	_u.mutation.ClearChannelCallerACLMembers()
+	return _u
+}
+
+// RemoveChannelCallerACLMemberIDs removes the "channel_caller_acl_members" edge to ChannelCallerACLMember entities by IDs.
+func (_u *APIKeyUpdate) RemoveChannelCallerACLMemberIDs(ids ...int) *APIKeyUpdate {
+	_u.mutation.RemoveChannelCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// RemoveChannelCallerACLMembers removes "channel_caller_acl_members" edges to ChannelCallerACLMember entities.
+func (_u *APIKeyUpdate) RemoveChannelCallerACLMembers(v ...*ChannelCallerACLMember) *APIKeyUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveChannelCallerACLMemberIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -369,6 +406,51 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(request.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ChannelCallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.ChannelCallerACLMembersTable,
+			Columns: []string{apikey.ChannelCallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedChannelCallerACLMembersIDs(); len(nodes) > 0 && !_u.mutation.ChannelCallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.ChannelCallerACLMembersTable,
+			Columns: []string{apikey.ChannelCallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ChannelCallerACLMembersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.ChannelCallerACLMembersTable,
+			Columns: []string{apikey.ChannelCallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -544,6 +626,21 @@ func (_u *APIKeyUpdateOne) AddRequests(v ...*Request) *APIKeyUpdateOne {
 	return _u.AddRequestIDs(ids...)
 }
 
+// AddChannelCallerACLMemberIDs adds the "channel_caller_acl_members" edge to the ChannelCallerACLMember entity by IDs.
+func (_u *APIKeyUpdateOne) AddChannelCallerACLMemberIDs(ids ...int) *APIKeyUpdateOne {
+	_u.mutation.AddChannelCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// AddChannelCallerACLMembers adds the "channel_caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *APIKeyUpdateOne) AddChannelCallerACLMembers(v ...*ChannelCallerACLMember) *APIKeyUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddChannelCallerACLMemberIDs(ids...)
+}
+
 // Mutation returns the APIKeyMutation object of the builder.
 func (_u *APIKeyUpdateOne) Mutation() *APIKeyMutation {
 	return _u.mutation
@@ -568,6 +665,27 @@ func (_u *APIKeyUpdateOne) RemoveRequests(v ...*Request) *APIKeyUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveRequestIDs(ids...)
+}
+
+// ClearChannelCallerACLMembers clears all "channel_caller_acl_members" edges to the ChannelCallerACLMember entity.
+func (_u *APIKeyUpdateOne) ClearChannelCallerACLMembers() *APIKeyUpdateOne {
+	_u.mutation.ClearChannelCallerACLMembers()
+	return _u
+}
+
+// RemoveChannelCallerACLMemberIDs removes the "channel_caller_acl_members" edge to ChannelCallerACLMember entities by IDs.
+func (_u *APIKeyUpdateOne) RemoveChannelCallerACLMemberIDs(ids ...int) *APIKeyUpdateOne {
+	_u.mutation.RemoveChannelCallerACLMemberIDs(ids...)
+	return _u
+}
+
+// RemoveChannelCallerACLMembers removes "channel_caller_acl_members" edges to ChannelCallerACLMember entities.
+func (_u *APIKeyUpdateOne) RemoveChannelCallerACLMembers(v ...*ChannelCallerACLMember) *APIKeyUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveChannelCallerACLMemberIDs(ids...)
 }
 
 // Where appends a list predicates to the APIKeyUpdate builder.
@@ -765,6 +883,51 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(request.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ChannelCallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.ChannelCallerACLMembersTable,
+			Columns: []string{apikey.ChannelCallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedChannelCallerACLMembersIDs(); len(nodes) > 0 && !_u.mutation.ChannelCallerACLMembersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.ChannelCallerACLMembersTable,
+			Columns: []string{apikey.ChannelCallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ChannelCallerACLMembersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.ChannelCallerACLMembersTable,
+			Columns: []string{apikey.ChannelCallerACLMembersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(channelcalleraclmember.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

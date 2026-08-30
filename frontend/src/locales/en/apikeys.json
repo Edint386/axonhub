@@ -253,5 +253,20 @@
   "apikeys.templateTransfer.saveSuccess": "Template “{{name}}” was saved to the target project",
   "apikeys.templateTransfer.overwriteSuccess": "Template “{{name}}” was overwritten in the target project",
   "apikeys.templateTransfer.saveError": "Failed to save the template. Check your API key management permission in the target project.",
-  "apikeys.templateTransfer.exportSuccess": "Template “{{name}}” was exported"
+  "apikeys.templateTransfer.exportSuccess": "Template “{{name}}” was exported",
+  "apikeys.actions.channelAccess": "Channel access",
+  "apikeys.channelAccess.title": "Channel access: {{name}}",
+  "apikeys.channelAccess.description": "The server calculates this key's effective Channel ACL result. Profile routing filters remain separate.",
+  "apikeys.channelAccess.searchPlaceholder": "Search channels",
+  "apikeys.channelAccess.loading": "Loading channel access...",
+  "apikeys.channelAccess.empty": "No channels found.",
+  "apikeys.channelAccess.allowed": "Allowed",
+  "apikeys.channelAccess.denied": "Denied",
+  "apikeys.channelAccess.reasons.public.member": "This channel is public.",
+  "apikeys.channelAccess.reasons.public.nonMember": "This channel is public.",
+  "apikeys.channelAccess.reasons.allowlist.member": "This API key is in the channel allowlist.",
+  "apikeys.channelAccess.reasons.allowlist.nonMember": "This API key is not in the channel allowlist.",
+  "apikeys.channelAccess.reasons.denylist.member": "This API key is in the channel denylist.",
+  "apikeys.channelAccess.reasons.denylist.nonMember": "This API key is not in the channel denylist.",
+  "apikeys.channelAccess.messages.loadError": "Failed to load channel access"
 }

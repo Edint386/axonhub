@@ -67,6 +67,8 @@ const (
 	FieldRemark = "remark"
 	// FieldEndpoints holds the string denoting the endpoints field in the database.
 	FieldEndpoints = "endpoints"
+	// FieldCallerAccessMode holds the string denoting the caller_access_mode field in the database.
+	FieldCallerAccessMode = "caller_access_mode"
 	// EdgeRequests holds the string denoting the requests edge name in mutations.
 	EdgeRequests = "requests"
 	// EdgeExecutions holds the string denoting the executions edge name in mutations.
@@ -81,6 +83,8 @@ const (
 	EdgeChannelModelPrices = "channel_model_prices"
 	// EdgeProviderQuotaStatus holds the string denoting the provider_quota_status edge name in mutations.
 	EdgeProviderQuotaStatus = "provider_quota_status"
+	// EdgeCallerACLMembers holds the string denoting the caller_acl_members edge name in mutations.
+	EdgeCallerACLMembers = "caller_acl_members"
 	// Table holds the table name of the channel in the database.
 	Table = "channels"
 	// RequestsTable is the table that holds the requests relation/edge.
@@ -132,6 +136,13 @@ const (
 	ProviderQuotaStatusInverseTable = "provider_quota_status"
 	// ProviderQuotaStatusColumn is the table column denoting the provider_quota_status relation/edge.
 	ProviderQuotaStatusColumn = "channel_id"
+	// CallerACLMembersTable is the table that holds the caller_acl_members relation/edge.
+	CallerACLMembersTable = "channel_caller_acl_members"
+	// CallerACLMembersInverseTable is the table name for the ChannelCallerACLMember entity.
+	// It exists in this package in order to avoid circular dependency with the "channelcalleraclmember" package.
+	CallerACLMembersInverseTable = "channel_caller_acl_members"
+	// CallerACLMembersColumn is the table column denoting the caller_acl_members relation/edge.
+	CallerACLMembersColumn = "channel_id"
 )
 
 // Columns holds all SQL columns for channel fields.
@@ -161,6 +172,7 @@ var Columns = []string{
 	FieldAutoDisabledAt,
 	FieldRemark,
 	FieldEndpoints,
+	FieldCallerAccessMode,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -329,6 +341,33 @@ func StatusValidator(s Status) error {
 	}
 }
 
+// CallerAccessMode defines the type for the "caller_access_mode" enum field.
+type CallerAccessMode string
+
+// CallerAccessModePublic is the default value of the CallerAccessMode enum.
+const DefaultCallerAccessMode = CallerAccessModePublic
+
+// CallerAccessMode values.
+const (
+	CallerAccessModePublic    CallerAccessMode = "public"
+	CallerAccessModeAllowlist CallerAccessMode = "allowlist"
+	CallerAccessModeDenylist  CallerAccessMode = "denylist"
+)
+
+func (cam CallerAccessMode) String() string {
+	return string(cam)
+}
+
+// CallerAccessModeValidator is a validator for the "caller_access_mode" field enum values. It is called by the builders before save.
+func CallerAccessModeValidator(cam CallerAccessMode) error {
+	switch cam {
+	case CallerAccessModePublic, CallerAccessModeAllowlist, CallerAccessModeDenylist:
+		return nil
+	default:
+		return fmt.Errorf("channel: invalid enum value for caller_access_mode field: %q", cam)
+	}
+}
+
 // OrderOption defines the ordering options for the Channel queries.
 type OrderOption func(*sql.Selector)
 
@@ -415,6 +454,11 @@ func ByAutoDisabledAt(opts ...sql.OrderTermOption) OrderOption {
 // ByRemark orders the results by the remark field.
 func ByRemark(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRemark, opts...).ToFunc()
+}
+
+// ByCallerAccessMode orders the results by the caller_access_mode field.
+func ByCallerAccessMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCallerAccessMode, opts...).ToFunc()
 }
 
 // ByRequestsCount orders the results by requests count.
@@ -507,6 +551,20 @@ func ByProviderQuotaStatusField(field string, opts ...sql.OrderTermOption) Order
 		sqlgraph.OrderByNeighborTerms(s, newProviderQuotaStatusStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByCallerACLMembersCount orders the results by caller_acl_members count.
+func ByCallerACLMembersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newCallerACLMembersStep(), opts...)
+	}
+}
+
+// ByCallerACLMembers orders the results by caller_acl_members terms.
+func ByCallerACLMembers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newCallerACLMembersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newRequestsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -556,6 +614,13 @@ func newProviderQuotaStatusStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2O, false, ProviderQuotaStatusTable, ProviderQuotaStatusColumn),
 	)
 }
+func newCallerACLMembersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(CallerACLMembersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CallerACLMembersTable, CallerACLMembersColumn),
+	)
+}
 
 // MarshalGQL implements graphql.Marshaler interface.
 func (e Type) MarshalGQL(w io.Writer) {
@@ -589,6 +654,24 @@ func (e *Status) UnmarshalGQL(val interface{}) error {
 	*e = Status(str)
 	if err := StatusValidator(*e); err != nil {
 		return fmt.Errorf("%s is not a valid Status", str)
+	}
+	return nil
+}
+
+// MarshalGQL implements graphql.Marshaler interface.
+func (e CallerAccessMode) MarshalGQL(w io.Writer) {
+	io.WriteString(w, strconv.Quote(e.String()))
+}
+
+// UnmarshalGQL implements graphql.Unmarshaler interface.
+func (e *CallerAccessMode) UnmarshalGQL(val interface{}) error {
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("enum %T must be a string", val)
+	}
+	*e = CallerAccessMode(str)
+	if err := CallerAccessModeValidator(*e); err != nil {
+		return fmt.Errorf("%s is not a valid CallerAccessMode", str)
 	}
 	return nil
 }

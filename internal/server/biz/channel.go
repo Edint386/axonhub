@@ -16,6 +16,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/schema/schematype"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
@@ -105,6 +106,11 @@ type Channel struct {
 
 	// cachedDisabledKeySet caches disabled key lookup set for O(1) check
 	cachedDisabledKeySet map[string]struct{}
+
+	// cachedCallerACLMemberIDs caches AxonHub caller API key IDs configured in
+	// this channel's access-control member set. It is built once with the channel
+	// cache snapshot and then treated as immutable by request paths.
+	cachedCallerACLMemberIDs map[int]struct{}
 
 	// apiKeyOverride, if non-empty, forces all outbound transformers to use this key
 	// instead of the channel's normal key selection. Used by the channel key test flow.
@@ -289,6 +295,7 @@ func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []
 	entities, err := svc.entFromContext(ctx).Channel.Query().
 		Where(channel.StatusEQ(channel.StatusEnabled)).
 		Order(ent.Desc(channel.FieldPriority), ent.Desc(channel.FieldOrderingWeight)).
+		WithCallerACLMembers().
 		All(ctx)
 	if err != nil {
 		return current, lastUpdate, false, err
@@ -423,6 +430,26 @@ func (svc *ChannelService) GetEnabledChannel(id int) *Channel {
 	}
 
 	return nil
+}
+
+// AllowsCallerAPIKey reports whether the AxonHub caller API key passes this
+// channel's hard access-control policy. Project and API key profile filters are
+// intentionally evaluated separately and may only narrow this result further.
+func (c *Channel) AllowsCallerAPIKey(apiKeyID int) bool {
+	_, listed := c.cachedCallerACLMemberIDs[apiKeyID]
+
+	switch c.CallerAccessMode {
+	case channel.CallerAccessModePublic:
+		return true
+	case channel.CallerAccessModeAllowlist:
+		return listed
+	case channel.CallerAccessModeDenylist:
+		return !listed
+	default:
+		// Unknown persisted values must fail closed rather than silently widening
+		// access after a partial or incompatible upgrade.
+		return false
+	}
 }
 
 func (svc *ChannelService) SetEnabledChannelsForTest(channels []*Channel) {
@@ -1106,7 +1133,15 @@ func (svc *ChannelService) SaveChannelEndpoints(ctx context.Context, input SaveC
 
 // DeleteChannel deletes a channel by ID.
 func (svc *ChannelService) DeleteChannel(ctx context.Context, id int) error {
-	if err := svc.entFromContext(ctx).Channel.DeleteOneID(id).Exec(ctx); err != nil {
+	if err := svc.RunInTransaction(ctx, func(txCtx context.Context) error {
+		client := svc.entFromContext(txCtx)
+		if _, err := client.ChannelCallerACLMember.Delete().
+			Where(channelcalleraclmember.ChannelIDEQ(id)).
+			Exec(txCtx); err != nil {
+			return fmt.Errorf("failed to delete Channel caller ACL members: %w", err)
+		}
+		return client.Channel.DeleteOneID(id).Exec(txCtx)
+	}); err != nil {
 		return fmt.Errorf("failed to delete channel: %w", err)
 	}
 

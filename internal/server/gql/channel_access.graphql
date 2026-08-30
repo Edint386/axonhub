@@ -1,0 +1,51 @@
+"""How a channel interprets its caller API key membership list."""
+enum ChannelCallerAccessMode {
+  """Every caller API key passes this ACL."""
+  public
+  """Only API keys in members pass this ACL."""
+  allowlist
+  """API keys in members are rejected; all others pass this ACL."""
+  denylist
+}
+
+"""The complete caller access policy for one channel."""
+type ChannelCallerAccessPolicy {
+  channel: Channel!
+  mode: ChannelCallerAccessMode!
+  members: [ChannelCallerAPIKeySummary!]!
+}
+
+"""Safe caller identity exposed by Channel ACL management."""
+type ChannelCallerAPIKeySummary {
+  id: ID!
+  name: String!
+  type: APIKeyType!
+  status: APIKeyStatus!
+  projectID: ID!
+  projectName: String!
+}
+
+"""One channel's caller access result projected from an API key."""
+type APIKeyChannelCallerAccess {
+  channel: Channel!
+  mode: ChannelCallerAccessMode!
+  isMember: Boolean!
+  allowed: Boolean!
+}
+
+"""Atomically replaces one channel's caller access mode and member set."""
+input SetChannelCallerAccessPolicyInput {
+  channelID: ID!
+  mode: ChannelCallerAccessMode!
+  memberAPIKeyIDs: [ID!]!
+}
+
+extend type Query {
+  channelCallerAccessPolicy(channelID: ID!): ChannelCallerAccessPolicy!
+  channelCallerAccessCandidates: [ChannelCallerAPIKeySummary!]!
+  apiKeyChannelCallerAccess(apiKeyID: ID!): [APIKeyChannelCallerAccess!]!
+}
+
+extend type Mutation {
+  setChannelCallerAccessPolicy(input: SetChannelCallerAccessPolicyInput!): ChannelCallerAccessPolicy!
+}

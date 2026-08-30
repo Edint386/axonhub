@@ -183,6 +183,30 @@ func (f ChannelMutationRuleFunc) EvalMutation(ctx context.Context, m ent.Mutatio
 	return Denyf("ent/privacy: unexpected mutation type %T, expect *ent.ChannelMutation", m)
 }
 
+// The ChannelCallerACLMemberQueryRuleFunc type is an adapter to allow the use of ordinary
+// functions as a query rule.
+type ChannelCallerACLMemberQueryRuleFunc func(context.Context, *ent.ChannelCallerACLMemberQuery) error
+
+// EvalQuery return f(ctx, q).
+func (f ChannelCallerACLMemberQueryRuleFunc) EvalQuery(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ChannelCallerACLMemberQuery); ok {
+		return f(ctx, q)
+	}
+	return Denyf("ent/privacy: unexpected query type %T, expect *ent.ChannelCallerACLMemberQuery", q)
+}
+
+// The ChannelCallerACLMemberMutationRuleFunc type is an adapter to allow the use of ordinary
+// functions as a mutation rule.
+type ChannelCallerACLMemberMutationRuleFunc func(context.Context, *ent.ChannelCallerACLMemberMutation) error
+
+// EvalMutation calls f(ctx, m).
+func (f ChannelCallerACLMemberMutationRuleFunc) EvalMutation(ctx context.Context, m ent.Mutation) error {
+	if m, ok := m.(*ent.ChannelCallerACLMemberMutation); ok {
+		return f(ctx, m)
+	}
+	return Denyf("ent/privacy: unexpected mutation type %T, expect *ent.ChannelCallerACLMemberMutation", m)
+}
+
 // The ChannelHealthProbeRunQueryRuleFunc type is an adapter to allow the use of ordinary
 // functions as a query rule.
 type ChannelHealthProbeRunQueryRuleFunc func(context.Context, *ent.ChannelHealthProbeRunQuery) error
@@ -776,6 +800,8 @@ func queryFilter(q ent.Query) (Filter, error) {
 		return q.Filter(), nil
 	case *ent.ChannelQuery:
 		return q.Filter(), nil
+	case *ent.ChannelCallerACLMemberQuery:
+		return q.Filter(), nil
 	case *ent.ChannelHealthProbeRunQuery:
 		return q.Filter(), nil
 	case *ent.ChannelModelPriceQuery:
@@ -834,6 +860,8 @@ func mutationFilter(m ent.Mutation) (Filter, error) {
 	case *ent.APIKeyProfileTemplateMutation:
 		return m.Filter(), nil
 	case *ent.ChannelMutation:
+		return m.Filter(), nil
+	case *ent.ChannelCallerACLMemberMutation:
 		return m.Filter(), nil
 	case *ent.ChannelHealthProbeRunMutation:
 		return m.Filter(), nil

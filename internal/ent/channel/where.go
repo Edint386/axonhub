@@ -955,6 +955,26 @@ func EndpointsNotNil() predicate.Channel {
 	return predicate.Channel(sql.FieldNotNull(FieldEndpoints))
 }
 
+// CallerAccessModeEQ applies the EQ predicate on the "caller_access_mode" field.
+func CallerAccessModeEQ(v CallerAccessMode) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldCallerAccessMode, v))
+}
+
+// CallerAccessModeNEQ applies the NEQ predicate on the "caller_access_mode" field.
+func CallerAccessModeNEQ(v CallerAccessMode) predicate.Channel {
+	return predicate.Channel(sql.FieldNEQ(FieldCallerAccessMode, v))
+}
+
+// CallerAccessModeIn applies the In predicate on the "caller_access_mode" field.
+func CallerAccessModeIn(vs ...CallerAccessMode) predicate.Channel {
+	return predicate.Channel(sql.FieldIn(FieldCallerAccessMode, vs...))
+}
+
+// CallerAccessModeNotIn applies the NotIn predicate on the "caller_access_mode" field.
+func CallerAccessModeNotIn(vs ...CallerAccessMode) predicate.Channel {
+	return predicate.Channel(sql.FieldNotIn(FieldCallerAccessMode, vs...))
+}
+
 // HasRequests applies the HasEdge predicate on the "requests" edge.
 func HasRequests() predicate.Channel {
 	return predicate.Channel(func(s *sql.Selector) {
@@ -1108,6 +1128,29 @@ func HasProviderQuotaStatus() predicate.Channel {
 func HasProviderQuotaStatusWith(preds ...predicate.ProviderQuotaStatus) predicate.Channel {
 	return predicate.Channel(func(s *sql.Selector) {
 		step := newProviderQuotaStatusStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasCallerACLMembers applies the HasEdge predicate on the "caller_acl_members" edge.
+func HasCallerACLMembers() predicate.Channel {
+	return predicate.Channel(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, CallerACLMembersTable, CallerACLMembersColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasCallerACLMembersWith applies the HasEdge predicate on the "caller_acl_members" edge with a given conditions (other predicates).
+func HasCallerACLMembersWith(preds ...predicate.ChannelCallerACLMember) predicate.Channel {
+	return predicate.Channel(func(s *sql.Selector) {
+		step := newCallerACLMembersStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

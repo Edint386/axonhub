@@ -253,5 +253,20 @@
   "apikeys.templateTransfer.saveSuccess": "模板“{{name}}”已保存到目标项目",
   "apikeys.templateTransfer.overwriteSuccess": "目标项目中的模板“{{name}}”已覆盖",
   "apikeys.templateTransfer.saveError": "保存模板失败，请确认你拥有目标项目的 API Key 管理权限。",
-  "apikeys.templateTransfer.exportSuccess": "模板“{{name}}”已导出"
+  "apikeys.templateTransfer.exportSuccess": "模板“{{name}}”已导出",
+  "apikeys.actions.channelAccess": "渠道访问",
+  "apikeys.channelAccess.title": "渠道访问：{{name}}",
+  "apikeys.channelAccess.description": "此处显示后端计算的 Channel ACL 有效结果；Profile 路由筛选仍然是独立的下一层规则。",
+  "apikeys.channelAccess.searchPlaceholder": "搜索渠道",
+  "apikeys.channelAccess.loading": "正在加载渠道访问……",
+  "apikeys.channelAccess.empty": "没有找到渠道。",
+  "apikeys.channelAccess.allowed": "允许",
+  "apikeys.channelAccess.denied": "拒绝",
+  "apikeys.channelAccess.reasons.public.member": "该渠道为公开模式。",
+  "apikeys.channelAccess.reasons.public.nonMember": "该渠道为公开模式。",
+  "apikeys.channelAccess.reasons.allowlist.member": "该 API Key 在渠道白名单中。",
+  "apikeys.channelAccess.reasons.allowlist.nonMember": "该 API Key 不在渠道白名单中。",
+  "apikeys.channelAccess.reasons.denylist.member": "该 API Key 在渠道黑名单中。",
+  "apikeys.channelAccess.reasons.denylist.nonMember": "该 API Key 不在渠道黑名单中。",
+  "apikeys.channelAccess.messages.loadError": "加载渠道访问失败"
 }

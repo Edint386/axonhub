@@ -25,6 +25,7 @@ import {
   IconHistory,
   IconPlugConnected,
   IconClockPlay,
+  IconShieldLock,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -32,7 +33,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,14 +40,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useChannels } from '../context/channels-context';
 import { useTestChannel, useUpdateChannel, useUpdateChannelStatus } from '../data/channels';
 import { CHANNEL_CONFIGS, getProvider } from '../data/config_channels';
-import { useSkipChannelStatusConfirmation } from '../hooks/use-channel-status-confirmation-preference';
 import { Channel } from '../data/schema';
+import { useSkipChannelStatusConfirmation } from '../hooks/use-channel-status-confirmation-preference';
 import { ChannelHealthCell } from './channel-health-cell';
 import { ChannelLimiterCell } from './channel-limiter-cell';
 import { ChannelsStatusDialog } from './channels-status-dialog';
@@ -86,8 +87,7 @@ const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
         id: channel.id,
         status: newStatus,
       });
-    } catch (_error) {
-    }
+    } catch (_error) {}
   }, [channel.id, isArchived, isEnabled, skipStatusConfirmation, updateChannelStatus]);
 
   if (!channelPermissions.canWrite) {
@@ -114,11 +114,12 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
   const { t } = useTranslation();
   const channel = row.original;
   const { setOpen, setCurrentRow } = useChannels();
-  const { channelPermissions } = usePermissions();
+  const { channelPermissions, hasSystemScope } = usePermissions();
   const testChannel = useTestChannel();
   const isArchived = channel.status === 'archived';
   const hasError = !!channel.errorMessage;
   const hasDisabledAPIKeys = channelPermissions.canWrite && (channel.disabledAPIKeys?.length ?? 0) > 0;
+  const canViewCallerAccess = hasSystemScope('read_channels') && hasSystemScope('read_api_keys');
 
   const handleDefaultTest = async () => {
     try {
@@ -253,6 +254,17 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
             >
               <IconKey size={16} className='mr-2' />
               {t('channels.actions.keyManagement')}
+            </DropdownMenuItem>
+          )}
+          {canViewCallerAccess && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(channel);
+                setOpen('callerAccess');
+              }}
+            >
+              <IconShieldLock size={16} className='mr-2' />
+              {t('channels.actions.callerAccess')}
             </DropdownMenuItem>
           )}
           {channelPermissions.canWrite && (
@@ -632,11 +644,9 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
   }
 
   return (
-    <div className='flex items-center justify-center gap-2 group cursor-pointer' onDoubleClick={handleDoubleClick}>
-      <span className={cn('font-mono text-sm', initialWeight == null && 'text-muted-foreground')}>
-        {initialWeight ?? '-'}
-      </span>
-      {updateChannel.isPending && <IconLoader2 className='h-3 w-3 animate-spin text-muted-foreground' />}
+    <div className='group flex cursor-pointer items-center justify-center gap-2' onDoubleClick={handleDoubleClick}>
+      <span className={cn('font-mono text-sm', initialWeight == null && 'text-muted-foreground')}>{initialWeight ?? '-'}</span>
+      {updateChannel.isPending && <IconLoader2 className='text-muted-foreground h-3 w-3 animate-spin' />}
     </div>
   );
 });

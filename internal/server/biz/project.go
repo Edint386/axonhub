@@ -12,6 +12,7 @@ import (
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
+	"github.com/looplj/axonhub/internal/ent/channelcalleraclmember"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/role"
 	"github.com/looplj/axonhub/internal/ent/userproject"
@@ -346,7 +347,6 @@ func (s *ProjectService) DeleteProject(ctx context.Context, id int) error {
 		if err != nil {
 			return fmt.Errorf("failed to get project: %w", err)
 		}
-
 		// 1. Delete UserProject relationships
 		_, err = client.UserProject.Delete().
 			Where(userproject.ProjectIDEQ(id)).
@@ -364,6 +364,27 @@ func (s *ProjectService) DeleteProject(ctx context.Context, id int) error {
 		}
 
 		// 3. Delete project API keys
+		projectAPIKeys, err := client.APIKey.Query().
+			Where(apikey.ProjectIDEQ(proj.ID)).
+			Select(apikey.FieldID).
+			All(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to query project API keys for Channel caller ACL cleanup: %w", err)
+		}
+
+		if len(projectAPIKeys) > 0 {
+			apiKeyIDs := make([]int, 0, len(projectAPIKeys))
+			for _, apiKey := range projectAPIKeys {
+				apiKeyIDs = append(apiKeyIDs, apiKey.ID)
+			}
+
+			if _, err := client.ChannelCallerACLMember.Delete().
+				Where(channelcalleraclmember.APIKeyIDIn(apiKeyIDs...)).
+				Exec(ctx); err != nil {
+				return fmt.Errorf("failed to delete project Channel caller ACL members: %w", err)
+			}
+		}
+
 		_, err = client.APIKey.Delete().
 			Where(apikey.ProjectIDEQ(proj.ID)).
 			Exec(ctx)
