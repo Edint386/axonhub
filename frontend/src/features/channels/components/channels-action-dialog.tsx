@@ -385,6 +385,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [proxyDisableConnectionReuse, setProxyDisableConnectionReuse] = useState(
     () => initialRow?.settings?.proxy?.disableConnectionReuse || false
   );
+  const [proxyDirty, setProxyDirty] = useState(false);
   const [oauthProxyDialogOpen, setOAuthProxyDialogOpen] = useState(false);
   const [passThroughUserAgent, setPassThroughUserAgent] = useState<boolean | null>(() => {
     return initialRow?.settings?.passThroughUserAgent ?? null;
@@ -418,6 +419,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     setProxyUsername(value.username || '');
     setProxyPassword(value.password || '');
     setProxyDisableConnectionReuse(value.disableConnectionReuse || false);
+    setProxyDirty(true);
   }, []);
 
   useEffect(() => {
@@ -428,6 +430,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     setProxyUsername(initialRow?.settings?.proxy?.username || '');
     setProxyPassword(initialRow?.settings?.proxy?.password || '');
     setProxyDisableConnectionReuse(initialRow?.settings?.proxy?.disableConnectionReuse || false);
+    setProxyDirty(false);
     setOAuthProxyDialogOpen(false);
   }, [initialRow, open]);
 
@@ -1299,7 +1302,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
 
       if (isEdit && currentRow) {
         const nextSettings = mergeChannelSettingsForUpdate(settingsForSubmit, {
-          proxy: proxyConfig,
+          ...(proxyDirty ? { proxy: proxyConfig } : {}),
           passThroughUserAgent,
           passThroughBody,
           retryableStatusCodes,
@@ -1354,17 +1357,17 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         } else {
           await createChannel.mutateAsync(createInput);
         }
+      }
 
-        // Auto-save proxy preset (preserve existing name if available)
-        if (hasSystemScope('write_settings') && proxyType === ProxyType.URL && proxyUrl) {
-          const existingPreset = proxyPresets.find((p) => p.url === proxyUrl);
-          saveProxyPreset.mutate({
-            name: existingPreset?.name,
-            url: proxyUrl,
-            username: proxyUsername || undefined,
-            password: proxyPassword || undefined,
-          });
-        }
+      // Save presets for creates/duplicates and for explicit OAuth proxy edits.
+      if (hasSystemScope('write_settings') && proxyType === ProxyType.URL && proxyUrl && (!isEdit || proxyDirty)) {
+        const existingPreset = proxyPresets.find((p) => p.url === proxyUrl);
+        saveProxyPreset.mutate({
+          name: existingPreset?.name,
+          url: proxyUrl,
+          username: proxyUsername || undefined,
+          password: proxyPassword || undefined,
+        });
       }
 
       form.reset();
@@ -1766,6 +1769,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             setProxyUsername(initialRow?.settings?.proxy?.username || '');
             setProxyPassword(initialRow?.settings?.proxy?.password || '');
             setProxyDisableConnectionReuse(initialRow?.settings?.proxy?.disableConnectionReuse || false);
+            setProxyDirty(false);
             setOAuthProxyDialogOpen(false);
             setPassThroughUserAgent(initialRow?.settings?.passThroughUserAgent ?? null);
             setPassThroughBody(initialRow?.settings?.passThroughBody ?? null);

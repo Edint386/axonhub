@@ -151,6 +151,7 @@ test('Codex OAuth configures the same proxy used after the channel is saved', ()
   const actionDialog = read('features/channels/components/channels-action-dialog.tsx');
   const oauthProxyDialog = read('features/channels/components/oauth-proxy-dialog.tsx');
   const oauthHook = read('features/channels/hooks/use-oauth-flow.ts');
+  const codexData = read('features/channels/data/codex.ts');
 
   assert.match(actionDialog, /data-testid='codex-oauth-proxy-button'/, 'Codex OAuth should expose a pre-login proxy button');
   assert.match(
@@ -162,7 +163,18 @@ test('Codex OAuth configures the same proxy used after the channel is saved', ()
   assert.equal(
     (actionDialog.match(/proxy:\s*proxyConfig/g) ?? []).length,
     2,
-    'create and update settings should both persist the exact OAuth proxy config'
+    'create and explicit OAuth proxy edits should persist the exact proxy config'
+  );
+  assert.match(actionDialog, /const \[proxyDirty, setProxyDirty\]/, 'the channel dialog should track explicit proxy application');
+  assert.match(
+    actionDialog,
+    /\.\.\.\(proxyDirty \? \{ proxy: proxyConfig \} : \{\}\)/,
+    'untouched edit submissions should preserve the existing proxy value'
+  );
+  assert.match(
+    actionDialog,
+    /\(!isEdit \|\| proxyDirty\)/,
+    'create, duplicate, and explicit edit flows should keep proxy presets synchronized'
   );
   assert.match(
     actionDialog,
@@ -174,6 +186,10 @@ test('Codex OAuth configures the same proxy used after the channel is saved', ()
     /<ProxyConfigFields form=\{form\} proxyPresets=\{proxyPresets\}/,
     'OAuth should reuse the channel proxy fields'
   );
+  assert.match(oauthProxyDialog, /codexOAuthTestProxy/, 'the OAuth proxy dialog should expose a dedicated connectivity test');
+  assert.match(oauthProxyDialog, /testGenerationRef/, 'stale connectivity results should be ignored after edits or close');
+  assert.match(oauthProxyDialog, /'X-Project-ID': selectedProjectId/, 'project-scoped write permission should reach the preflight endpoint');
+  assert.match(codexData, /\/admin\/codex\/oauth\/test-proxy/, 'the connectivity test should use the fixed Codex admin endpoint');
   assert.match(
     oauthHook,
     /if \(proxyConfig\) \{\s*exchangeInput\.proxy = proxyConfig;/,

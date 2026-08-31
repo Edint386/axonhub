@@ -26,6 +26,18 @@ export async function codexOAuthExchange(
   })
 }
 
+export async function codexOAuthTestProxy(
+  input: { proxy: ProxyConfig },
+  headers?: Record<string, string>
+): Promise<{ success: boolean; latencyMs: number }> {
+  return apiRequest('/admin/codex/oauth/test-proxy', {
+    method: 'POST',
+    body: input,
+    headers,
+    requireAuth: true,
+  })
+}
+
 export async function codexDecodeAuthJSON(
   input: {
     auth_json: string
