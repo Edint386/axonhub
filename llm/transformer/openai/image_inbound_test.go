@@ -70,8 +70,7 @@ func TestImageInboundTransformer_TransformRequest_Generation_JSON(t *testing.T) 
 func TestImageInboundTransformer_TransformRequest_Generation_WithSingleImage(t *testing.T) {
 	inbound := NewImageGenerationInboundTransformer()
 
-	// 1x1 red pixel PNG
-	pngBytes := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	pngBytes := decodeImageSecurityTestPNG(t)
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
 
 	reqBody, err := json.Marshal(map[string]any{
@@ -99,8 +98,8 @@ func TestImageInboundTransformer_TransformRequest_Generation_WithSingleImage(t *
 func TestImageInboundTransformer_TransformRequest_Generation_WithMultipleImages(t *testing.T) {
 	inbound := NewImageGenerationInboundTransformer()
 
-	pngBytes1 := []byte{0x89, 0x50, 0x4E, 0x47}
-	pngBytes2 := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D}
+	pngBytes1 := decodeImageSecurityTestPNG(t)
+	pngBytes2 := decodeImageSecurityTestPNG(t)
 	dataURL1 := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes1)
 	dataURL2 := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes2)
 
@@ -193,7 +192,7 @@ func TestImageInboundTransformer_TransformRequest_Generation_WithNonBase64DataUR
 func TestImageInboundTransformer_Generation_RoundTrip_WithImage(t *testing.T) {
 	inbound := NewImageGenerationInboundTransformer()
 
-	pngBytes := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	pngBytes := decodeImageSecurityTestPNG(t)
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
 
 	reqBody, err := json.Marshal(map[string]any{
@@ -229,6 +228,150 @@ func TestImageInboundTransformer_Generation_RoundTrip_WithImage(t *testing.T) {
 	imageField, ok := body["image"].(string)
 	require.True(t, ok, "image should be forwarded as a string in the outbound request")
 	assert.Contains(t, imageField, "data:image/png;base64,")
+}
+
+func TestDecodeDataURLToBytes_AcceptsSupportedImageTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		mediaType    string
+		imageData    []byte
+		expectedMIME string
+	}{
+		{
+			name:         "png with normalized media type and parameter",
+			mediaType:    "IMAGE/PNG; charset=binary",
+			imageData:    decodeImageSecurityTestPNG(t),
+			expectedMIME: "image/png",
+		},
+		{
+			name:         "jpeg",
+			mediaType:    "image/jpeg",
+			imageData:    []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F'},
+			expectedMIME: "image/jpeg",
+		},
+		{
+			name:         "gif",
+			mediaType:    "image/gif",
+			imageData:    []byte("GIF89a"),
+			expectedMIME: "image/gif",
+		},
+		{
+			name:         "webp",
+			mediaType:    "image/webp",
+			imageData:    []byte("RIFF\x00\x00\x00\x00WEBPVP8 "),
+			expectedMIME: "image/webp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dataURL := "data:" + tt.mediaType + ";base64," + base64.StdEncoding.EncodeToString(tt.imageData)
+			decoded, err := decodeDataURLToBytes(dataURL)
+			require.NoError(t, err)
+			assert.Equal(t, tt.imageData, decoded)
+			assert.Equal(t, tt.expectedMIME, http.DetectContentType(decoded))
+		})
+	}
+}
+
+func TestDecodeDataURLToBytes_RejectsUnsafeImages(t *testing.T) {
+	pngData := decodeImageSecurityTestPNG(t)
+	tests := []struct {
+		name       string
+		dataURL    string
+		errMessage string
+	}{
+		{
+			name:       "bad base64",
+			dataURL:    "data:image/png;base64,%%%",
+			errMessage: "failed to decode base64 image data",
+		},
+		{
+			name:       "unsupported declared mime",
+			dataURL:    "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(pngData),
+			errMessage: "unsupported image type",
+		},
+		{
+			name:       "spoofed declared mime",
+			dataURL:    "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(pngData),
+			errMessage: "declared image type does not match image content",
+		},
+		{
+			name:       "unknown image content",
+			dataURL:    "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("not an image")),
+			errMessage: "unsupported image content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := decodeDataURLToBytes(tt.dataURL)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errMessage)
+		})
+	}
+}
+
+func TestImageInboundTransformer_TransformRequest_Generation_RejectsOversizedImageBeforeDecode(t *testing.T) {
+	originalMaxImageFileSize := maxImageFileSize
+	maxImageFileSize = 8
+	t.Cleanup(func() {
+		maxImageFileSize = originalMaxImageFileSize
+	})
+
+	pngData := decodeImageSecurityTestPNG(t)
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData)
+	reqBody, err := json.Marshal(map[string]any{
+		"prompt": "a cat",
+		"image":  dataURL,
+	})
+	require.NoError(t, err)
+
+	inbound := NewImageGenerationInboundTransformer()
+	_, err = inbound.TransformRequest(context.Background(), &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body:    reqBody,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "file too large")
+}
+
+func TestImageInboundTransformer_TransformRequest_Generation_RejectsTooManyImages(t *testing.T) {
+	pngDataURL := "data:image/png;base64," + imageSecurityTestPNGBase64
+	images := make([]string, maxImageCount+1)
+	for i := range images {
+		images[i] = pngDataURL
+	}
+
+	reqBody, err := json.Marshal(map[string]any{
+		"prompt": "combine images",
+		"image":  images,
+	})
+	require.NoError(t, err)
+
+	inbound := NewImageGenerationInboundTransformer()
+	_, err = inbound.TransformRequest(context.Background(), &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body:    reqBody,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too many images")
+}
+
+func TestImageInboundTransformer_TransformRequest_Generation_RejectsOversizedBody(t *testing.T) {
+	originalMaxBodySize := maxImageGenerationBodySize
+	maxImageGenerationBodySize = 64
+	t.Cleanup(func() {
+		maxImageGenerationBodySize = originalMaxBodySize
+	})
+
+	inbound := NewImageGenerationInboundTransformer()
+	_, err := inbound.TransformRequest(context.Background(), &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body:    bytes.Repeat([]byte(" "), maxImageGenerationBodySize+1),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "request body too large")
 }
 
 func TestImageInboundTransformer_TransformRequest_Edit_Multipart_WithMask(t *testing.T) {

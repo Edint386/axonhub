@@ -303,6 +303,7 @@ export interface TriggerGcCleanupInput {
   requestBodiesCleanupDays?: number;
   responseBodiesCleanupDays?: number;
   responseChunksCleanupDays?: number;
+  channelHealthProbeRunsCleanupDays?: number;
 }
 
 export interface GcCleanupPreviewItem {

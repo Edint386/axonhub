@@ -857,6 +857,57 @@ func NormalizeAPIKeyAutoDisableRules(policies *objects.ChannelPolicies) error {
 	return nil
 }
 
+// mergeChannelSettingsForUpdate copies input settings and keeps stored
+// providerQuota / healthProbe when the update omitted them. Channel settings
+// are persisted as one JSON blob, so a dialog that only edits rate limits
+// would otherwise wipe probe config and quota credentials.
+func mergeChannelSettingsForUpdate(existing, input *objects.ChannelSettings) *objects.ChannelSettings {
+	if input == nil {
+		return existing
+	}
+	if existing == nil {
+		return input
+	}
+
+	merged := *input
+	if merged.ProviderQuota == nil {
+		merged.ProviderQuota = existing.ProviderQuota
+	} else {
+		merged.ProviderQuota = mergeProviderQuotaSettings(existing.ProviderQuota, merged.ProviderQuota)
+	}
+	if merged.HealthProbe == nil {
+		merged.HealthProbe = existing.HealthProbe
+	}
+
+	return &merged
+}
+
+func mergeProviderQuotaSettings(existing, input *objects.ChannelProviderQuotaSettings) *objects.ChannelProviderQuotaSettings {
+	if input == nil {
+		return existing
+	}
+	if existing == nil {
+		return input
+	}
+
+	merged := *input
+	if merged.OpencodeGo == nil {
+		merged.OpencodeGo = existing.OpencodeGo
+		return &merged
+	}
+	if existing.OpencodeGo == nil {
+		return &merged
+	}
+
+	opencodeGo := *merged.OpencodeGo
+	if strings.TrimSpace(opencodeGo.AuthCookie) == "" {
+		opencodeGo.AuthCookie = existing.OpencodeGo.AuthCookie
+	}
+	merged.OpencodeGo = &opencodeGo
+
+	return &merged
+}
+
 // UpdateChannel updates an existing channel with the provided input.
 func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent.UpdateChannelInput) (*ent.Channel, error) {
 	log.Debug(ctx, "UpdateChannel", log.Int("id", id), log.Any("input", input))
@@ -976,7 +1027,18 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 		}
 
 		if input.Settings != nil {
-			mut.SetSettings(input.Settings)
+			existingSettingsRow, err := db.Channel.Query().
+				Where(channel.IDEQ(id)).
+				Select(channel.FieldSettings).
+				Only(ctx)
+			if err != nil && !ent.IsNotFound(err) {
+				return fmt.Errorf("failed to load existing channel settings: %w", err)
+			}
+			settings := input.Settings
+			if existingSettingsRow != nil {
+				settings = mergeChannelSettingsForUpdate(existingSettingsRow.Settings, input.Settings)
+			}
+			mut.SetSettings(settings)
 		}
 
 		if input.Policies != nil {

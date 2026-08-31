@@ -543,6 +543,53 @@ func TestChannelService_UpdateChannel(t *testing.T) {
 	}
 }
 
+func TestChannelService_UpdateChannelPreservesProbeAndProviderQuota(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	enabled := true
+	created, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Settings Preserve Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "key"}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetSettings(&objects.ChannelSettings{
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
+					WorkspaceID: "wk_keep",
+					AuthCookie:  "auth=keep-me",
+				},
+			},
+			HealthProbe: &objects.ChannelHealthProbeSettings{
+				ProbeEnabled: &enabled,
+			},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	updated, err := svc.UpdateChannel(ctx, created.ID, &ent.UpdateChannelInput{
+		Settings: &objects.ChannelSettings{
+			ExtraModelPrefix: "keep-",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Settings)
+	require.Equal(t, "keep-", updated.Settings.ExtraModelPrefix)
+	require.NotNil(t, updated.Settings.ProviderQuota)
+	require.NotNil(t, updated.Settings.ProviderQuota.OpencodeGo)
+	require.Equal(t, "wk_keep", updated.Settings.ProviderQuota.OpencodeGo.WorkspaceID)
+	require.Equal(t, "auth=keep-me", updated.Settings.ProviderQuota.OpencodeGo.AuthCookie)
+	require.NotNil(t, updated.Settings.HealthProbe)
+	require.NotNil(t, updated.Settings.HealthProbe.ProbeEnabled)
+	require.True(t, *updated.Settings.HealthProbe.ProbeEnabled)
+}
+
 func TestChannelService_UpdateChannelStatus(t *testing.T) {
 	svc, client := setupTestChannelService(t)
 	defer client.Close()
@@ -773,11 +820,11 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name          string
-		updates       []*ChannelOrderingItem
-		wantErr       bool
-		wantUpdated   int
-		verifyWeights map[int]int
+		name           string
+		updates        []*ChannelOrderingItem
+		wantErr        bool
+		wantUpdated    int
+		verifyWeights  map[int]int
 		verifyPriority map[int]int
 	}{
 		{

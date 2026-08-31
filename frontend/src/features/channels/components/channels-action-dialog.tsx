@@ -370,6 +370,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   // Debounced search values for better performance
   const debouncedFetchedModelsSearch = useDebounce(fetchedModelsSearch, 300);
   const debouncedSupportedModelsSearch = useDebounce(supportedModelsSearch, 300);
+  const debouncedApiKeysSearch = useDebounce(apiKeysSearch, 300);
 
   // Refs for virtual scrolling
   const fetchedModelsParentRef = useRef<HTMLDivElement>(null);
@@ -1329,7 +1330,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       }
 
       if (isEdit && currentRow) {
-        const nextSettings = mergeChannelSettingsForUpdate(settingsForSubmit, {
+        const nextSettings = mergeChannelSettingsForUpdate(currentRow.settings, {
+          ...settingsForSubmit,
           proxy: proxyConfig,
           passThroughUserAgent,
           passThroughBody,
@@ -3065,8 +3067,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                       const enabledKeysCount = validKeys.filter((k) => savedAPIKeySet.has(k) && !disabledKeySet.has(k)).length;
                       return validKeys
                         .filter((k) => {
-                          if (!apiKeysSearch.trim()) return true;
-                          const search = apiKeysSearch.trim().toLowerCase();
+                          if (!debouncedApiKeysSearch.trim()) return true;
+                          const search = debouncedApiKeysSearch.trim().toLowerCase();
                           return k.toLowerCase().includes(search) || k.slice(-4).toLowerCase().includes(search);
                         })
                         .map((key) => {

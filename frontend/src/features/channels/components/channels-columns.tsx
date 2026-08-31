@@ -28,6 +28,7 @@ import {
   IconShieldLock,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
@@ -653,6 +654,112 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
 
 OrderingWeightCell.displayName = 'OrderingWeightCell';
 
+const PriorityCell = memo(({ row }: { row: Row<Channel> }) => {
+  const channel = row.original;
+  const initialPriority = row.getValue('priority') as number | null;
+  const { t } = useTranslation();
+  const [isEditing, setIsEditing] = useState(false);
+  const [priority, setPriority] = useState<string>((initialPriority ?? 0).toString());
+  const updateChannel = useUpdateChannel();
+  const { channelPermissions } = usePermissions();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleDoubleClick = useCallback(() => {
+    setIsEditing(true);
+    setPriority((initialPriority ?? 0).toString());
+  }, [initialPriority]);
+
+  const handleSave = useCallback(async () => {
+    const trimmedPriority = priority.trim();
+    if (trimmedPriority === '') {
+      setPriority((initialPriority ?? 0).toString());
+      setIsEditing(false);
+      return;
+    }
+
+    if (!/^[+-]?\d+$/.test(trimmedPriority)) {
+      toast.error(t('channels.dialogs.fields.priority.integer'));
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      return;
+    }
+
+    const nextPriority = Number(trimmedPriority);
+    if (!Number.isSafeInteger(nextPriority)) {
+      toast.error(t('channels.dialogs.fields.priority.integer'));
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      return;
+    }
+
+    if (nextPriority === (initialPriority ?? 0)) {
+      setIsEditing(false);
+      return;
+    }
+
+    try {
+      await updateChannel.mutateAsync({
+        id: channel.id,
+        input: { priority: nextPriority },
+      });
+      setIsEditing(false);
+    } catch (_error) {
+      // Error handled by mutation hook
+    }
+  }, [channel.id, priority, initialPriority, updateChannel, t]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        handleSave();
+      } else if (e.key === 'Escape') {
+        setIsEditing(false);
+        setPriority((initialPriority ?? 0).toString());
+      }
+    },
+    [handleSave, initialPriority]
+  );
+
+  if (!channelPermissions.canWrite) {
+    return <span className='font-mono text-sm'>{initialPriority ?? 0}</span>;
+  }
+
+  if (isEditing) {
+    return (
+      <div className='flex justify-center px-2'>
+        <Input
+          ref={inputRef}
+          type='number'
+          inputMode='numeric'
+          step='1'
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          className='h-7 w-20 text-center font-mono text-sm'
+          disabled={updateChannel.isPending}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className='group flex cursor-pointer items-center justify-center gap-2' onDoubleClick={handleDoubleClick}>
+      <span className='font-mono text-sm'>{initialPriority ?? 0}</span>
+      {updateChannel.isPending && <IconLoader2 className='text-muted-foreground h-3 w-3 animate-spin' />}
+    </div>
+  );
+});
+
+PriorityCell.displayName = 'PriorityCell';
+
 const CreatedAtCell = memo(({ row }: { row: Row<Channel> }) => {
   const raw = row.getValue('createdAt') as unknown;
   const date = raw instanceof Date ? raw : new Date(raw as string);
@@ -824,6 +931,17 @@ export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrit
         className: 'text-center',
       },
       enableSorting: false,
+      enableHiding: true,
+    },
+    {
+      accessorKey: 'priority',
+      header: ({ column }) => <DataTableColumnHeader column={column} title={t('channels.columns.priority')} className='justify-center' />,
+      cell: PriorityCell,
+      meta: {
+        className: 'w-20 min-w-20 text-center',
+      },
+      sortingFn: 'alphanumeric',
+      enableSorting: true,
       enableHiding: true,
     },
     {

@@ -962,13 +962,29 @@ func (s *LoadBalancedSelector) sortCandidates(
 	// Hard-unavailable channels remain as last-resort retry candidates.
 	result := make([]*ChannelModelsCandidate, 0, min(requiredCount, len(candidates)))
 	deferredUnavailable := make([]*ChannelModelsCandidate, 0)
+	skippedByHardUnavailable := 0
 
 	for _, p := range priorities {
 		group := make([]*ChannelModelsCandidate, 0, len(priorityGroups[p]))
 		for _, candidate := range priorityGroups[p] {
-			if _, unavailable := loadBalancer.HardUnavailableReason(ctx, candidate.Channel); unavailable {
-				deferredUnavailable = append(deferredUnavailable, candidate)
-				continue
+			if loadBalancer != nil {
+				reason, unavailable := loadBalancer.HardUnavailableReason(ctx, candidate.Channel)
+				if unavailable {
+					skippedByHardUnavailable++
+					deferredUnavailable = append(deferredUnavailable, candidate)
+
+					if log.DebugEnabled(ctx) && candidate.Channel != nil {
+						log.Debug(ctx, "deferred hard-unavailable channel candidate",
+							log.String("model", req.Model),
+							log.Int("channel_id", candidate.Channel.ID),
+							log.String("channel_name", candidate.Channel.Name),
+							log.Int("model_priority", p.modelPriority),
+							log.Int("channel_priority", p.channelPriority),
+							log.String("reason", reason))
+					}
+
+					continue
+				}
 			}
 			group = append(group, candidate)
 		}
@@ -1012,6 +1028,7 @@ func (s *LoadBalancedSelector) sortCandidates(
 			log.Int("total_candidates", len(candidates)),
 			log.Int("sorted_candidates", len(result)),
 			log.Int("required_count", requiredCount),
+			log.Int("hard_unavailable_candidates", skippedByHardUnavailable),
 			log.Any("priority_tiers", priorities))
 	}
 
