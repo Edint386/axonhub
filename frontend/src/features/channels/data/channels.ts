@@ -95,6 +95,21 @@ const CHANNEL_QUOTA_FIELDS = `
           }
 `;
 
+const CHANNEL_PROVIDER_QUOTA_FIELDS = `
+          providerQuota {
+            opencodeGo {
+              workspaceId
+              authCookie
+            }
+          }
+`;
+
+const CHANNEL_HEALTH_PROBE_FIELDS = `
+          healthProbe {
+            probeEnabled
+          }
+`;
+
 const CREATE_CHANNEL_MUTATION = `
   mutation CreateChannel($input: CreateChannelInput!) {
     createChannel(input: $input) {
@@ -142,6 +157,8 @@ const CREATE_CHANNEL_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
+        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
+        ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
           pattern
@@ -214,6 +231,8 @@ const DUPLICATE_CHANNEL_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
+        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
+        ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
           pattern
@@ -286,6 +305,8 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
+        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
+        ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
           pattern
@@ -358,6 +379,8 @@ const UPDATE_CHANNEL_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
+        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
+        ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
           pattern
@@ -557,6 +580,8 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           passThroughBody
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
+        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
+        ${CHANNEL_HEALTH_PROBE_FIELDS}
           retryableStatusCodes
           retryableErrorPatterns {
             pattern
@@ -786,6 +811,8 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           passThroughBody
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
+        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
+        ${CHANNEL_HEALTH_PROBE_FIELDS}
           retryableStatusCodes
           retryableErrorPatterns {
             pattern
@@ -935,6 +962,8 @@ const QUERY_CHANNELS_QUERY = `
             passThroughBody
             ${CHANNEL_RATE_LIMIT_FIELDS}
             ${CHANNEL_QUOTA_FIELDS}
+        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
+        ${CHANNEL_HEALTH_PROBE_FIELDS}
             retryableStatusCodes
             retryableErrorPatterns {
               pattern

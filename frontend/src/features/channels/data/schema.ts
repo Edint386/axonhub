@@ -334,6 +334,22 @@ export const retryableErrorPatternSchema = z.object({
 });
 export type RetryableErrorPattern = z.infer<typeof retryableErrorPatternSchema>;
 
+export const openCodeGoQuotaSettingsSchema = z.object({
+  workspaceId: z.string().optional().nullable(),
+  authCookie: z.string().optional().nullable(),
+});
+export type OpenCodeGoQuotaSettings = z.infer<typeof openCodeGoQuotaSettingsSchema>;
+
+export const channelProviderQuotaSettingsSchema = z.object({
+  opencodeGo: openCodeGoQuotaSettingsSchema.optional().nullable(),
+});
+export type ChannelProviderQuotaSettings = z.infer<typeof channelProviderQuotaSettingsSchema>;
+
+export const channelHealthProbeSettingsSchema = z.object({
+  probeEnabled: z.boolean().optional().nullable(),
+});
+export type ChannelHealthProbeSettings = z.infer<typeof channelHealthProbeSettingsSchema>;
+
 // Channel Settings
 export const channelSettingsSchema = z.object({
   extraModelPrefix: z.string().optional(),
@@ -352,6 +368,8 @@ export const channelSettingsSchema = z.object({
   quota: channelQuotaSchema.optional().nullable(),
   retryableStatusCodes: z.array(z.number().int().min(400).max(599)).optional().nullable(),
   retryableErrorPatterns: z.array(retryableErrorPatternSchema).optional().nullable(),
+  providerQuota: channelProviderQuotaSettingsSchema.optional().nullable(),
+  healthProbe: channelHealthProbeSettingsSchema.optional().nullable(),
 });
 
 export type ChannelSettings = z.infer<typeof channelSettingsSchema>;

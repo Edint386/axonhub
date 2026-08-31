@@ -99,6 +99,7 @@ const DEFAULT_CLEANUP_OPTIONS: CleanupOption[] = [
   { resourceType: 'request_bodies', enabled: false, cleanupDays: 7 },
   { resourceType: 'response_bodies', enabled: false, cleanupDays: 7 },
   { resourceType: 'response_chunks', enabled: false, cleanupDays: 3 },
+  { resourceType: 'channel_health_probe_runs', enabled: true, cleanupDays: 30 },
 ];
 
 function ensureCleanupOptions(options: CleanupOption[]): CleanupOption[] {
@@ -151,6 +152,7 @@ export function StoragePolicySettings() {
   const [manualRequestBodiesDays, setManualRequestBodiesDays] = useState(7);
   const [manualResponseBodiesDays, setManualResponseBodiesDays] = useState(7);
   const [manualResponseChunksDays, setManualResponseChunksDays] = useState(3);
+  const [manualChannelHealthProbeRunsDays, setManualChannelHealthProbeRunsDays] = useState(30);
   const [previewItems, setPreviewItems] = useState<GcCleanupPreviewItem[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -177,8 +179,16 @@ export function StoragePolicySettings() {
     requestBodyDays: number,
     responseBodyDays: number,
     chunkDays: number,
+    probeDays: number,
   ) => {
-    if (reqDays <= 0 && usageDays <= 0 && requestBodyDays <= 0 && responseBodyDays <= 0 && chunkDays <= 0) {
+    if (
+      reqDays <= 0 &&
+      usageDays <= 0 &&
+      requestBodyDays <= 0 &&
+      responseBodyDays <= 0 &&
+      chunkDays <= 0 &&
+      probeDays <= 0
+    ) {
       setPreviewItems([]);
       setPreviewFailed(false);
       return;
@@ -201,6 +211,7 @@ export function StoragePolicySettings() {
           requestBodiesCleanupDays: requestBodyDays,
           responseBodiesCleanupDays: responseBodyDays,
           responseChunksCleanupDays: chunkDays,
+          channelHealthProbeRunsCleanupDays: probeDays,
         },
         controller.signal
       );
@@ -235,12 +246,13 @@ export function StoragePolicySettings() {
     requestBodyDays: number,
     responseBodyDays: number,
     chunkDays: number,
+    probeDays: number,
   ) => {
     if (previewTimerRef.current) {
       clearTimeout(previewTimerRef.current);
     }
     previewTimerRef.current = setTimeout(() => {
-      fetchPreview(reqDays, usageDays, requestBodyDays, responseBodyDays, chunkDays);
+      fetchPreview(reqDays, usageDays, requestBodyDays, responseBodyDays, chunkDays, probeDays);
     }, 500);
   };
 
@@ -261,14 +273,16 @@ export function StoragePolicySettings() {
       const requestBodyDays = cleanupOption(storagePolicyState.cleanupOptions, 'request_bodies')?.cleanupDays || 7;
       const responseBodyDays = cleanupOption(storagePolicyState.cleanupOptions, 'response_bodies')?.cleanupDays || 7;
       const chunkDays = cleanupOption(storagePolicyState.cleanupOptions, 'response_chunks')?.cleanupDays || 3;
+      const probeDays = cleanupOption(storagePolicyState.cleanupOptions, 'channel_health_probe_runs')?.cleanupDays || 30;
       setManualRequestsDays(reqDays);
       setManualUsageLogsDays(usageDays);
       setManualRequestBodiesDays(requestBodyDays);
       setManualResponseBodiesDays(responseBodyDays);
       setManualResponseChunksDays(chunkDays);
+      setManualChannelHealthProbeRunsDays(probeDays);
       setPreviewItems([]);
       setPreviewFailed(false);
-      schedulePreview(reqDays, usageDays, requestBodyDays, responseBodyDays, chunkDays);
+      schedulePreview(reqDays, usageDays, requestBodyDays, responseBodyDays, chunkDays, probeDays);
     }
   };
 
@@ -282,31 +296,79 @@ export function StoragePolicySettings() {
   const handleManualRequestsDaysChange = (value: number) => {
     const days = clampDays(value);
     setManualRequestsDays(days);
-    schedulePreview(days, manualUsageLogsDays, manualRequestBodiesDays, manualResponseBodiesDays, manualResponseChunksDays);
+    schedulePreview(
+      days,
+      manualUsageLogsDays,
+      manualRequestBodiesDays,
+      manualResponseBodiesDays,
+      manualResponseChunksDays,
+      manualChannelHealthProbeRunsDays
+    );
   };
 
   const handleManualUsageLogsDaysChange = (value: number) => {
     const days = clampDays(value);
     setManualUsageLogsDays(days);
-    schedulePreview(manualRequestsDays, days, manualRequestBodiesDays, manualResponseBodiesDays, manualResponseChunksDays);
+    schedulePreview(
+      manualRequestsDays,
+      days,
+      manualRequestBodiesDays,
+      manualResponseBodiesDays,
+      manualResponseChunksDays,
+      manualChannelHealthProbeRunsDays
+    );
   };
 
   const handleManualRequestBodiesDaysChange = (value: number) => {
     const days = clampDays(value);
     setManualRequestBodiesDays(days);
-    schedulePreview(manualRequestsDays, manualUsageLogsDays, days, manualResponseBodiesDays, manualResponseChunksDays);
+    schedulePreview(
+      manualRequestsDays,
+      manualUsageLogsDays,
+      days,
+      manualResponseBodiesDays,
+      manualResponseChunksDays,
+      manualChannelHealthProbeRunsDays
+    );
   };
 
   const handleManualResponseBodiesDaysChange = (value: number) => {
     const days = clampDays(value);
     setManualResponseBodiesDays(days);
-    schedulePreview(manualRequestsDays, manualUsageLogsDays, manualRequestBodiesDays, days, manualResponseChunksDays);
+    schedulePreview(
+      manualRequestsDays,
+      manualUsageLogsDays,
+      manualRequestBodiesDays,
+      days,
+      manualResponseChunksDays,
+      manualChannelHealthProbeRunsDays
+    );
   };
 
   const handleManualResponseChunksDaysChange = (value: number) => {
     const days = clampDays(value);
     setManualResponseChunksDays(days);
-    schedulePreview(manualRequestsDays, manualUsageLogsDays, manualRequestBodiesDays, manualResponseBodiesDays, days);
+    schedulePreview(
+      manualRequestsDays,
+      manualUsageLogsDays,
+      manualRequestBodiesDays,
+      manualResponseBodiesDays,
+      days,
+      manualChannelHealthProbeRunsDays
+    );
+  };
+
+  const handleManualChannelHealthProbeRunsDaysChange = (value: number) => {
+    const days = clampDays(value);
+    setManualChannelHealthProbeRunsDays(days);
+    schedulePreview(
+      manualRequestsDays,
+      manualUsageLogsDays,
+      manualRequestBodiesDays,
+      manualResponseBodiesDays,
+      manualResponseChunksDays,
+      days
+    );
   };
 
   const handleManualCleanup = () => {
@@ -316,6 +378,7 @@ export function StoragePolicySettings() {
       requestBodiesCleanupDays: manualRequestBodiesDays,
       responseBodiesCleanupDays: manualResponseBodiesDays,
       responseChunksCleanupDays: manualResponseChunksDays,
+      channelHealthProbeRunsCleanupDays: manualChannelHealthProbeRunsDays,
     });
   };
 
@@ -433,6 +496,11 @@ export function StoragePolicySettings() {
                   <div className='text-sm font-medium'>{t('system.storage.policy.runCleanupGroupDelete')}</div>
                   {renderManualDaysRow('requests', manualRequestsDays, handleManualRequestsDaysChange)}
                   {renderManualDaysRow('usage_logs', manualUsageLogsDays, handleManualUsageLogsDaysChange)}
+                  {renderManualDaysRow(
+                    'channel_health_probe_runs',
+                    manualChannelHealthProbeRunsDays,
+                    handleManualChannelHealthProbeRunsDaysChange
+                  )}
                 </div>
                 <div className='space-y-3'>
                   <div className='text-sm font-medium'>{t('system.storage.policy.runCleanupGroupStrip')}</div>
