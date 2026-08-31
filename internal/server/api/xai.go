@@ -189,7 +189,10 @@ func (handler *XAIHandlers) DecodeSSO(c *gin.Context) {
 	if request.Proxy != nil && request.Proxy.Type == httpclient.ProxyTypeURL && request.Proxy.URL != "" {
 		client = client.WithProxy(request.Proxy)
 	}
-	credentials, err := subscription.ConvertSSOToBuild(ctx, request.SSOToken, subscription.SSODeviceOptions{HTTPClient: client.GetNativeClient()})
+	credentials, err := subscription.ConvertSSOToBuild(ctx, request.SSOToken, subscription.SSODeviceOptions{
+		HTTPClient: client.GetNativeClient(),
+		Sleep:      nil,
+	})
 	if err != nil {
 		JSONError(c, http.StatusBadGateway, fmt.Errorf("xAI SSO conversion failed: %w", err))
 		return
