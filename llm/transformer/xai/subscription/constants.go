@@ -6,6 +6,7 @@ const (
 	ClientID     = "b1a00492-073a-47ea-816f-4c329264a828"
 	RedirectURI  = "http://127.0.0.1:56121/callback"
 	Scopes       = "openid profile email offline_access grok-cli:access api:access"
+	SSOScopes    = Scopes + " conversations:read conversations:write"
 
 	DefaultBaseURL    = "https://cli-chat-proxy.grok.com/v1"
 	BillingWeeklyURL  = DefaultBaseURL + "/billing?format=credits"
@@ -19,6 +20,10 @@ const (
 	CLITokenAuthHeader        = "x-xai-token-auth"
 	CLIUserAgent              = "xai-grok-workspace/" + CLIClientVersion
 
+	SSOAccountsURL = "https://accounts.x.ai/"
+	SSODeviceURL   = "https://auth.x.ai/oauth2/device/code"
+	SSOVerifyURL   = "https://auth.x.ai/oauth2/device/verify"
+	SSOApproveURL  = "https://auth.x.ai/oauth2/device/approve"
 )
 
 func DefaultModels() []string {

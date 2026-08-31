@@ -116,6 +116,7 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 		adminGroup.POST("/codex/auth/decode", handlers.Codex.DecodeAuthJSON)
 		adminGroup.POST("/xai/oauth/start", handlers.XAI.StartOAuth)
 		adminGroup.POST("/xai/oauth/exchange", handlers.XAI.Exchange)
+		adminGroup.POST("/xai/oauth/sso", handlers.XAI.DecodeSSO)
 
 		adminGroup.POST("/claudecode/oauth/start", handlers.ClaudeCode.StartOAuth)
 		adminGroup.POST("/claudecode/oauth/exchange", handlers.ClaudeCode.Exchange)
