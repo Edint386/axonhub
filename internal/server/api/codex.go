@@ -110,6 +110,32 @@ type ExchangeCodexOAuthResponse struct {
 	Credentials string `json:"credentials"`
 }
 
+func (h *CodexHandlers) httpClientForOAuthExchange(proxy *httpclient.ProxyConfig) *httpclient.HttpClient {
+	if proxy == nil {
+		return h.httpClient
+	}
+
+	return h.httpClient.WithProxy(proxy)
+}
+
+func validateCodexOAuthProxy(proxy *httpclient.ProxyConfig) error {
+	if proxy == nil {
+		return nil
+	}
+
+	switch proxy.Type {
+	case httpclient.ProxyTypeDisabled, httpclient.ProxyTypeEnvironment:
+		return nil
+	case httpclient.ProxyTypeURL:
+		if strings.TrimSpace(proxy.URL) == "" {
+			return errors.New("proxy URL is required when proxy type is url")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported proxy type %q", proxy.Type)
+	}
+}
+
 type DecodeCodexAuthJSONRequest struct {
 	AuthJSON string `json:"auth_json" binding:"required"`
 }
@@ -184,6 +210,11 @@ func (h *CodexHandlers) Exchange(c *gin.Context) {
 		return
 	}
 
+	if err := validateCodexOAuthProxy(req.Proxy); err != nil {
+		JSONError(c, http.StatusBadRequest, err)
+		return
+	}
+
 	cacheKey := codexOAuthCacheKey(req.SessionID)
 
 	state, err := h.stateCache.Get(ctx, cacheKey)
@@ -207,11 +238,7 @@ func (h *CodexHandlers) Exchange(c *gin.Context) {
 		return
 	}
 
-	// Create HTTP client with proxy if provided
-	httpClient := h.httpClient
-	if req.Proxy != nil && req.Proxy.Type == httpclient.ProxyTypeURL && req.Proxy.URL != "" {
-		httpClient = h.httpClient.WithProxy(req.Proxy)
-	}
+	httpClient := h.httpClientForOAuthExchange(req.Proxy)
 
 	tokenProvider := codex.NewTokenProvider(codex.TokenProviderParams{
 		HTTPClient: httpClient,

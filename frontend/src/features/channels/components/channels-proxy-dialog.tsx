@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
+import { useForm, type UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { IconPlayerPlay } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,13 +14,12 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import LongText from '@/components/long-text';
+import { useProxyPresets, useSaveProxyPreset, type ProxyPreset } from '@/features/system/data/system';
 import { useUpdateChannel, useTestChannel } from '../data/channels';
+import { normalizeProxyConfig, ProxyType, proxyConfigSchema, type ProxyConfig } from '../data/proxy-config';
 import { Channel } from '../data/schema';
-import { mergeChannelSettingsForUpdate } from '../utils/merge';
 import { ErrorDisplay } from '../utils/error-formatter';
-import { useProxyPresets, useSaveProxyPreset } from '@/features/system/data/system';
-import { usePermissions } from '@/hooks/usePermissions';
+import { mergeChannelSettingsForUpdate } from '../utils/merge';
 
 interface Props {
   open: boolean;
@@ -28,37 +27,151 @@ interface Props {
   currentRow: Channel;
 }
 
-// Proxy type enum
-export enum ProxyType {
-  DISABLED = 'disabled',
-  ENVIRONMENT = 'environment',
-  URL = 'url',
+interface ProxyConfigFieldsProps {
+  form: UseFormReturn<ProxyConfig>;
+  proxyPresets: ProxyPreset[];
 }
 
-// Proxy configuration schema
-const proxyConfigSchema = z
-  .object({
-    type: z.nativeEnum(ProxyType),
-    url: z.string().optional(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-    disableConnectionReuse: z.boolean().optional(),
-  })
-  .refine(
-    (data) => {
-      // If type is URL, url field is required
-      if (data.type === ProxyType.URL) {
-        return !!data.url && data.url.trim() !== '';
-      }
-      return true;
-    },
-    {
-      message: 'Proxy URL is required when type is URL',
-      path: ['url'],
-    }
-  );
+export function ProxyConfigFields({ form, proxyPresets }: ProxyConfigFieldsProps) {
+  const { t } = useTranslation();
+  const selectedProxyType = form.watch('type');
 
-type ProxyConfig = z.infer<typeof proxyConfigSchema>;
+  const handlePresetSelect = (presetUrl: string) => {
+    const preset = proxyPresets.find((item) => item.url === presetUrl);
+    if (!preset) return;
+
+    form.setValue('type', ProxyType.URL);
+    form.setValue('url', preset.url);
+    form.setValue('username', preset.username || '');
+    form.setValue('password', preset.password || '');
+  };
+
+  return (
+    <>
+      <FormField
+        control={form.control}
+        name='type'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{t('channels.dialogs.proxy.fields.type.label')}</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger data-testid='proxy-type-select'>
+                  <SelectValue placeholder={t('channels.dialogs.proxy.fields.type.placeholder')} />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value={ProxyType.DISABLED}>{t('channels.dialogs.proxy.types.disabled')}</SelectItem>
+                <SelectItem value={ProxyType.ENVIRONMENT}>{t('channels.dialogs.proxy.types.environment')}</SelectItem>
+                <SelectItem value={ProxyType.URL}>{t('channels.dialogs.proxy.types.url')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      {selectedProxyType === ProxyType.URL && proxyPresets.length > 0 && (
+        <FormItem>
+          <FormLabel>{t('channels.dialogs.proxy.presets.label')}</FormLabel>
+          <Select onValueChange={handlePresetSelect}>
+            <FormControl>
+              <SelectTrigger>
+                <SelectValue placeholder={t('channels.dialogs.proxy.presets.placeholder')} />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {proxyPresets.map((preset) => (
+                <SelectItem key={preset.url} value={preset.url}>
+                  {preset.name || preset.url}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormItem>
+      )}
+
+      {selectedProxyType === ProxyType.URL && (
+        <>
+          <FormField
+            control={form.control}
+            name='url'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('channels.dialogs.proxy.fields.url.label')}</FormLabel>
+                <FormControl>
+                  <Input data-testid='proxy-url-input' placeholder={t('channels.dialogs.proxy.fields.url.placeholder')} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='username'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('channels.dialogs.proxy.fields.username.label')}</FormLabel>
+                <FormControl>
+                  <Input
+                    data-testid='proxy-username-input'
+                    placeholder={t('channels.dialogs.proxy.fields.username.placeholder')}
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='password'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('channels.dialogs.proxy.fields.password.label')}</FormLabel>
+                <FormControl>
+                  <Input
+                    data-testid='proxy-password-input'
+                    type='password'
+                    placeholder={t('channels.dialogs.proxy.fields.password.placeholder')}
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='disableConnectionReuse'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between gap-4 rounded-md border p-3'>
+                <div className='space-y-0.5'>
+                  <FormLabel>{t('channels.dialogs.proxy.fields.disableConnectionReuse.label')}</FormLabel>
+                  <FormDescription>{t('channels.dialogs.proxy.fields.disableConnectionReuse.description')}</FormDescription>
+                </div>
+                <FormControl>
+                  <Switch data-testid='proxy-disable-connection-reuse' checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </>
+      )}
+
+      {selectedProxyType === ProxyType.ENVIRONMENT && (
+        <div className='text-muted-foreground rounded-md border p-3 text-sm'>{t('channels.dialogs.proxy.environmentHint')}</div>
+      )}
+
+      {selectedProxyType === ProxyType.DISABLED && (
+        <div className='text-muted-foreground rounded-md border p-3 text-sm'>{t('channels.dialogs.proxy.disabledHint')}</div>
+      )}
+    </>
+  );
+}
 
 export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
   const { t } = useTranslation();
@@ -88,30 +201,9 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
     },
   });
 
-  const selectedProxyType = form.watch('type');
-
-  const handlePresetSelect = (presetUrl: string) => {
-    const preset = proxyPresets.find((p) => p.url === presetUrl);
-    if (preset) {
-      form.setValue('type', ProxyType.URL);
-      form.setValue('url', preset.url);
-      form.setValue('username', preset.username || '');
-      form.setValue('password', preset.password || '');
-    }
-  };
-
   const onSubmit = async (values: ProxyConfig) => {
     try {
-      // Prepare proxy config
-      const proxyConfig = {
-        type: values.type,
-        ...(values.type === ProxyType.URL && {
-          url: values.url,
-          username: values.username || undefined,
-          password: values.password || undefined,
-          disableConnectionReuse: values.disableConnectionReuse,
-        }),
-      };
+      const proxyConfig = normalizeProxyConfig(values);
 
       const nextSettings = mergeChannelSettingsForUpdate(currentRow.settings, {
         proxy: proxyConfig,
@@ -148,16 +240,7 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
       // Get current form values
       const values = form.getValues();
 
-      // Prepare proxy config for testing
-      const proxyConfig = {
-        type: values.type,
-        ...(values.type === ProxyType.URL && {
-          url: values.url,
-          username: values.username || undefined,
-          password: values.password || undefined,
-          disableConnectionReuse: values.disableConnectionReuse,
-        }),
-      };
+      const proxyConfig = normalizeProxyConfig(values);
 
       const result = await testChannel.mutateAsync({
         channelID: currentRow.id,
@@ -217,118 +300,7 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
             <CardContent>
               <Form {...form}>
                 <form className='space-y-4'>
-                  <FormField
-                    control={form.control}
-                    name='type'
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t('channels.dialogs.proxy.fields.type.label')}</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={t('channels.dialogs.proxy.fields.type.placeholder')} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value={ProxyType.DISABLED}>{t('channels.dialogs.proxy.types.disabled')}</SelectItem>
-                            <SelectItem value={ProxyType.ENVIRONMENT}>{t('channels.dialogs.proxy.types.environment')}</SelectItem>
-                            <SelectItem value={ProxyType.URL}>{t('channels.dialogs.proxy.types.url')}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {selectedProxyType === ProxyType.URL && proxyPresets.length > 0 && (
-                    <FormItem>
-                      <FormLabel>{t('channels.dialogs.proxy.presets.label')}</FormLabel>
-                      <Select onValueChange={handlePresetSelect}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('channels.dialogs.proxy.presets.placeholder')} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {proxyPresets.map((preset) => (
-                            <SelectItem key={preset.url} value={preset.url}>
-                              {preset.name || preset.url}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-
-                  {selectedProxyType === ProxyType.URL && (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name='url'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('channels.dialogs.proxy.fields.url.label')}</FormLabel>
-                            <FormControl>
-                              <Input placeholder={t('channels.dialogs.proxy.fields.url.placeholder')} {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='username'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('channels.dialogs.proxy.fields.username.label')}</FormLabel>
-                            <FormControl>
-                              <Input placeholder={t('channels.dialogs.proxy.fields.username.placeholder')} {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='password'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('channels.dialogs.proxy.fields.password.label')}</FormLabel>
-                            <FormControl>
-                              <Input type='password' placeholder={t('channels.dialogs.proxy.fields.password.placeholder')} {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='disableConnectionReuse'
-                        render={({ field }) => (
-                          <FormItem className='flex flex-row items-center justify-between gap-4 rounded-md border p-3'>
-                            <div className='space-y-0.5'>
-                              <FormLabel>{t('channels.dialogs.proxy.fields.disableConnectionReuse.label')}</FormLabel>
-                              <FormDescription>{t('channels.dialogs.proxy.fields.disableConnectionReuse.description')}</FormDescription>
-                            </div>
-                            <FormControl>
-                              <Switch checked={field.value} onCheckedChange={field.onChange} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </>
-                  )}
-
-                  {selectedProxyType === ProxyType.ENVIRONMENT && (
-                    <div className='text-muted-foreground rounded-md border p-3 text-sm'>{t('channels.dialogs.proxy.environmentHint')}</div>
-                  )}
-
-                  {selectedProxyType === ProxyType.DISABLED && (
-                    <div className='text-muted-foreground rounded-md border p-3 text-sm'>{t('channels.dialogs.proxy.disabledHint')}</div>
-                  )}
+                  <ProxyConfigFields form={form} proxyPresets={proxyPresets} />
                 </form>
               </Form>
             </CardContent>
@@ -356,7 +328,8 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
                     )}
                     {testResult.ttftMs != null && (
                       <p>
-                        <span className='font-medium'>{t('channels.dialogs.test.firstTokenLatency')}:</span> {testResult.ttftMs.toFixed(0)}ms
+                        <span className='font-medium'>{t('channels.dialogs.test.firstTokenLatency')}:</span> {testResult.ttftMs.toFixed(0)}
+                        ms
                       </p>
                     )}
                   </div>

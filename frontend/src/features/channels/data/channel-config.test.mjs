@@ -97,6 +97,7 @@ test('channel proxy connection reuse setting is submitted, echoed, and localized
   const schema = read('features/channels/data/schema.ts');
   const channelsData = read('features/channels/data/channels.ts');
   const proxyDialog = read('features/channels/components/channels-proxy-dialog.tsx');
+  const proxyConfig = read('features/channels/data/proxy-config.ts');
 
   assert.match(
     schema,
@@ -111,18 +112,17 @@ test('channel proxy connection reuse setting is submitted, echoed, and localized
   }
   assert.match(channelsData, /proxy\?:\s*ProxyConfig;/, 'channel test input should use the shared ProxyConfig type');
 
+  assert.match(proxyDialog, /export function ProxyConfigFields/, 'proxy fields should be reusable outside the saved-channel dialog');
   assert.match(proxyDialog, /name='disableConnectionReuse'/, 'proxy dialog should render the connection reuse switch');
   const submitSection = proxyDialog.slice(proxyDialog.indexOf('const onSubmit'), proxyDialog.indexOf('const handleTest'));
-  const testSection = proxyDialog.slice(proxyDialog.indexOf('const handleTest'), proxyDialog.indexOf('return ('));
+  const handleTestStart = proxyDialog.indexOf('const handleTest');
+  const testSection = proxyDialog.slice(handleTestStart, proxyDialog.indexOf('\n  return (', handleTestStart));
+  assert.match(submitSection, /normalizeProxyConfig\(values\)/, 'channel save payload should use the shared proxy normalizer');
+  assert.match(testSection, /normalizeProxyConfig\(values\)/, 'channel test payload should use the shared proxy normalizer');
   assert.match(
-    submitSection,
-    /const proxyConfig[\s\S]*disableConnectionReuse:\s*values\.disableConnectionReuse/,
-    'channel save payload should send disableConnectionReuse'
-  );
-  assert.match(
-    testSection,
-    /const proxyConfig[\s\S]*disableConnectionReuse:\s*values\.disableConnectionReuse/,
-    'channel test payload should send disableConnectionReuse'
+    proxyConfig,
+    /normalizeProxyConfig[\s\S]*disableConnectionReuse:\s*values\.disableConnectionReuse/,
+    'the shared normalizer should preserve disableConnectionReuse for URL proxies'
   );
   const presetPayload = submitSection.match(/saveProxyPreset\.mutate\(\{[\s\S]*?\}\);/)?.[0] ?? '';
   assert.doesNotMatch(presetPayload, /disableConnectionReuse/, 'proxy presets should remain address and credential only');
@@ -145,4 +145,51 @@ test('channel proxy connection reuse setting is submitted, echoed, and localized
     zh['channels.dialogs.proxy.fields.disableConnectionReuse.description'],
     '适用于 Resin 等按连接切换节点的代理池。开启后每个请求都会重新建立代理连接，并增加 CONNECT 与 TLS 握手开销。'
   );
+});
+
+test('Codex OAuth configures the same proxy used after the channel is saved', () => {
+  const actionDialog = read('features/channels/components/channels-action-dialog.tsx');
+  const oauthProxyDialog = read('features/channels/components/oauth-proxy-dialog.tsx');
+  const oauthHook = read('features/channels/hooks/use-oauth-flow.ts');
+
+  assert.match(actionDialog, /data-testid='codex-oauth-proxy-button'/, 'Codex OAuth should expose a pre-login proxy button');
+  assert.match(
+    actionDialog,
+    /!isEdit && !\(isCodexType && authMode === 'official'\)/,
+    'official Codex login should use the proxy button instead of rendering a second inline proxy editor'
+  );
+  assert.match(actionDialog, /<OAuthProxyDialog[\s\S]*value=\{proxyConfig\}[\s\S]*onApply=\{handleOAuthProxyApply\}/);
+  assert.equal(
+    (actionDialog.match(/proxy:\s*proxyConfig/g) ?? []).length,
+    2,
+    'create and update settings should both persist the exact OAuth proxy config'
+  );
+  assert.match(
+    actionDialog,
+    /if \(open\) return;[\s\S]*setProxyType[\s\S]*setProxyDisableConnectionReuse[\s\S]*setOAuthProxyDialogOpen\(false\)/,
+    'closing the channel dialog should reset draft OAuth proxy state'
+  );
+  assert.match(
+    oauthProxyDialog,
+    /<ProxyConfigFields form=\{form\} proxyPresets=\{proxyPresets\}/,
+    'OAuth should reuse the channel proxy fields'
+  );
+  assert.match(
+    oauthHook,
+    /if \(proxyConfig\) \{\s*exchangeInput\.proxy = proxyConfig;/,
+    'OAuth exchange should send every explicit proxy mode'
+  );
+  assert.match(oauthHook, /proxyConfigSchema\.safeParse\(proxyConfig\)/, 'OAuth should reject malformed proxy config before starting or exchanging');
+
+  const en = parseLocale('en');
+  assert.equal(en['channels.dialogs.oauth.proxy.button'], 'Set Proxy');
+  assert.match(en['channels.dialogs.oauth.proxy.description'], /token exchange/);
+  assert.match(en['channels.dialogs.oauth.proxy.current'], /Current server route/);
+  assert.match(en['channels.dialogs.oauth.errors.proxyInvalid'], /valid proxy/);
+
+  const zh = parseLocale('zh-CN');
+  assert.equal(zh['channels.dialogs.oauth.proxy.button'], '设置代理');
+  assert.match(zh['channels.dialogs.oauth.proxy.description'], /交换令牌/);
+  assert.match(zh['channels.dialogs.oauth.proxy.current'], /当前服务端线路/);
+  assert.match(zh['channels.dialogs.oauth.errors.proxyInvalid'], /有效代理/);
 });

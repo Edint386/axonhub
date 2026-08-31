@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -83,6 +84,141 @@ func TestCodexHandlers_StartOAuth_DoesNotIncludeOriginatorParam(t *testing.T) {
 	require.Equal(t, codex.RedirectURI, query.Get("redirect_uri"))
 	require.Equal(t, "true", query.Get("codex_cli_simplified_flow"))
 	require.Equal(t, resp.SessionID, query.Get("state"))
+}
+
+func TestCodexHandlers_HTTPClientForOAuthExchange_UsesProvidedProxyMode(t *testing.T) {
+	baseClient := httpclient.NewHttpClientWithProxy(&httpclient.ProxyConfig{
+		Type: httpclient.ProxyTypeURL,
+		URL:  "http://base-proxy.example:8080",
+	})
+	h := &CodexHandlers{httpClient: baseClient}
+
+	require.Same(t, baseClient, h.httpClientForOAuthExchange(nil))
+
+	request := httptest.NewRequest(http.MethodPost, "https://oauth.example/token", nil)
+
+	tests := []struct {
+		name   string
+		proxy  *httpclient.ProxyConfig
+		assert func(t *testing.T, selected *httpclient.HttpClient)
+	}{
+		{
+			name:  "disabled",
+			proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeDisabled},
+			assert: func(t *testing.T, selected *httpclient.HttpClient) {
+				proxyURL, err := selected.ProxyFunc()(request)
+				require.NoError(t, err)
+				require.Nil(t, proxyURL)
+			},
+		},
+		{
+			name:  "environment",
+			proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeEnvironment},
+			assert: func(t *testing.T, selected *httpclient.HttpClient) {
+				require.Equal(
+					t,
+					reflect.ValueOf(http.ProxyFromEnvironment).Pointer(),
+					reflect.ValueOf(selected.ProxyFunc()).Pointer(),
+				)
+			},
+		},
+		{
+			name: "url",
+			proxy: &httpclient.ProxyConfig{
+				Type: httpclient.ProxyTypeURL,
+				URL:  "http://oauth-proxy.example:8080",
+			},
+			assert: func(t *testing.T, selected *httpclient.HttpClient) {
+				proxyURL, err := selected.ProxyFunc()(request)
+				require.NoError(t, err)
+				require.Equal(t, "http://oauth-proxy.example:8080", proxyURL.String())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selected := h.httpClientForOAuthExchange(tt.proxy)
+			require.NotSame(t, baseClient, selected)
+			tt.assert(t, selected)
+		})
+	}
+}
+
+func TestValidateCodexOAuthProxy(t *testing.T) {
+	tests := []struct {
+		name    string
+		proxy   *httpclient.ProxyConfig
+		wantErr string
+	}{
+		{name: "nil", proxy: nil},
+		{name: "disabled", proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeDisabled}},
+		{name: "environment", proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeEnvironment}},
+		{name: "url", proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeURL, URL: "http://proxy.example:8080"}},
+		{name: "empty url", proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeURL, URL: "  "}, wantErr: "proxy URL is required"},
+		{name: "unknown", proxy: &httpclient.ProxyConfig{Type: "unknown"}, wantErr: "unsupported proxy type"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCodexOAuthProxy(tt.proxy)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestCodexHandlers_Exchange_InvalidProxyDoesNotConsumeState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewCodexHandlers(CodexHandlersParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		HttpClient:  httpclient.NewHttpClient(),
+	})
+
+	router := gin.New()
+	router.POST("/admin/codex/oauth/start", h.StartOAuth)
+	router.POST("/admin/codex/oauth/exchange", h.Exchange)
+
+	startReq := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/start", bytes.NewBufferString("{}"))
+	startReq.Header.Set("Content-Type", "application/json")
+	startW := httptest.NewRecorder()
+	router.ServeHTTP(startW, startReq)
+	require.Equal(t, http.StatusOK, startW.Code)
+
+	var startResp StartCodexOAuthResponse
+	require.NoError(t, json.Unmarshal(startW.Body.Bytes(), &startResp))
+
+	invalidProxyBody, err := json.Marshal(ExchangeCodexOAuthRequest{
+		SessionID:   startResp.SessionID,
+		CallbackURL: "http://localhost:1455/auth/callback?code=test-code&state=" + startResp.SessionID,
+		Proxy:       &httpclient.ProxyConfig{Type: httpclient.ProxyTypeURL, URL: "  "},
+	})
+	require.NoError(t, err)
+
+	invalidProxyReq := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/exchange", bytes.NewBuffer(invalidProxyBody))
+	invalidProxyReq.Header.Set("Content-Type", "application/json")
+	invalidProxyW := httptest.NewRecorder()
+	router.ServeHTTP(invalidProxyW, invalidProxyReq)
+	require.Equal(t, http.StatusBadRequest, invalidProxyW.Code)
+	require.Contains(t, invalidProxyW.Body.String(), "proxy URL is required")
+
+	retryBody, err := json.Marshal(ExchangeCodexOAuthRequest{
+		SessionID:   startResp.SessionID,
+		CallbackURL: "http://localhost:1455/auth/callback?code=test-code&state=mismatch",
+		Proxy:       &httpclient.ProxyConfig{Type: httpclient.ProxyTypeDisabled},
+	})
+	require.NoError(t, err)
+
+	retryReq := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/exchange", bytes.NewBuffer(retryBody))
+	retryReq.Header.Set("Content-Type", "application/json")
+	retryW := httptest.NewRecorder()
+	router.ServeHTTP(retryW, retryReq)
+	require.Equal(t, http.StatusBadRequest, retryW.Code)
+	require.Contains(t, retryW.Body.String(), "oauth state mismatch")
 }
 
 func TestCodexHandlers_Exchange_StateDeletedOnTokenExchangeFailure(t *testing.T) {

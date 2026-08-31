@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { X, RefreshCw, Search, ChevronLeft, ChevronRight, PanelLeft, Plus, Trash2, Eye, EyeOff, Copy, Play, Info, Ban } from 'lucide-react';
+import { X, RefreshCw, Search, ChevronLeft, ChevronRight, PanelLeft, Plus, Trash2, Eye, EyeOff, Copy, Play, Info, Ban, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useHorizontalScroll } from '@/hooks/use-horizontal-scroll';
@@ -42,6 +42,7 @@ import {
 } from '../data/channels';
 import { claudecodeOAuthExchange, claudecodeOAuthStart } from '../data/claudecode';
 import { codexDecodeAuthJSON, codexOAuthExchange, codexOAuthStart } from '../data/codex';
+import { normalizeProxyConfig, ProxyType, type ProxyConfig } from '../data/proxy-config';
 import { xaiOAuthExchange, xaiOAuthStart } from '../data/xai';
 import {
   getDefaultBaseURL,
@@ -59,12 +60,12 @@ import {
   getChannelTypeForApiFormat,
 } from '../data/config_providers';
 import { Channel, ChannelType, ApiFormat, RetryableErrorPattern, createChannelInputSchema, updateChannelInputSchema } from '../data/schema';
-import { ProxyConfig, useOAuthFlow } from '../hooks/use-oauth-flow';
+import { useOAuthFlow } from '../hooks/use-oauth-flow';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
 import { isValidModelPattern, matchesModelPattern } from '../utils/pattern';
-import { ProxyType } from './channels-proxy-dialog';
 import { CopilotDeviceFlow } from './copilot-device-flow';
 import { ManualModelBadge } from './manual-model-badge';
+import { OAuthProxyDialog } from './oauth-proxy-dialog';
 
 interface Props {
   currentRow?: Channel;
@@ -381,6 +382,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [proxyUrl, setProxyUrl] = useState(() => initialRow?.settings?.proxy?.url || '');
   const [proxyUsername, setProxyUsername] = useState(() => initialRow?.settings?.proxy?.username || '');
   const [proxyPassword, setProxyPassword] = useState(() => initialRow?.settings?.proxy?.password || '');
+  const [proxyDisableConnectionReuse, setProxyDisableConnectionReuse] = useState(
+    () => initialRow?.settings?.proxy?.disableConnectionReuse || false
+  );
+  const [oauthProxyDialogOpen, setOAuthProxyDialogOpen] = useState(false);
   const [passThroughUserAgent, setPassThroughUserAgent] = useState<boolean | null>(() => {
     return initialRow?.settings?.passThroughUserAgent ?? null;
   });
@@ -395,17 +400,36 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   );
 
   // Memoized proxy config for OAuth exchange
-  const proxyConfig: ProxyConfig | undefined = useMemo(() => {
-    if (proxyType === ProxyType.URL && proxyUrl) {
-      return {
+  const proxyConfig = useMemo<ProxyConfig>(
+    () =>
+      normalizeProxyConfig({
         type: proxyType,
         url: proxyUrl,
-        ...(proxyUsername && { username: proxyUsername }),
-        ...(proxyPassword && { password: proxyPassword }),
-      };
-    }
-    return undefined;
-  }, [proxyType, proxyUrl, proxyUsername, proxyPassword]);
+        username: proxyUsername,
+        password: proxyPassword,
+        disableConnectionReuse: proxyDisableConnectionReuse,
+      }),
+    [proxyType, proxyUrl, proxyUsername, proxyPassword, proxyDisableConnectionReuse]
+  );
+
+  const handleOAuthProxyApply = useCallback((value: ProxyConfig) => {
+    setProxyType(value.type);
+    setProxyUrl(value.url || '');
+    setProxyUsername(value.username || '');
+    setProxyPassword(value.password || '');
+    setProxyDisableConnectionReuse(value.disableConnectionReuse || false);
+  }, []);
+
+  useEffect(() => {
+    if (open) return;
+
+    setProxyType((initialRow?.settings?.proxy?.type as ProxyType) || ProxyType.ENVIRONMENT);
+    setProxyUrl(initialRow?.settings?.proxy?.url || '');
+    setProxyUsername(initialRow?.settings?.proxy?.username || '');
+    setProxyPassword(initialRow?.settings?.proxy?.password || '');
+    setProxyDisableConnectionReuse(initialRow?.settings?.proxy?.disableConnectionReuse || false);
+    setOAuthProxyDialogOpen(false);
+  }, [initialRow, open]);
 
   const handleProxyPresetSelect = (presetUrl: string) => {
     const preset = proxyPresets.find((p) => p.url === presetUrl);
@@ -1130,11 +1154,17 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   }, [supportedModels, watchedDefaultTestModel, isEdit, isDuplicate, form]);
 
   const renderOAuthSection = useCallback(
-    (oauth: ReturnType<typeof useOAuthFlow>, description: string) => (
+    (oauth: ReturnType<typeof useOAuthFlow>, description: string, onConfigureProxy?: () => void) => (
       <div className='mt-3 space-y-2'>
         <div className='rounded-md border p-3'>
           <div className='flex flex-wrap items-center gap-2'>
-            <Button type='button' variant='secondary' onClick={oauth.start} disabled={oauth.isStarting}>
+            {onConfigureProxy && (
+              <Button type='button' variant='outline' onClick={onConfigureProxy} data-testid='codex-oauth-proxy-button'>
+                <Settings2 className='mr-2 h-4 w-4' />
+                {t('channels.dialogs.oauth.proxy.button')}
+              </Button>
+            )}
+            <Button type='button' variant='secondary' onClick={oauth.start} disabled={oauth.isStarting} data-testid='oauth-start-button'>
               {oauth.isStarting ? t('channels.dialogs.oauth.buttons.starting') : t('channels.dialogs.oauth.buttons.startOAuth')}
             </Button>
             {oauth.authUrl && (
@@ -1143,6 +1173,14 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               </Button>
             )}
           </div>
+
+          {onConfigureProxy && (
+            <p className='text-muted-foreground mt-2 text-xs'>
+              {t('channels.dialogs.oauth.proxy.current', {
+                type: t(`channels.dialogs.proxy.types.${proxyType}`),
+              })}
+            </p>
+          )}
 
           {oauth.authUrl && (
             <div className='mt-3 space-y-2'>
@@ -1163,8 +1201,14 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               onChange={(e) => oauth.setCallbackUrl(e.target.value)}
               placeholder={t('channels.dialogs.oauth.placeholders.callbackUrl')}
               className='min-h-[80px] resize-y font-mono text-xs'
+              data-testid='oauth-callback-input'
             />
-            <Button type='button' onClick={oauth.exchange} disabled={oauth.isExchanging || !oauth.sessionId}>
+            <Button
+              type='button'
+              onClick={oauth.exchange}
+              disabled={oauth.isExchanging || !oauth.sessionId}
+              data-testid='oauth-exchange-button'
+            >
               {oauth.isExchanging
                 ? t('channels.dialogs.oauth.buttons.exchanging')
                 : t('channels.dialogs.oauth.buttons.exchangeAndFillApiKey')}
@@ -1176,7 +1220,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         </div>
       </div>
     ),
-    [t]
+    [proxyType, t]
   );
 
   const applyCodexAuthJSON = useCallback(async () => {
@@ -1255,6 +1299,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
 
       if (isEdit && currentRow) {
         const nextSettings = mergeChannelSettingsForUpdate(settingsForSubmit, {
+          proxy: proxyConfig,
           passThroughUserAgent,
           passThroughBody,
           retryableStatusCodes,
@@ -1288,15 +1333,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           input: updateInput,
         });
       } else {
-        const proxyConfig = {
-          type: proxyType as 'disabled' | 'environment' | 'url',
-          ...(proxyType === ProxyType.URL && {
-            url: proxyUrl,
-            username: proxyUsername || undefined,
-            password: proxyPassword || undefined,
-          }),
-        };
-
         const nextSettings = mergeChannelSettingsForUpdate(settingsForSubmit, {
           proxy: proxyConfig,
           passThroughUserAgent,
@@ -1729,6 +1765,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             setProxyUrl(initialRow?.settings?.proxy?.url || '');
             setProxyUsername(initialRow?.settings?.proxy?.username || '');
             setProxyPassword(initialRow?.settings?.proxy?.password || '');
+            setProxyDisableConnectionReuse(initialRow?.settings?.proxy?.disableConnectionReuse || false);
+            setOAuthProxyDialogOpen(false);
             setPassThroughUserAgent(initialRow?.settings?.passThroughUserAgent ?? null);
             setPassThroughBody(initialRow?.settings?.passThroughBody ?? null);
             setRetryableStatusCodesText(formatRetryableStatusCodes(initialRow?.settings?.retryableStatusCodes));
@@ -2046,7 +2084,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                         )}
                       />
 
-                      {!isEdit && (
+                      {!isEdit && !(isCodexType && authMode === 'official') && (
                         <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
                           <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
                             {t('channels.dialogs.proxy.fields.type.label')}
@@ -2171,7 +2209,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                             {isCodexType && (
                               <div className='space-y-2'>
                                 {authMode === 'official' &&
-                                  renderOAuthSection(codexOAuth, t('channels.dialogs.fields.apiFormat.codex.description'))}
+                                  renderOAuthSection(codexOAuth, t('channels.dialogs.fields.apiFormat.codex.description'), () =>
+                                    setOAuthProxyDialogOpen(true)
+                                  )}
                               </div>
                             )}
 
@@ -3307,6 +3347,12 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <OAuthProxyDialog
+        open={oauthProxyDialogOpen}
+        onOpenChange={setOAuthProxyDialogOpen}
+        value={proxyConfig}
+        onApply={handleOAuthProxyApply}
+      />
     </>
   );
 }

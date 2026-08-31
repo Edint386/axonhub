@@ -1,14 +1,9 @@
 import { useState, useCallback } from 'react';
-import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { ProxyType } from '../components/channels-proxy-dialog';
+import { toast } from 'sonner';
+import { proxyConfigSchema, type ProxyConfig } from '../data/proxy-config';
 
-export interface ProxyConfig {
-  type: ProxyType;
-  url?: string;
-  username?: string;
-  password?: string;
-}
+export type { ProxyConfig } from '../data/proxy-config';
 
 export interface OAuthStartResult {
   session_id: string;
@@ -90,7 +85,16 @@ export function useOAuthFlow(options: OAuthFlowOptions): OAuthFlowState & OAuthF
   const [isStarting, setIsStarting] = useState(false);
   const [isExchanging, setIsExchanging] = useState(false);
 
+  const hasValidProxyConfig = useCallback(() => {
+    if (!proxyConfig || proxyConfigSchema.safeParse(proxyConfig).success) return true;
+
+    toast.error(t('channels.dialogs.oauth.errors.proxyInvalid'));
+    return false;
+  }, [proxyConfig, t]);
+
   const start = useCallback(async () => {
+    if (!hasValidProxyConfig()) return;
+
     setIsStarting(true);
     try {
       const result = await startFn();
@@ -101,7 +105,7 @@ export function useOAuthFlow(options: OAuthFlowOptions): OAuthFlowState & OAuthF
     } finally {
       setIsStarting(false);
     }
-  }, [startFn]);
+  }, [hasValidProxyConfig, startFn]);
 
   const exchange = useCallback(async () => {
     if (!sessionId) {
@@ -114,6 +118,8 @@ export function useOAuthFlow(options: OAuthFlowOptions): OAuthFlowState & OAuthF
       return;
     }
 
+    if (!hasValidProxyConfig()) return;
+
     setIsExchanging(true);
     try {
       const exchangeInput: OAuthExchangeInput = {
@@ -121,14 +127,8 @@ export function useOAuthFlow(options: OAuthFlowOptions): OAuthFlowState & OAuthF
         callback_url: callbackUrl.trim(),
       };
 
-      // Add proxy config if provided and type is not disabled/environment
-      if (proxyConfig && proxyConfig.type === ProxyType.URL) {
-        exchangeInput.proxy = {
-          type: proxyConfig.type,
-          url: proxyConfig.url,
-          ...(proxyConfig.username && { username: proxyConfig.username }),
-          ...(proxyConfig.password && { password: proxyConfig.password }),
-        };
+      if (proxyConfig) {
+        exchangeInput.proxy = proxyConfig;
       }
 
       const result = await exchangeFn(exchangeInput);
@@ -143,7 +143,7 @@ export function useOAuthFlow(options: OAuthFlowOptions): OAuthFlowState & OAuthF
     } finally {
       setIsExchanging(false);
     }
-  }, [sessionId, callbackUrl, exchangeFn, onSuccess, t, proxyConfig]);
+  }, [sessionId, callbackUrl, exchangeFn, onSuccess, t, proxyConfig, hasValidProxyConfig]);
 
   const reset = useCallback(() => {
     setSessionId(null);
