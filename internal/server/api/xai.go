@@ -51,6 +51,15 @@ type ExchangeXAIOAuthResponse struct {
 	Credentials string `json:"credentials"`
 }
 
+type DecodeXAISSORequest struct {
+	SSOToken string                  `json:"sso_token" binding:"required"`
+	Proxy    *httpclient.ProxyConfig `json:"proxy,omitempty"`
+}
+
+type DecodeXAISSOResponse struct {
+	Credentials string `json:"credentials"`
+}
+
 func NewXAIHandlers(params XAIHandlersParams) *XAIHandlers {
 	return &XAIHandlers{
 		stateCache: xcache.NewFromConfig[xaiOAuthState](params.CacheConfig),
@@ -165,6 +174,32 @@ func (handler *XAIHandlers) Exchange(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, ExchangeXAIOAuthResponse{Credentials: output})
+}
+
+// DecodeSSO converts a Grok Web SSO cookie to Build OAuth credentials.
+func (handler *XAIHandlers) DecodeSSO(c *gin.Context) {
+	ctx := c.Request.Context()
+	var request DecodeXAISSORequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		JSONError(c, http.StatusBadRequest, errors.New("invalid request format"))
+		return
+	}
+
+	client := handler.httpClient
+	if request.Proxy != nil && request.Proxy.Type == httpclient.ProxyTypeURL && request.Proxy.URL != "" {
+		client = client.WithProxy(request.Proxy)
+	}
+	credentials, err := subscription.ConvertSSOToBuild(ctx, request.SSOToken, subscription.SSODeviceOptions{HTTPClient: client.GetNativeClient()})
+	if err != nil {
+		JSONError(c, http.StatusBadGateway, fmt.Errorf("xAI SSO conversion failed: %w", err))
+		return
+	}
+	output, err := credentials.ToJSON()
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, fmt.Errorf("encode xAI credentials: %w", err))
+		return
+	}
+	c.JSON(http.StatusOK, DecodeXAISSOResponse{Credentials: output})
 }
 
 func parseXAICallbackURL(callbackURL string) (string, string, error) {

@@ -105,6 +105,33 @@ func TestXAIHandlers_Exchange_returns_normalized_credentials(t *testing.T) {
 	require.Equal(t, subscription.ClientID, credentials.ClientID)
 }
 
+func TestXAIHandlers_DecodeSSO_returns_normalized_credentials(t *testing.T) {
+	// Given
+	gin.SetMode(gin.TestMode)
+	transport := roundTripperFunc(newXAISSORoundTripper(t))
+	handler := NewXAIHandlers(XAIHandlersParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		HttpClient:  httpclient.NewHttpClientWithClient(&http.Client{Transport: transport}),
+	})
+	router := gin.New()
+	withXAITestUser(router, 1)
+	router.POST("/admin/xai/oauth/sso", handler.DecodeSSO)
+
+	// When
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/admin/xai/oauth/sso", bytes.NewBufferString(`{"sso_token":"sso=synthetic-sso"}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+
+	// Then
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response DecodeXAISSOResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	credentials, err := oauth.ParseCredentialsJSON(response.Credentials)
+	require.NoError(t, err)
+	require.Equal(t, "access", credentials.AccessToken)
+}
+
 func TestXAIHandlers_Exchange_rejects_session_from_another_user(t *testing.T) {
 	// Given
 	gin.SetMode(gin.TestMode)
@@ -149,4 +176,29 @@ func withXAITestUser(router *gin.Engine, userID int) {
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
+}
+
+func newXAISSORoundTripper(t *testing.T) func(*http.Request) (*http.Response, error) {
+	t.Helper()
+	return func(request *http.Request) (*http.Response, error) {
+		response := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("{}"))}
+		switch request.URL.String() {
+		case subscription.SSOAccountsURL:
+			require.Contains(t, request.Header.Get("Cookie"), "sso=synthetic-sso")
+		case subscription.SSODeviceURL:
+			response.Body = io.NopCloser(strings.NewReader(`{"device_code":"device","user_code":"user","verification_uri_complete":"https://auth.x.ai/oauth2/device/verify?user_code=user","interval":1,"expires_in":60}`))
+		case "https://auth.x.ai/oauth2/device/verify?user_code=user", "https://auth.x.ai/oauth2/device/consent", "https://auth.x.ai/oauth2/device/done":
+		case subscription.SSOVerifyURL:
+			response.StatusCode = http.StatusFound
+			response.Header.Set("Location", "https://auth.x.ai/oauth2/device/consent")
+		case subscription.SSOApproveURL:
+			response.StatusCode = http.StatusFound
+			response.Header.Set("Location", "https://auth.x.ai/oauth2/device/done")
+		case subscription.TokenURL:
+			response.Body = io.NopCloser(strings.NewReader(`{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer"}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
+		}
+		return response, nil
+	}
 }

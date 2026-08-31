@@ -43,7 +43,7 @@ import {
 import { claudecodeOAuthExchange, claudecodeOAuthStart } from '../data/claudecode';
 import { codexDecodeAuthJSON, codexOAuthExchange, codexOAuthStart } from '../data/codex';
 import { normalizeProxyConfig, ProxyType, type ProxyConfig } from '../data/proxy-config';
-import { xaiOAuthExchange, xaiOAuthStart } from '../data/xai';
+import { xaiDecodeSSO, xaiOAuthExchange, xaiOAuthStart } from '../data/xai';
 import {
   getDefaultBaseURL,
   getDefaultModels,
@@ -363,6 +363,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [confirmDisableKey, setConfirmDisableKey] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'official' | 'auth-json' | 'third-party'>('official');
   const [codexAuthJSONText, setCodexAuthJSONText] = useState('');
+  const [xaiSSOToken, setXaiSSOToken] = useState('');
+  const [isImportingXAISSO, setIsImportingXAISSO] = useState(false);
   const [patternError, setPatternError] = useState<string | null>(null);
 
   // Debounced search values for better performance
@@ -541,6 +543,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       antigravityOAuth.reset();
       xaiOAuth.reset();
       setCodexAuthJSONText('');
+      setXaiSSOToken('');
     }
   }, [open, codexOAuth.reset, claudecodeOAuth.reset, antigravityOAuth.reset, xaiOAuth.reset]);
 
@@ -1101,6 +1104,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     }
     if (selectedProvider !== 'xai_subscription') {
       xaiOAuth.reset();
+      setXaiSSOToken('');
     }
 
     const providerToChannelType: Partial<Record<string, ChannelType>> = {
@@ -1222,6 +1226,33 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     ),
     [proxyType, t]
   );
+
+  const applyXAISSO = useCallback(async () => {
+    const token = xaiSSOToken.trim();
+    if (!token) {
+      toast.error(t('channels.dialogs.xaiSso.errors.required'));
+      return;
+    }
+
+    setIsImportingXAISSO(true);
+    try {
+      const result = await xaiDecodeSSO({
+        sso_token: token,
+        ...(proxyConfig ? { proxy: proxyConfig } : {}),
+      });
+      form.setValue('credentials.apiKey', result.credentials, {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+      setXaiSSOToken('');
+      toast.success(t('channels.dialogs.xaiSso.messages.imported'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsImportingXAISSO(false);
+    }
+  }, [form, proxyConfig, t, xaiSSOToken]);
 
   const applyCodexAuthJSON = useCallback(async () => {
     try {
@@ -2230,6 +2261,33 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                           <div className='col-span-2' />
                           <div className='space-y-4 md:col-span-6'>
                             {renderOAuthSection(xaiOAuth, t('channels.dialogs.fields.apiFormat.xaiSubscription.description'))}
+                            <div className='rounded-md border p-3'>
+                              <div className='space-y-2'>
+                                <FormLabel htmlFor='xai-sso-token' className='text-sm font-medium'>
+                                  {t('channels.dialogs.xaiSso.label')}
+                                </FormLabel>
+                                <Textarea
+                                  id='xai-sso-token'
+                                  value={xaiSSOToken}
+                                  onChange={(event) => setXaiSSOToken(event.target.value)}
+                                  spellCheck={false}
+                                  autoComplete='off'
+                                  placeholder={t('channels.dialogs.xaiSso.placeholder')}
+                                  className='min-h-[96px] resize-y font-mono text-xs'
+                                />
+                                <Button
+                                  type='button'
+                                  variant='secondary'
+                                  onClick={applyXAISSO}
+                                  disabled={isImportingXAISSO || !xaiSSOToken.trim()}
+                                >
+                                  {isImportingXAISSO
+                                    ? t('channels.dialogs.xaiSso.buttons.importing')
+                                    : t('channels.dialogs.xaiSso.buttons.import')}
+                                </Button>
+                                <p className='text-muted-foreground text-xs'>{t('channels.dialogs.xaiSso.description')}</p>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
