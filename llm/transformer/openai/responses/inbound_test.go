@@ -56,6 +56,13 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name: "stream_id is websocket only",
+			httpReq: &httpclient.Request{
+				Body: []byte(`{"model":"gpt-4o","input":"Hello","stream_id":"main"}`),
+			},
+			expectError: true,
+		},
+		{
 			name: "simple text input",
 			httpReq: &httpclient.Request{
 				Body: []byte(`{
@@ -69,30 +76,6 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 				require.Len(t, result.Messages, 1)
 				require.Equal(t, "user", result.Messages[0].Role)
 				require.Equal(t, "Hello, world!", *result.Messages[0].Content.Content)
-			},
-		},
-		{
-			name: "function call input preserves namespace",
-			httpReq: &httpclient.Request{
-				Body: []byte(`{
-					"model": "gpt-5",
-					"input": [
-						{
-							"type": "function_call",
-							"call_id": "call_js",
-							"name": "js",
-							"namespace": "mcp__node_repl",
-							"arguments": "{\"code\":\"nodeRepl.write(\\\"ok\\\")\"}"
-						}
-					]
-				}`),
-			},
-			expectError: false,
-			validate: func(t *testing.T, result *llm.Request) {
-				require.Len(t, result.Messages, 1)
-				require.Len(t, result.Messages[0].ToolCalls, 1)
-				require.Equal(t, "js", result.Messages[0].ToolCalls[0].Function.Name)
-				require.Equal(t, "mcp__node_repl", result.Messages[0].ToolCalls[0].TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey])
 			},
 		},
 		{
@@ -297,60 +280,6 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 				require.NotNil(t, result.Tools[0].ImageGeneration)
 				require.Equal(t, "high", result.Tools[0].ImageGeneration.Quality)
 				require.Equal(t, "1024x1024", result.Tools[0].ImageGeneration.Size)
-			},
-		},
-		{
-			name: "request with raw-only namespace tool preserves provider extension",
-			httpReq: &httpclient.Request{
-				Body: []byte(`{
-					"model": "gpt-4o",
-					"input": "Use tools",
-					"tools": [
-						{"type": "function", "name": "known", "parameters": {"type": "object"}},
-						{"type": "namespace", "name": "mcp__node_repl__", "description": "Node kernel"}
-					]
-				}`),
-			},
-			expectError: false,
-			validate: func(t *testing.T, result *llm.Request) {
-				require.Len(t, result.Tools, 1)
-				require.Equal(t, "known", result.Tools[0].Function.Name)
-				require.NotNil(t, result.ProviderExtensions)
-				require.NotNil(t, result.ProviderExtensions.OpenAIResponses)
-				require.NotNil(t, result.ProviderExtensions.OpenAIResponses.Request)
-				require.Len(t, result.ProviderExtensions.OpenAIResponses.Request.RawTools, 1)
-				require.Equal(t, 1, result.ProviderExtensions.OpenAIResponses.Request.RawTools[0].OriginalIndex)
-				require.Equal(t, "namespace", result.ProviderExtensions.OpenAIResponses.Request.RawTools[0].Type)
-				require.JSONEq(t, `{"type":"namespace","name":"mcp__node_repl__","description":"Node kernel"}`, string(result.ProviderExtensions.OpenAIResponses.Request.RawTools[0].Raw))
-			},
-		},
-		{
-			name: "captures namespace child tools",
-			httpReq: &httpclient.Request{
-				Body: []byte(`{
-					"model": "gpt-4o",
-					"input": "Use node repl",
-					"tools": [
-						{
-							"type": "namespace",
-							"name": "mcp__node_repl",
-							"tools": [
-								{"type": "function", "name": "js"},
-								{"type": "function", "name": "js_reset"}
-							]
-						}
-					]
-				}`),
-			},
-			expectError: false,
-			validate: func(t *testing.T, result *llm.Request) {
-				require.NotNil(t, result.ProviderExtensions)
-				require.NotNil(t, result.ProviderExtensions.OpenAIResponses)
-				require.NotNil(t, result.ProviderExtensions.OpenAIResponses.Request)
-				require.Equal(t, []llm.OpenAIResponsesNamespaceTool{
-					{Namespace: "mcp__node_repl", Name: "js"},
-					{Namespace: "mcp__node_repl", Name: "js_reset"},
-				}, result.ProviderExtensions.OpenAIResponses.Request.NamespaceTools)
 			},
 		},
 		{
@@ -631,321 +560,23 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 	}
 }
 
-func TestInboundTransformer_TransformResponse_NamespaceFunctionCall(t *testing.T) {
-	trans := NewInboundTransformer()
-	llmResp := &llm.Response{
-		ID:      "resp_namespace",
-		Object:  "chat.completion",
-		Model:   "gpt-5",
-		Created: 1700000000,
-		TransformerMetadata: map[string]any{
-			responsesNamespaceToolsTransformerMetadataKey: []llm.OpenAIResponsesNamespaceTool{{
-				Namespace: "mcp__node_repl",
-				Name:      "js",
-			}},
-		},
-		Choices: []llm.Choice{{
-			Index: 0,
-			Message: &llm.Message{
-				Role: "assistant",
-				ToolCalls: []llm.ToolCall{{
-					ID:   "call_js",
-					Type: "function",
-					Function: llm.FunctionCall{
-						Name:      "js",
-						Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
-					},
-				}},
-			},
-			FinishReason: lo.ToPtr("tool_calls"),
-		}},
-	}
-
-	result, err := trans.TransformResponse(context.Background(), llmResp)
-	require.NoError(t, err)
-
-	var resp Response
-	require.NoError(t, json.Unmarshal(result.Body, &resp))
-	require.Len(t, resp.Output, 1)
-	require.Equal(t, "function_call", resp.Output[0].Type)
-	require.Equal(t, "js", resp.Output[0].Name)
-	require.Equal(t, "mcp__node_repl", resp.Output[0].Namespace)
-}
-
-// Non-Responses channels only ever see the flattened function name, and their
-// outbound transformer builds its own TransformerMetadata, so the namespace has
-// to be recovered from the request carried in ctx.
-func TestInboundTransformer_TransformResponse_RestoresFlattenedNamespaceFunctionCall(t *testing.T) {
+func TestInboundTransformer_TransformRequest_RejectsHTTPStreamIDWithParam(t *testing.T) {
 	trans := NewInboundTransformer()
 
-	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
-		Body: []byte(`{
-			"model": "gpt-5",
-			"input": "run it",
-			"tools": [{
-				"type": "namespace",
-				"name": "mcp__node_repl",
-				"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
-			}]
-		}`),
+	_, err := trans.TransformRequest(t.Context(), &httpclient.Request{
+		Body: []byte(`{"model":"gpt-4o","input":"Hello","stream_id":"main"}`),
 	})
-	require.NoError(t, err)
-	require.Len(t, llmReq.Tools, 1)
-	require.Equal(t, "mcp__node_repl__js", llmReq.Tools[0].Function.Name)
+	require.Error(t, err)
 
-	llmResp := &llm.Response{
-		ID:      "resp_flattened_namespace",
-		Object:  "chat.completion",
-		Model:   "gpt-5",
-		Created: 1700000000,
-		Choices: []llm.Choice{{
-			Index: 0,
-			Message: &llm.Message{
-				Role: "assistant",
-				ToolCalls: []llm.ToolCall{{
-					ID:   "call_js",
-					Type: "function",
-					Function: llm.FunctionCall{
-						Name:      "mcp__node_repl__js",
-						Arguments: `{"code":"nodeRepl.write(\"ok\")"}`,
-					},
-				}},
-			},
-			FinishReason: lo.ToPtr("tool_calls"),
-		}},
-	}
-
-	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
-	require.NoError(t, err)
-
-	var resp Response
-
-	require.NoError(t, json.Unmarshal(result.Body, &resp))
-	require.Len(t, resp.Output, 1)
-	require.Equal(t, "function_call", resp.Output[0].Type)
-	require.Equal(t, "js", resp.Output[0].Name)
-	require.Equal(t, "mcp__node_repl", resp.Output[0].Namespace)
-}
-
-// A plain function whose name merely contains "__" must never be split.
-func TestInboundTransformer_TransformResponse_DoesNotSplitUnrelatedFunctionName(t *testing.T) {
-	trans := NewInboundTransformer()
-
-	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
-		Body: []byte(`{
-			"model": "gpt-5",
-			"input": "check",
-			"tools": [
-				{
-					"type": "namespace",
-					"name": "mcp__node_repl",
-					"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
-				},
-				{"type": "function", "name": "get__weather", "parameters": {"type": "object"}}
-			]
-		}`),
-	})
-	require.NoError(t, err)
-
-	llmResp := &llm.Response{
-		ID:      "resp_unrelated",
-		Object:  "chat.completion",
-		Model:   "gpt-5",
-		Created: 1700000000,
-		Choices: []llm.Choice{{
-			Index: 0,
-			Message: &llm.Message{
-				Role: "assistant",
-				ToolCalls: []llm.ToolCall{{
-					ID:       "call_weather",
-					Type:     "function",
-					Function: llm.FunctionCall{Name: "get__weather", Arguments: `{}`},
-				}},
-			},
-			FinishReason: lo.ToPtr("tool_calls"),
-		}},
-	}
-
-	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
-	require.NoError(t, err)
-
-	var resp Response
-
-	require.NoError(t, json.Unmarshal(result.Body, &resp))
-	require.Len(t, resp.Output, 1)
-	require.Equal(t, "get__weather", resp.Output[0].Name)
-	require.Empty(t, resp.Output[0].Namespace)
-}
-
-func TestInboundTransformer_TransformResponse_DoesNotNamespaceAmbiguousFunctionCall(t *testing.T) {
-	trans := NewInboundTransformer()
-	llmResp := &llm.Response{
-		ID:      "resp_namespace_ambiguous",
-		Object:  "chat.completion",
-		Model:   "gpt-5",
-		Created: 1700000000,
-		TransformerMetadata: map[string]any{
-			responsesNamespaceToolsTransformerMetadataKey: []llm.OpenAIResponsesNamespaceTool{
-				{Namespace: "mcp__one", Name: "js"},
-				{Namespace: "mcp__two", Name: "js"},
-			},
-		},
-		Choices: []llm.Choice{{
-			Index: 0,
-			Message: &llm.Message{
-				Role: "assistant",
-				ToolCalls: []llm.ToolCall{{
-					ID:   "call_js",
-					Type: "function",
-					Function: llm.FunctionCall{
-						Name:      "js",
-						Arguments: `{}`,
-					},
-				}},
-			},
-			FinishReason: lo.ToPtr("tool_calls"),
-		}},
-	}
-
-	result, err := trans.TransformResponse(context.Background(), llmResp)
-	require.NoError(t, err)
-
-	var resp Response
-	require.NoError(t, json.Unmarshal(result.Body, &resp))
-	require.Len(t, resp.Output, 1)
-	require.Equal(t, "js", resp.Output[0].Name)
-	require.Empty(t, resp.Output[0].Namespace)
-}
-
-func TestInboundTransformer_TransformResponse_DoesNotNamespaceCollidingPlainFunction(t *testing.T) {
-	trans := NewInboundTransformer()
-
-	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
-		Body: []byte(`{
-			"model": "gpt-5",
-			"input": "check",
-			"tools": [
-				{
-					"type": "namespace",
-					"name": "mcp__node_repl",
-					"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
-				},
-				{"type": "function", "name": "mcp__node_repl__js", "parameters": {"type": "object"}}
-			]
-		}`),
-	})
-	require.NoError(t, err)
-
-	llmResp := &llm.Response{
-		ID:      "resp_namespace_collision",
-		Object:  "chat.completion",
-		Model:   "gpt-5",
-		Created: 1700000000,
-		Choices: []llm.Choice{{
-			Index: 0,
-			Message: &llm.Message{
-				Role: "assistant",
-				ToolCalls: []llm.ToolCall{{
-					ID:   "call_collision",
-					Type: "function",
-					Function: llm.FunctionCall{
-						Name:      "mcp__node_repl__js",
-						Arguments: `{}`,
-					},
-				}},
-			},
-			FinishReason: lo.ToPtr("tool_calls"),
-		}},
-	}
-
-	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
-	require.NoError(t, err)
-
-	var resp Response
-	require.NoError(t, json.Unmarshal(result.Body, &resp))
-	require.Len(t, resp.Output, 1)
-	require.Equal(t, "mcp__node_repl__js", resp.Output[0].Name)
-	require.Empty(t, resp.Output[0].Namespace)
-}
-
-func TestInboundTransformer_TransformResponse_FallsBackWhenNamespaceMetadataIsEmpty(t *testing.T) {
-	trans := NewInboundTransformer()
-
-	llmReq, err := trans.TransformRequest(context.Background(), &httpclient.Request{
-		Body: []byte(`{
-			"model": "gpt-5",
-			"input": "run it",
-			"tools": [{
-				"type": "namespace",
-				"name": "mcp__node_repl",
-				"tools": [{"type": "function", "name": "js", "parameters": {"type": "object"}}]
-			}]
-		}`),
-	})
-	require.NoError(t, err)
-
-	llmResp := &llm.Response{
-		ID:      "resp_namespace_empty_metadata",
-		Object:  "chat.completion",
-		Model:   "gpt-5",
-		Created: 1700000000,
-		TransformerMetadata: map[string]any{
-			responsesNamespaceToolsTransformerMetadataKey: []llm.OpenAIResponsesNamespaceTool{},
-		},
-		Choices: []llm.Choice{{
-			Index: 0,
-			Message: &llm.Message{
-				Role: "assistant",
-				ToolCalls: []llm.ToolCall{{
-					ID:   "call_js",
-					Type: "function",
-					Function: llm.FunctionCall{
-						Name:      "mcp__node_repl__js",
-						Arguments: `{}`,
-					},
-				}},
-			},
-			FinishReason: lo.ToPtr("tool_calls"),
-		}},
-	}
-
-	result, err := trans.TransformResponse(llm.WithRequest(context.Background(), llmReq), llmResp)
-	require.NoError(t, err)
-
-	var resp Response
-	require.NoError(t, json.Unmarshal(result.Body, &resp))
-	require.Len(t, resp.Output, 1)
-	require.Equal(t, "js", resp.Output[0].Name)
-	require.Equal(t, "mcp__node_repl", resp.Output[0].Namespace)
-}
-
-func TestNamespaceToolMappings_FallsBackWhenMetadataHasNoValidMappings(t *testing.T) {
-	want := []llm.OpenAIResponsesNamespaceTool{{Namespace: "mcp__node_repl", Name: "js"}}
-	req := &llm.Request{
-		ProviderExtensions: &llm.ProviderExtensions{
-			OpenAIResponses: &llm.OpenAIResponsesProviderExtensions{
-				Request: &llm.OpenAIResponsesRequestExtensions{NamespaceTools: want},
-			},
-		},
-	}
-	ctx := llm.WithRequest(context.Background(), req)
-
-	tests := map[string]any{
-		"empty typed mappings": []llm.OpenAIResponsesNamespaceTool{},
-		"missing namespace":    []llm.OpenAIResponsesNamespaceTool{{Name: "js"}},
-		"missing name":         []llm.OpenAIResponsesNamespaceTool{{Namespace: "mcp__node_repl"}},
-		"generic invalid item": []map[string]any{{"namespace": "", "name": ""}},
-	}
-
-	for name, metadata := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := namespaceToolMappings(ctx, map[string]any{
-				responsesNamespaceToolsTransformerMetadataKey: metadata,
-			})
-
-			require.Equal(t, want, got)
-		})
-	}
+	httpErr := trans.TransformError(t.Context(), err)
+	require.Equal(t, http.StatusBadRequest, httpErr.StatusCode)
+	require.JSONEq(t, `{
+		"error":{
+			"message":"Unsupported parameter: stream_id",
+			"type":"invalid_request_error",
+			"param":"stream_id"
+		}
+	}`, string(httpErr.Body))
 }
 
 func TestInboundTransformer_TransformRequest_PreservesWebSearchTools(t *testing.T) {
@@ -1142,6 +773,30 @@ func TestInboundTransformer_TransformRequest_GroupsConsecutiveFunctionCalls(t *t
 	require.Equal(t, "call_a", lo.FromPtr(result.Messages[2].ToolCallID))
 	require.Equal(t, "tool", result.Messages[3].Role)
 	require.Equal(t, "call_b", lo.FromPtr(result.Messages[3].ToolCallID))
+}
+
+func TestInboundTransformer_TransformRequest_PreservesInputFiles(t *testing.T) {
+	trans := NewInboundTransformer()
+	result, err := trans.TransformRequest(t.Context(), &httpclient.Request{
+		Body: []byte(`{
+			"model":"gpt-5.6",
+			"input":[{"role":"user","content":[
+				{"type":"input_file","filename":"inline.pdf","file_data":"data:application/pdf;base64,JVBERi0xLjQK"},
+				{"type":"input_file","filename":"remote.pdf","file_url":"https://example.com/remote.pdf"},
+				{"type":"input_file","file_id":"file_123"}
+			]}]
+		}`),
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Messages, 1)
+	require.Len(t, result.Messages[0].Content.MultipleContent, 3)
+	require.Equal(t, "data:application/pdf;base64,JVBERi0xLjQK", result.Messages[0].Content.MultipleContent[0].Document.URL)
+	require.Equal(t, "application/pdf", result.Messages[0].Content.MultipleContent[0].Document.MIMEType)
+	require.Equal(t, "inline.pdf", result.Messages[0].Content.MultipleContent[0].Document.Filename)
+	require.Equal(t, "https://example.com/remote.pdf", result.Messages[0].Content.MultipleContent[1].Document.URL)
+	require.Equal(t, "remote.pdf", result.Messages[0].Content.MultipleContent[1].Document.Filename)
+	require.Equal(t, "file_123", result.Messages[0].Content.MultipleContent[2].Document.FileID)
 }
 
 func TestInboundTransformer_TransformResponse(t *testing.T) {

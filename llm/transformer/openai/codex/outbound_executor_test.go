@@ -14,6 +14,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -22,6 +23,7 @@ import (
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer/openai"
 	"github.com/looplj/axonhub/llm/transformer/openai/responses"
+	"github.com/looplj/axonhub/llm/transformer/shared"
 )
 
 func TestCodexOutbound_StreamAcceptHeader(t *testing.T) {
@@ -271,6 +273,38 @@ func TestCodexOutbound_ImageEditRequestUsesResponsesImageTool(t *testing.T) {
 	require.Equal(t, "You are a helpful assistant that can generate images based on user requests. Must use the image generation tool.", payload.Instructions)
 }
 
+func TestCodexOutbound_TransformRequestStripsUserField(t *testing.T) {
+	ctx := context.Background()
+
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL: "https://chatgpt.com/backend-api/codex#",
+		TokenProvider: staticTokenGetter{
+			creds: &oauth.OAuthCredentials{
+				AccessToken: testAccessTokenWithAccountID(t),
+				ExpiresAt:   time.Now().Add(time.Hour),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	req, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model:     "gpt-5.6-luna",
+		APIFormat: llm.APIFormatOpenAIChatCompletion,
+		Stream:    lo.ToPtr(true),
+		User:      lo.ToPtr("user-123"),
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("hello")},
+		}},
+	})
+	require.NoError(t, err)
+
+	var payload map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(req.Body, &payload))
+	_, hasUser := payload["user"]
+	assert.False(t, hasUser, "Codex backend rejects the user field with a 400 Bad Request; it must not be sent upstream")
+}
+
 func TestCodexOutbound_TransformImageResponse(t *testing.T) {
 	upstream := &responses.Response{
 		ID:        "resp_image",
@@ -331,6 +365,112 @@ func TestCodexOutbound_CustomizeExecutorUsesCurrentExecutor(t *testing.T) {
 	require.Same(t, firstInner, againInner)
 	require.Same(t, firstClient, firstInner.Inner())
 	require.Same(t, secondClient, secondInner.Inner())
+	require.Same(t, firstInner, first.executor(shared.WithResponsesWebSocket(context.Background())))
+}
+
+func TestCodexOutbound_DownstreamTransportDoesNotOverrideOfficialUpstreamTransport(t *testing.T) {
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL: "https://chatgpt.com/backend-api/codex#",
+		TokenProvider: staticTokenGetter{
+			creds: &oauth.OAuthCredentials{AccessToken: "test-token"},
+		},
+	})
+	require.NoError(t, err)
+
+	inner := &mockCodexExecutor{}
+	executor, ok := outbound.CustomizeExecutor(inner).(*codexExecutor)
+	require.True(t, ok)
+	require.Same(t, inner, executor.executor(context.Background()))
+
+	ctx := shared.WithResponsesWebSocket(context.Background())
+	require.Same(t, inner, executor.executor(ctx))
+}
+
+func TestCodexOutbound_DownstreamResponsesWebSocketKeepsThirdPartyTransport(t *testing.T) {
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL: "https://api.fenno.ai",
+		TokenProvider: staticTokenGetter{
+			creds: &oauth.OAuthCredentials{AccessToken: "test-token"},
+		},
+	})
+	require.NoError(t, err)
+
+	inner := &mockCodexExecutor{}
+	executor, ok := outbound.CustomizeExecutor(inner).(*codexExecutor)
+	require.True(t, ok)
+
+	ctx := shared.WithResponsesWebSocket(context.Background())
+	require.Same(t, inner, executor.executor(ctx))
+}
+
+func TestCodexOutbound_HTTPTransportStripsWebSocketOnlyFields(t *testing.T) {
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL: "https://chatgpt.com/backend-api/codex#",
+		TokenProvider: staticTokenGetter{
+			creds: &oauth.OAuthCredentials{AccessToken: "test-token"},
+		},
+	})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		headers http.Header
+	}{
+		{
+			name: "websocket beta header present",
+			headers: http.Header{
+				"Openai-Beta": {responses.WebSocketBetaHeaderValue + ", other_beta=v1"},
+			},
+		},
+		{name: "websocket beta header already absent"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inner := &mockCodexExecutor{}
+			executor := outbound.CustomizeExecutor(inner)
+			request := &httpclient.Request{
+				Headers: tt.headers,
+				Body:    []byte(`{"model":"gpt-5","previous_response_id":"resp_1","input":[{"type":"message","role":"user","content":"hello"}]}`),
+			}
+
+			stream, err := executor.DoStream(context.Background(), request)
+			require.NoError(t, err)
+			require.NoError(t, stream.Close())
+			require.NotNil(t, inner.request)
+			require.False(t, gjson.GetBytes(inner.request.Body, "previous_response_id").Exists())
+			require.Equal(t, "hello", gjson.GetBytes(inner.request.Body, "input.0.content").String())
+			require.Equal(t, "resp_1", gjson.GetBytes(request.Body, "previous_response_id").String())
+
+			if tt.headers != nil {
+				require.Equal(t, "other_beta=v1", inner.request.Headers.Get("OpenAI-Beta"))
+				require.Equal(t, responses.WebSocketBetaHeaderValue+", other_beta=v1", request.Headers.Get("OpenAI-Beta"))
+			}
+		})
+	}
+}
+
+func TestCodexOutbound_WebSocketTransportKeepsContinuationFields(t *testing.T) {
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL:   "https://chatgpt.com/backend-api/codex#",
+		Transport: responses.TransportWebSocket,
+		TokenProvider: staticTokenGetter{
+			creds: &oauth.OAuthCredentials{AccessToken: "test-token"},
+		},
+	})
+	require.NoError(t, err)
+
+	request := &httpclient.Request{
+		Headers: http.Header{
+			"Openai-Beta": {responses.WebSocketBetaHeaderValue},
+		},
+		Body: []byte(`{"model":"gpt-5","previous_response_id":"resp_1","input":[]}`),
+	}
+	executor := &codexExecutor{transformer: outbound}
+
+	prepared := executor.requestForTransport(request)
+	require.Same(t, request, prepared)
+	require.Equal(t, "resp_1", gjson.GetBytes(prepared.Body, "previous_response_id").String())
+	require.Equal(t, responses.WebSocketBetaHeaderValue, prepared.Headers.Get("OpenAI-Beta"))
 }
 
 func TestCodexOutbound_CustomizeExecutorAggregatesNonStreamRequests(t *testing.T) {
@@ -373,6 +513,53 @@ func TestCodexOutbound_CustomizeExecutorAggregatesNonStreamRequests(t *testing.T
 	assert.Equal(t, "resp_test_123", body["id"])
 	assert.Equal(t, "completed", body["status"])
 	assert.Equal(t, "gpt-5-codex", body["model"])
+}
+
+func TestCodexOutbound_CustomizeExecutorAlphaSearchUsesNonStreamingDo(t *testing.T) {
+	ctx := context.Background()
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL: "https://chatgpt.com/backend-api/codex#",
+		TokenProvider: staticTokenGetter{creds: &oauth.OAuthCredentials{
+			AccessToken: testAccessTokenWithAccountID(t),
+			ExpiresAt:   time.Now().Add(time.Hour),
+		}},
+	})
+	require.NoError(t, err)
+
+	request := &httpclient.Request{RequestType: llm.RequestTypeAlphaSearch.String()}
+	mock := &mockCodexExecutor{streamEvents: []*httpclient.StreamEvent{{
+		Data: []byte(`{"ok":true}`),
+	}}}
+	executor := outbound.CustomizeExecutor(mock)
+
+	response, err := executor.Do(ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), mock.doCalls.Load(), "alpha search must use the non-streaming HTTP path")
+	require.Equal(t, "text/event-stream", response.Headers.Get("Content-Type"))
+}
+
+func TestCodexOutbound_CustomizeExecutorAlphaSearchBypassesWebSocketTransport(t *testing.T) {
+	ctx := context.Background()
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL:   "https://chatgpt.com/backend-api/codex#",
+		Transport: responses.TransportWebSocket,
+		TokenProvider: staticTokenGetter{creds: &oauth.OAuthCredentials{
+			AccessToken: testAccessTokenWithAccountID(t),
+			ExpiresAt:   time.Now().Add(time.Hour),
+		}},
+	})
+	require.NoError(t, err)
+
+	request := &httpclient.Request{RequestType: llm.RequestTypeAlphaSearch.String()}
+	mock := &mockCodexExecutor{streamEvents: []*httpclient.StreamEvent{{
+		Data: []byte(`{"ok":true}`),
+	}}}
+	executor := outbound.CustomizeExecutor(mock)
+
+	_, err = executor.Do(ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), mock.doCalls.Load(), "alpha search must use the original HTTP executor")
+	require.Zero(t, mock.doStreamCalls.Load(), "alpha search must not enter the Responses WebSocket protocol")
 }
 
 func TestCodexOutbound_CustomizeExecutorPassesThroughJSONForNonStreamRequests(t *testing.T) {
@@ -546,8 +733,10 @@ func TestCodexOutbound_DoReturnsWebSocketErrorEvents(t *testing.T) {
 var _ pipeline.ChannelCustomizedExecutor = (*OutboundTransformer)(nil)
 
 type mockCodexExecutor struct {
-	streamEvents []*httpclient.StreamEvent
-	doCalls      atomic.Int32
+	streamEvents  []*httpclient.StreamEvent
+	doCalls       atomic.Int32
+	doStreamCalls atomic.Int32
+	request       *httpclient.Request
 }
 
 func (m *mockCodexExecutor) Do(_ context.Context, _ *httpclient.Request) (*httpclient.Response, error) {
@@ -555,7 +744,9 @@ func (m *mockCodexExecutor) Do(_ context.Context, _ *httpclient.Request) (*httpc
 	return newCodexSSEResponse(m.streamEvents), nil
 }
 
-func (m *mockCodexExecutor) DoStream(_ context.Context, _ *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
+func (m *mockCodexExecutor) DoStream(_ context.Context, request *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
+	m.doStreamCalls.Add(1)
+	m.request = request
 	return streams.SliceStream(m.streamEvents), nil
 }
 

@@ -154,12 +154,34 @@ input OpenCodeGoQuotaSettingsInput {
   authCookie: String
 }
 
+type ModelProtocol {
+  model: String!
+  apiFormats: [String!]!
+  enabled: Boolean
+}
+
+input ModelProtocolInput {
+  model: String!
+  apiFormats: [String!]!
+  enabled: Boolean
+}
+
+type CommandCodeQuotaSettings {
+  authCookie: String
+}
+
+input CommandCodeQuotaSettingsInput {
+  authCookie: String
+}
+
 type ChannelProviderQuotaSettings {
   opencodeGo: OpenCodeGoQuotaSettings
+  commandCode: CommandCodeQuotaSettings
 }
 
 input ChannelProviderQuotaSettingsInput {
   opencodeGo: OpenCodeGoQuotaSettingsInput
+  commandCode: CommandCodeQuotaSettingsInput
 }
 
 type ChannelHealthProbeSettings {
@@ -188,8 +210,10 @@ type ChannelSettings {
   quota: APIKeyQuota
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
-  providerQuota: ChannelProviderQuotaSettings
+  modelProtocols: [ModelProtocol!]
+  providerQuota: ChannelProviderQuotaSettings @goField(forceResolver: true)
   healthProbe: ChannelHealthProbeSettings
+
 }
 
 enum CapabilityPolicy {
@@ -257,8 +281,10 @@ input ChannelSettingsInput {
   quota: APIKeyQuotaInput
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
+  modelProtocols: [ModelProtocolInput!]
   providerQuota: ChannelProviderQuotaSettingsInput
   healthProbe: ChannelHealthProbeSettingsInput
+
 }
 
 input ChannelRateLimitInput {
@@ -312,6 +338,7 @@ input ChannelCredentialsInput {
   apiKeys: [String!]
   gcp: GCPCredentialInput
   oauth: OAuthCredentialsInput
+  managementApiKey: String
 }
 
 input OAuthCredentialsInput {

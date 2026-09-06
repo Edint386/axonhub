@@ -228,7 +228,6 @@ func TestChannelService_CreateChannel_PersistsAutoSyncModelPatternAndManualModel
 		AutoSyncModelPattern:    new("^gpt-"),
 		Tags:                    []string{"tag-1"},
 		DefaultTestModel:        "gpt-4",
-		Priority:                lo.ToPtr(42),
 	})
 	require.NoError(t, err)
 
@@ -237,7 +236,6 @@ func TestChannelService_CreateChannel_PersistsAutoSyncModelPatternAndManualModel
 	require.Equal(t, []string{"manual-1"}, got.ManualModels)
 	require.Equal(t, "^gpt-", got.AutoSyncModelPattern)
 	require.Equal(t, true, got.AutoSyncSupportedModels)
-	require.Equal(t, 42, got.Priority)
 }
 
 func TestChannelService_XAISubscriptionAlwaysUsesOfficialBaseURL(t *testing.T) {
@@ -418,6 +416,32 @@ func TestChannelService_CreateChannel(t *testing.T) {
 		})
 	}
 }
+func TestChannelService_CommandCodeRequiresHTTPS(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+	_, err := svc.CreateChannel(ctx, ent.CreateChannelInput{
+		Type:        channel.TypeCommandcode,
+		Name:        "Command Code insecure",
+		BaseURL:     lo.ToPtr("http://api.commandcode.ai/provider/v1"),
+		Credentials: objects.ChannelCredentials{APIKey: "test-key"},
+	})
+	require.ErrorContains(t, err, "HTTPS")
+
+	created, err := svc.CreateChannel(ctx, ent.CreateChannelInput{
+		Type:        channel.TypeCommandcode,
+		Name:        "Command Code secure",
+		BaseURL:     lo.ToPtr("https://api.commandcode.ai/provider/v1"),
+		Credentials: objects.ChannelCredentials{APIKey: "test-key"},
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateChannel(ctx, created.ID, &ent.UpdateChannelInput{
+		BaseURL: lo.ToPtr("http://api.commandcode.ai/provider/v1"),
+	})
+	require.ErrorContains(t, err, "HTTPS")
+}
 
 func TestChannelService_UpdateChannel(t *testing.T) {
 	svc, client := setupTestChannelService(t)
@@ -543,51 +567,82 @@ func TestChannelService_UpdateChannel(t *testing.T) {
 	}
 }
 
-func TestChannelService_UpdateChannelPreservesProbeAndProviderQuota(t *testing.T) {
+func TestChannelService_UpdateChannel_PreservesManagementKeyWhenOmitted(t *testing.T) {
 	svc, client := setupTestChannelService(t)
 	defer client.Close()
 
-	ctx := context.Background()
-	ctx = ent.NewContext(ctx, client)
-	ctx = authz.WithTestBypass(ctx)
-
-	enabled := true
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
 	created, err := client.Channel.Create().
-		SetType(channel.TypeOpenai).
-		SetName("Settings Preserve Channel").
-		SetBaseURL("https://api.openai.com/v1").
-		SetCredentials(objects.ChannelCredentials{APIKey: "key"}).
-		SetSupportedModels([]string{"gpt-4"}).
-		SetDefaultTestModel("gpt-4").
-		SetSettings(&objects.ChannelSettings{
-			ProviderQuota: &objects.ChannelProviderQuotaSettings{
-				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
-					WorkspaceID: "wk_keep",
-					AuthCookie:  "auth=keep-me",
-				},
-			},
-			HealthProbe: &objects.ChannelHealthProbeSettings{
-				ProbeEnabled: &enabled,
-			},
-		}).
+		SetType(channel.TypeZenmux).
+		SetName("ZenMux channel").
+		SetBaseURL("https://zenmux.ai/api/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "inference-key", ManagementAPIKey: "management-key"}).
+		SetSupportedModels([]string{"test-model"}).
+		SetDefaultTestModel("test-model").
 		Save(ctx)
 	require.NoError(t, err)
 
 	updated, err := svc.UpdateChannel(ctx, created.ID, &ent.UpdateChannelInput{
-		Settings: &objects.ChannelSettings{
-			ExtraModelPrefix: "keep-",
-		},
+		Credentials: &objects.ChannelCredentials{APIKey: "updated-inference-key"},
 	})
+
 	require.NoError(t, err)
-	require.NotNil(t, updated.Settings)
-	require.Equal(t, "keep-", updated.Settings.ExtraModelPrefix)
-	require.NotNil(t, updated.Settings.ProviderQuota)
-	require.NotNil(t, updated.Settings.ProviderQuota.OpencodeGo)
-	require.Equal(t, "wk_keep", updated.Settings.ProviderQuota.OpencodeGo.WorkspaceID)
-	require.Equal(t, "auth=keep-me", updated.Settings.ProviderQuota.OpencodeGo.AuthCookie)
-	require.NotNil(t, updated.Settings.HealthProbe)
-	require.NotNil(t, updated.Settings.HealthProbe.ProbeEnabled)
-	require.True(t, *updated.Settings.HealthProbe.ProbeEnabled)
+	require.Equal(t, "updated-inference-key", updated.Credentials.APIKey)
+	require.Equal(t, "management-key", updated.Credentials.ManagementAPIKey)
+}
+
+func TestChannelService_UpdateChannel_ClearsManagementKeyWhenChangingProvider(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	created, err := client.Channel.Create().
+		SetType(channel.TypeZenmux).
+		SetName("ZenMux conversion").
+		SetBaseURL("https://zenmux.ai/api/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "inference-key", ManagementAPIKey: "management-key"}).
+		SetSupportedModels([]string{"test-model"}).
+		SetDefaultTestModel("test-model").
+		Save(ctx)
+	require.NoError(t, err)
+
+	updated, err := svc.UpdateChannel(ctx, created.ID, &ent.UpdateChannelInput{
+		Type:        lo.ToPtr(channel.TypeOpenai),
+		BaseURL:     lo.ToPtr("https://api.openai.com/v1"),
+		Credentials: &objects.ChannelCredentials{APIKey: "openai-key"},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, channel.TypeOpenai, updated.Type)
+	require.Empty(t, updated.Credentials.ManagementAPIKey)
+}
+
+func TestChannelService_DuplicateChannelPreservesZenmuxManagementKey(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	source, err := client.Channel.Create().
+		SetType(channel.TypeZenmux).
+		SetName("ZenMux source").
+		SetBaseURL("https://zenmux.ai/api/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "inference-key", ManagementAPIKey: "management-key"}).
+		SetSupportedModels([]string{"test-model"}).
+		SetDefaultTestModel("test-model").
+		Save(ctx)
+	require.NoError(t, err)
+
+	duplicated, err := svc.DuplicateChannel(ctx, source.ID, ent.CreateChannelInput{
+		Type:             channel.TypeZenmux,
+		BaseURL:          lo.ToPtr("https://zenmux.ai/api/v1"),
+		Name:             "ZenMux duplicate",
+		Credentials:      objects.ChannelCredentials{APIKey: "duplicate-inference-key"},
+		SupportedModels:  []string{"test-model"},
+		DefaultTestModel: "test-model",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "management-key", duplicated.Credentials.ManagementAPIKey)
 }
 
 func TestChannelService_UpdateChannelStatus(t *testing.T) {
@@ -820,12 +875,11 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name           string
-		updates        []*ChannelOrderingItem
-		wantErr        bool
-		wantUpdated    int
-		verifyWeights  map[int]int
-		verifyPriority map[int]int
+		name          string
+		updates       []*ChannelOrderingItem
+		wantErr       bool
+		wantUpdated   int
+		verifyWeights map[int]int
 	}{
 		{
 			name: "update ordering weights successfully",
@@ -838,36 +892,6 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 			verifyWeights: map[int]int{
 				ch1.ID: 100,
 				ch2.ID: 50,
-			},
-		},
-		{
-			name: "update priorities successfully",
-			updates: []*ChannelOrderingItem{
-				{ID: ch1.ID, Priority: lo.ToPtr(90)},
-				{ID: ch2.ID, Priority: lo.ToPtr(80)},
-			},
-			wantErr:     false,
-			wantUpdated: 2,
-			verifyPriority: map[int]int{
-				ch1.ID: 90,
-				ch2.ID: 80,
-			},
-		},
-		{
-			name: "update weights and priorities successfully",
-			updates: []*ChannelOrderingItem{
-				{ID: ch1.ID, OrderingWeight: lo.ToPtr(70), Priority: lo.ToPtr(700)},
-				{ID: ch2.ID, OrderingWeight: lo.ToPtr(60), Priority: lo.ToPtr(600)},
-			},
-			wantErr:     false,
-			wantUpdated: 2,
-			verifyWeights: map[int]int{
-				ch1.ID: 70,
-				ch2.ID: 60,
-			},
-			verifyPriority: map[int]int{
-				ch1.ID: 700,
-				ch2.ID: 600,
 			},
 		},
 		{
@@ -897,15 +921,6 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 						expectedWeight, ok := tt.verifyWeights[ch.ID]
 						if ok {
 							require.Equal(t, expectedWeight, ch.OrderingWeight)
-						}
-					}
-				}
-
-				if tt.verifyPriority != nil {
-					for _, ch := range result {
-						expectedPriority, ok := tt.verifyPriority[ch.ID]
-						if ok {
-							require.Equal(t, expectedPriority, ch.Priority)
 						}
 					}
 				}

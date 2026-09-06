@@ -17,6 +17,7 @@ import (
 	"github.com/looplj/axonhub/internal/tracing"
 	"github.com/looplj/axonhub/llm/transformer/anthropic/claudecode"
 	"github.com/looplj/axonhub/llm/transformer/openai/codex"
+	"github.com/looplj/axonhub/llm/transformer/opencode"
 	"github.com/looplj/axonhub/llm/transformer/shared"
 )
 
@@ -132,6 +133,15 @@ func WithTrace(config tracing.Config, traceService *biz.TraceService) gin.Handle
 			return
 		}
 
+		// Tool endpoints such as embeddings carry a trace ID header from generic API
+		// clients but are not conversation turns: keep the resolved trace ID and
+		// response headers for client correlation, but never persist a trace for them.
+		if isNonMessageEndpoint(c.Request.URL.Path) {
+			c.Next()
+
+			return
+		}
+
 		// Get thread ID from context if available
 		var threadID *int
 		if thread, ok := contexts.GetThread(c.Request.Context()); ok && thread != nil {
@@ -206,9 +216,9 @@ func tryExtractTraceIDFromClaudeCodeRequest(c *gin.Context, config tracing.Confi
 	return traceID, nil
 }
 
-// tryExtractTraceIDFromOpenCodeRequest extracts the trace ID from the OpenCode session affinity header.
+// tryExtractTraceIDFromOpenCodeRequest extracts the trace ID from OpenCode session headers.
 func tryExtractTraceIDFromOpenCodeRequest(c *gin.Context) string {
-	traceID := c.GetHeader("x-session-affinity")
+	traceID := opencode.GetSessionIDFromHeaders(c.Request.Header)
 	if traceID == "" {
 		return ""
 	}
@@ -232,4 +242,18 @@ func tryExtractTraceIDFromCodexRequest(c *gin.Context) string {
 	log.Debug(c.Request.Context(), "Extracted trace ID from "+traceSource, log.String("trace_id", traceID))
 
 	return traceID
+}
+
+// isNonMessageEndpoint reports whether the request targets an endpoint whose
+// payload is not message-shaped (e.g. /v1/embeddings). Such requests may carry
+// a trace ID header from generic API clients, but must not create a persisted
+// trace: they are tool calls rather than conversation turns and have no
+// displayable content in the trace UI.
+func isNonMessageEndpoint(path string) bool {
+	if strings.HasSuffix(path, "/embeddings") {
+		return true
+	}
+
+	// Gemini serves embeddings through model actions instead of an /embeddings path.
+	return strings.Contains(path, ":embedContent") || strings.Contains(path, ":batchEmbedContents")
 }

@@ -73,7 +73,7 @@ func (r *channelResolver) DefaultEndpoints(ctx context.Context, obj *ent.Channel
 func (r *channelResolver) AllModelEntries(ctx context.Context, obj *ent.Channel) ([]*biz.ChannelModelEntry, error) {
 	ch := biz.Channel{Channel: obj}
 	entries := ch.GetModelEntries()
-	result := lo.Values(entries)
+	result := sortChannelModelEntries(lo.Values(entries))
 
 	return lo.ToSlicePtr(result), nil
 }
@@ -147,6 +147,11 @@ func (r *channelResolver) LiveLimiterStats(ctx context.Context, obj *ent.Channel
 	}, nil
 }
 
+// OpencodeGo is the resolver for the opencodeGo field.
+func (r *channelProviderQuotaSettingsResolver) OpencodeGo(ctx context.Context, obj *objects.ChannelProviderQuotaSettings) (*OpenCodeGoQuotaSettings, error) {
+	panic(fmt.Errorf("not implemented: OpencodeGo - opencodeGo"))
+}
+
 // HeaderOverrideOperations is the resolver for the headerOverrideOperations field.
 func (r *channelSettingsResolver) HeaderOverrideOperations(ctx context.Context, obj *objects.ChannelSettings) ([]*objects.OverrideOperation, error) {
 	if obj == nil {
@@ -181,6 +186,17 @@ func (r *channelSettingsResolver) BodyOverrideOperations(ctx context.Context, ob
 	}
 
 	return lo.ToSlicePtr(ops), nil
+}
+
+// ProviderQuota is the resolver for the providerQuota field. Quota-only
+// credentials (e.g. the Command Code account session cookie) are sensitive, so
+// they are only exposed to operators holding channel write permission.
+func (r *channelSettingsResolver) ProviderQuota(ctx context.Context, obj *objects.ChannelSettings) (*objects.ChannelProviderQuotaSettings, error) {
+	if obj == nil || !scopes.UserHasScope(ctx, scopes.ScopeWriteChannels) {
+		return nil, nil
+	}
+
+	return obj.ProviderQuota, nil
 }
 
 // CreateChannel is the resolver for the createChannel field.
@@ -1048,6 +1064,16 @@ func (r *traceResolver) UsageMetadata(ctx context.Context, obj *ent.Trace) (*biz
 	return r.traceService.UsageMetadata(ctx, obj.ID)
 }
 
+// OpencodeGo is the resolver for the opencodeGo field.
+func (r *channelProviderQuotaSettingsInputResolver) OpencodeGo(ctx context.Context, obj *objects.ChannelProviderQuotaSettings, data *OpenCodeGoQuotaSettingsInput) error {
+	panic(fmt.Errorf("not implemented: OpencodeGo - opencodeGo"))
+}
+
+// ChannelProviderQuotaSettings returns ChannelProviderQuotaSettingsResolver implementation.
+func (r *Resolver) ChannelProviderQuotaSettings() ChannelProviderQuotaSettingsResolver {
+	return &channelProviderQuotaSettingsResolver{r}
+}
+
 // ChannelSettings returns ChannelSettingsResolver implementation.
 func (r *Resolver) ChannelSettings() ChannelSettingsResolver { return &channelSettingsResolver{r} }
 
@@ -1057,6 +1083,13 @@ func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 // Segment returns SegmentResolver implementation.
 func (r *Resolver) Segment() SegmentResolver { return &segmentResolver{r} }
 
+// ChannelProviderQuotaSettingsInput returns ChannelProviderQuotaSettingsInputResolver implementation.
+func (r *Resolver) ChannelProviderQuotaSettingsInput() ChannelProviderQuotaSettingsInputResolver {
+	return &channelProviderQuotaSettingsInputResolver{r}
+}
+
+type channelProviderQuotaSettingsResolver struct{ *Resolver }
 type channelSettingsResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type segmentResolver struct{ *Resolver }
+type channelProviderQuotaSettingsInputResolver struct{ *Resolver }

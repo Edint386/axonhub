@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -45,6 +46,13 @@ import (
 	"github.com/looplj/axonhub/llm/transformer/xai"
 	xaisubscription "github.com/looplj/axonhub/llm/transformer/xai/subscription"
 	"github.com/looplj/axonhub/llm/transformer/zai"
+	zenmuxtransformer "github.com/looplj/axonhub/llm/transformer/zenmux"
+)
+
+const (
+	zenmuxOpenAIBaseURL    = "https://zenmux.ai/api/v1"
+	zenmuxAnthropicBaseURL = "https://zenmux.ai/api/anthropic"
+	zenmuxGeminiBaseURL    = "https://zenmux.ai/api/vertex-ai"
 )
 
 type AutoRefresher interface {
@@ -124,7 +132,6 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 			disabledKeySet[dk.Key] = struct{}{}
 		}
 	}
-
 	callerACLMemberIDs := make(map[int]struct{}, len(c.Edges.CallerACLMembers))
 	for _, member := range c.Edges.CallerACLMembers {
 		if member != nil {
@@ -139,7 +146,6 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 		cachedEnabledAPIKeys:     c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys),
 		cachedCallerACLMemberIDs: callerACLMemberIDs,
 	}
-	ch.setModelPriceMultiplier(c.ModelPriceMultiplier)
 
 	// Precompute other caches
 	entries := ch.GetModelEntries()
@@ -223,6 +229,15 @@ func (svc *ChannelService) buildChannelWithOutbounds(c *ent.Channel, apiKeyOverr
 			continue
 		}
 
+		if c.Type == channel.TypeZenmux && ep.APIFormat == llm.APIFormatZenmuxVideo.String() {
+			out, err := svc.buildNonDefaultEndpointOutbound(c, ch, ep)
+			if err != nil {
+				return nil, fmt.Errorf("failed to build default outbound for api_format %q on channel %s: %w", ep.APIFormat, c.Name, err)
+			}
+			outbounds[ep.APIFormat] = out
+			continue
+		}
+
 		if c.Type != channel.TypeXai || ep.APIFormat == ch.Outbound.APIFormat().String() {
 			outbounds[ep.APIFormat] = ch.Outbound
 			continue
@@ -242,6 +257,9 @@ func (svc *ChannelService) buildChannelWithOutbounds(c *ent.Channel, apiKeyOverr
 		out, err := svc.buildNonDefaultEndpointOutbound(c, ch, ep)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build outbound for api_format %q on channel %s: %w", ep.APIFormat, c.Name, err)
+		}
+		if c.Type == channel.TypeOpencodeGo || c.Type == channel.TypeOpencodeGoAnthropic {
+			out = opencode.WithSessionHeader(out)
 		}
 		outbounds[ep.APIFormat] = out
 	}
@@ -293,6 +311,7 @@ func (svc *ChannelService) buildCodexOutbound(
 	ch *Channel,
 	baseURL string,
 	transport string,
+	alphaSearchPath string,
 	httpClient *httpclient.HttpClient,
 ) (transformer.Outbound, error) {
 	if c.Credentials.IsOAuth() {
@@ -300,9 +319,10 @@ func (svc *ChannelService) buildCodexOutbound(
 			if existing, ok := ch.Outbound.(*codex.OutboundTransformer); ok {
 				if tokens := existing.TokenProvider(); tokens != nil {
 					return codex.NewOutboundTransformer(codex.Params{
-						TokenProvider: tokens,
-						BaseURL:       baseURL,
-						Transport:     transport,
+						TokenProvider:   tokens,
+						BaseURL:         baseURL,
+						Transport:       transport,
+						AlphaSearchPath: alphaSearchPath,
 					})
 				}
 			}
@@ -343,9 +363,10 @@ func (svc *ChannelService) buildCodexOutbound(
 		}
 
 		return codex.NewOutboundTransformer(codex.Params{
-			TokenProvider: p,
-			BaseURL:       baseURL,
-			Transport:     transport,
+			TokenProvider:   p,
+			BaseURL:         baseURL,
+			Transport:       transport,
+			AlphaSearchPath: alphaSearchPath,
 		})
 	}
 
@@ -353,9 +374,10 @@ func (svc *ChannelService) buildCodexOutbound(
 	tokens := oauth.NewAPIKeyTokenProvider(apiKeyProvider.Get)
 
 	return codex.NewOutboundTransformer(codex.Params{
-		TokenProvider: tokens,
-		BaseURL:       baseURL,
-		Transport:     transport,
+		TokenProvider:   tokens,
+		BaseURL:         baseURL,
+		Transport:       transport,
+		AlphaSearchPath: alphaSearchPath,
 	})
 }
 
@@ -378,7 +400,14 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 	} else {
 		ep.BaseURL = baseURL
 	}
-
+	if isCommandCodeChannelType(c.Type) {
+		if err := validateCommandCodeBaseURL(baseURL); err != nil {
+			return nil, err
+		}
+	}
+	if endpointTransport(ep) == objects.ChannelEndpointTransportWebSocket && !supportsWebSocketTransport(ep.APIFormat) {
+		return nil, fmt.Errorf("websocket transport only supports api_format %q", llm.APIFormatOpenAIResponse.String())
+	}
 	switch ep.APIFormat {
 	case llm.APIFormatOpenAIChatCompletion.String():
 		if c.Type == channel.TypeCline {
@@ -387,6 +416,19 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 				EndpointPath:   ep.Path,
 				APIKeyProvider: apiKeyProvider(),
 			})
+		}
+
+		// Empty paths on existing custom endpoints historically used the generic
+		// OpenAI transformer, which appends /v1. There is no persisted flag that
+		// distinguishes those records from newer family endpoints, so only opt into
+		// a family transformer when the base URL explicitly carries its provider
+		// version. An explicit path is unambiguous and always uses the family
+		// transformer. This preserves old /v1 routes while retaining family-specific
+		// request handling for new /v4 and /v3 endpoints.
+		if ep.Path != "" || providerChatEndpointUsesFamilyVersion(c.Type, baseURL) {
+			if outbound, ok, err := newProviderChatOutbound(c.Type, ch, baseURL, ep.Path); ok {
+				return outbound, err
+			}
 		}
 
 		return openai.NewOutboundTransformerWithConfig(&openai.Config{
@@ -404,9 +446,8 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 	case llm.APIFormatOpenAIResponse.String(),
 		llm.APIFormatOpenAIResponseCompact.String():
 		transport := endpointTransport(ep)
-		if c.Type == channel.TypeCodex ||
-			(c.Type == channel.TypeFenno && ep.APIFormat == llm.APIFormatOpenAIResponse.String()) {
-			return svc.buildCodexOutbound(c, ch, baseURL, transport, ch.HTTPClient)
+		if (c.Type == channel.TypeCodex || c.Type == channel.TypeFenno) && ep.APIFormat == llm.APIFormatOpenAIResponse.String() {
+			return svc.buildCodexOutbound(c, ch, baseURL, transport, "", ch.HTTPClient)
 		}
 
 		return responses.NewOutboundTransformerWithConfig(&responses.Config{
@@ -414,6 +455,17 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 			APIKeyProvider: apiKeyProvider(),
 			EndpointPath:   ep.Path,
 			Transport:      transport,
+		})
+	case llm.APIFormatOpenAIAlphaSearch.String():
+		if c.Type == channel.TypeCodex {
+			return svc.buildCodexOutbound(c, ch, baseURL, endpointTransport(ep), ep.Path, ch.HTTPClient)
+		}
+
+		return openai.NewOutboundTransformerWithConfig(&openai.Config{
+			PlatformType:   openai.PlatformOpenAI,
+			BaseURL:        baseURL,
+			APIKeyProvider: apiKeyProvider(),
+			EndpointPath:   ep.Path,
 		})
 	case llm.APIFormatOpenAIEmbedding.String(),
 		llm.APIFormatOpenAIModeration.String(),
@@ -429,7 +481,7 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 				ep.APIFormat == llm.APIFormatOpenAIImageEdit.String()) {
 			transport := endpointTransport(ep)
 
-			return svc.buildCodexOutbound(c, ch, baseURL, transport, ch.HTTPClient)
+			return svc.buildCodexOutbound(c, ch, baseURL, transport, "", ch.HTTPClient)
 		}
 
 		return openai.NewOutboundTransformerWithConfig(&openai.Config{
@@ -438,7 +490,31 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 			APIKeyProvider: apiKeyProvider(),
 			EndpointPath:   ep.Path,
 		})
+	case llm.APIFormatZenmuxVideo.String():
+		if c.Type != channel.TypeZenmux {
+			return nil, fmt.Errorf("api_format %q is only supported by channel type %q", ep.APIFormat, channel.TypeZenmux)
+		}
+
+		return zenmuxtransformer.NewOutboundTransformerWithConfig(&zenmuxtransformer.Config{
+			BaseURL:        baseURL,
+			EndpointPath:   ep.Path,
+			APIKeyProvider: apiKeyProvider(),
+		})
 	case llm.APIFormatAnthropicMessage.String():
+		// Command Code only accepts Authorization: Bearer, for both the
+		// Anthropic-format channel type and the chat-completions channel type
+		// opting into a custom Anthropic endpoint; ordinary Anthropic direct
+		// channels keep X-API-Key.
+		switch c.Type {
+		case channel.TypeCommandcode, channel.TypeCommandcodeAnthropic:
+			return anthropic.NewOutboundTransformerWithConfig(&anthropic.Config{
+				Type:           anthropic.PlatformCommandCode,
+				BaseURL:        baseURL,
+				APIKeyProvider: apiKeyProvider(),
+				EndpointPath:   ep.Path,
+			})
+		}
+
 		return anthropic.NewOutboundTransformerWithConfig(&anthropic.Config{
 			Type:           anthropic.PlatformDirect,
 			BaseURL:        baseURL,
@@ -470,12 +546,92 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 	}
 }
 
+func newProviderChatOutbound(
+	channelType channel.Type,
+	ch *Channel,
+	baseURL string,
+	endpointPath string,
+) (transformer.Outbound, bool, error) {
+	apiKeyProvider := getAPIKeyProvider(ch)
+
+	switch channelType {
+	case channel.TypeZai, channel.TypeZhipu, channel.TypeZhipuAnthropic, channel.TypeZaiAnthropic:
+		outbound, err := zai.NewOutboundTransformerWithConfig(&zai.Config{
+			BaseURL:        baseURL,
+			Version:        "v4",
+			EndpointPath:   endpointPath,
+			APIKeyProvider: apiKeyProvider,
+		})
+		return outbound, true, err
+	case channel.TypeXiaomi, channel.TypeXiaomiAnthropic:
+		outbound, err := zai.NewOutboundTransformerWithConfig(&zai.Config{
+			BaseURL:        baseURL,
+			Version:        "v1",
+			EndpointPath:   endpointPath,
+			APIKeyProvider: apiKeyProvider,
+		})
+		return outbound, true, err
+	case channel.TypeDoubao, channel.TypeVolcengine, channel.TypeDoubaoAnthropic, channel.TypeVolcengineAnthropic:
+		outbound, err := doubao.NewOutboundTransformerWithConfig(&doubao.Config{
+			BaseURL:        baseURL,
+			EndpointPath:   endpointPath,
+			APIKeyProvider: apiKeyProvider,
+		})
+		return outbound, true, err
+	default:
+		return nil, false, nil
+	}
+}
+
+func providerChatEndpointUsesFamilyVersion(channelType channel.Type, baseURL string) bool {
+	if channelType == channel.TypeXiaomi || channelType == channel.TypeXiaomiAnthropic {
+		// Xiaomi uses v1, so the family and generic transformers have the same
+		// route convention. Keep its provider-specific request handling.
+		return true
+	}
+
+	version := ""
+	switch channelType {
+	case channel.TypeZai, channel.TypeZhipu, channel.TypeZhipuAnthropic, channel.TypeZaiAnthropic:
+		version = "v4"
+	case channel.TypeDoubao, channel.TypeVolcengine, channel.TypeDoubaoAnthropic, channel.TypeVolcengineAnthropic:
+		version = "v3"
+	default:
+		return false
+	}
+
+	return urlPathContainsSegment(baseURL, version)
+}
+
+func urlPathContainsSegment(rawURL, segment string) bool {
+	rawURL = strings.TrimSuffix(rawURL, "##")
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+
+	return slices.Contains(strings.Split(strings.Trim(parsed.Path, "/"), "/"), segment)
+}
+
+func validateCommandCodeBaseURL(rawURL string) error {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("Command Code base URL must use HTTPS")
+	}
+
+	return nil
+}
+
 //nolint:maintidx // Checked.
 func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOverride ...string) (*Channel, error) {
 	// Validate credentials early so we can fail fast without constructing HTTP clients/transformers.
 	//
 	// NOTE: "enabled" keys excludes keys that were explicitly disabled for this channel.
 	enabledKeys := c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys)
+	overrideAPIKey := ""
+	if len(apiKeyOverride) > 0 {
+		overrideAPIKey = strings.TrimSpace(apiKeyOverride[0])
+	}
 
 	//nolint:exhaustive // Checked.
 	switch c.Type {
@@ -500,24 +656,45 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		// Ollama is often run locally without an API key. An apiKeyOverride
 		// (channel key test flow) may also supply a key when none are stored,
 		// so skip the stored-key check here.
+	case channel.TypeCommandcode, channel.TypeCommandcodeAnthropic:
+		// Command Code inference always authenticates with a Bearer API key;
+		// the quota collection cookie is never an inference credential.
+		if len(enabledKeys) == 0 && overrideAPIKey == "" {
+			return nil, fmt.Errorf("missing api key for channel %s", c.Name)
+		}
 	default:
 		if len(enabledKeys) == 0 {
 			return nil, fmt.Errorf("missing api key for channel %s", c.Name)
 		}
 	}
 
+	if c.BaseURL == "" {
+		switch c.Type { //nolint:exhaustive // Only ZenMux types have defaults applied here.
+		case channel.TypeZenmux, channel.TypeZenmuxResponses:
+			c.BaseURL = zenmuxOpenAIBaseURL
+		case channel.TypeZenmuxAnthropic:
+			c.BaseURL = zenmuxAnthropicBaseURL
+		case channel.TypeZenmuxGemini:
+			c.BaseURL = zenmuxGeminiBaseURL
+		default:
+		}
+	}
+
 	httpClient := svc.getHttpClient(c.Settings)
+	if isCommandCodeChannelType(c.Type) {
+		if err := validateCommandCodeBaseURL(c.BaseURL); err != nil {
+			return nil, err
+		}
+		httpClient = httpClient.WithRejectHTTPSDowngrade()
+	}
 	ch := buildChannel(c, httpClient)
-	if len(apiKeyOverride) > 0 {
-		ch.apiKeyOverride = apiKeyOverride[0]
+	if overrideAPIKey != "" {
+		ch.apiKeyOverride = overrideAPIKey
 	}
 
 	switch c.Type {
 	case channel.TypeDoubao, channel.TypeVolcengine:
-		transformer, err := doubao.NewOutboundTransformerWithConfig(&doubao.Config{
-			BaseURL:        c.BaseURL,
-			APIKeyProvider: getAPIKeyProvider(ch),
-		})
+		transformer, _, err := newProviderChatOutbound(c.Type, ch, c.BaseURL, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
 		}
@@ -585,7 +762,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		ch.Outbound = transformer
 
 		return ch, nil
-	case channel.TypeNanogptResponses:
+	case channel.TypeNanogptResponses, channel.TypeZenmuxResponses:
 		transformer, err := responses.NewOutboundTransformerWithConfig(&responses.Config{
 			BaseURL:        c.BaseURL,
 			APIKeyProvider: getAPIKeyProvider(ch),
@@ -598,10 +775,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 
 		return ch, nil
 	case channel.TypeZai, channel.TypeZhipu:
-		transformer, err := zai.NewOutboundTransformerWithConfig(&zai.Config{
-			BaseURL:        c.BaseURL,
-			APIKeyProvider: getAPIKeyProvider(ch),
-		})
+		transformer, _, err := newProviderChatOutbound(c.Type, ch, c.BaseURL, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
 		}
@@ -610,11 +784,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 
 		return ch, nil
 	case channel.TypeXiaomi:
-		transformer, err := zai.NewOutboundTransformerWithConfig(&zai.Config{
-			BaseURL:        c.BaseURL,
-			APIKeyProvider: getAPIKeyProvider(ch),
-			Version:        "v1",
-		})
+		transformer, _, err := newProviderChatOutbound(c.Type, ch, c.BaseURL, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
 		}
@@ -662,7 +832,6 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		transformer, err := responses.NewOutboundTransformerWithConfig(&responses.Config{
 			BaseURL:        c.BaseURL,
 			APIKeyProvider: getAPIKeyProvider(ch),
-			Transport:      primaryEndpointTransport(c, llm.APIFormatOpenAIResponse.String()),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
@@ -702,9 +871,22 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		ch.Outbound = transformer
 
 		return ch, nil
-	case channel.TypeAnthropic, channel.TypeQiniuAnthropic, channel.TypeMinimaxAnthropic, channel.TypeVolcengineAnthropic, channel.TypeAihubmixAnthropic, channel.TypeXiaomiAnthropic, channel.TypeEvolinkAnthropic:
+	case channel.TypeAnthropic, channel.TypeQiniuAnthropic, channel.TypeMinimaxAnthropic, channel.TypeZenmuxAnthropic, channel.TypeVolcengineAnthropic, channel.TypeAihubmixAnthropic, channel.TypeXiaomiAnthropic, channel.TypeEvolinkAnthropic:
 		transformer, err := anthropic.NewOutboundTransformerWithConfig(&anthropic.Config{
 			Type:           anthropic.PlatformDirect,
+			BaseURL:        c.BaseURL,
+			APIKeyProvider: getAPIKeyProvider(ch),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
+		}
+
+		ch.Outbound = transformer
+
+		return ch, nil
+	case channel.TypeCommandcodeAnthropic:
+		transformer, err := anthropic.NewOutboundTransformerWithConfig(&anthropic.Config{
+			Type:           anthropic.PlatformCommandCode,
 			BaseURL:        c.BaseURL,
 			APIKeyProvider: getAPIKeyProvider(ch),
 		})
@@ -958,18 +1140,26 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
 		}
 
-		ch.Outbound = transformer
+		ch.Outbound = opencode.WithSessionHeader(transformer)
 
 		return ch, nil
 	case channel.TypeOpencodeGo:
-		var reasoningEffortMapping []llm.ReasoningEffortMapping
-		if c.Settings != nil {
-			reasoningEffortMapping = c.Settings.TransformOptions.ReasoningEffortMapping
-		}
 		transformer, err := opencode.NewOutboundTransformerWithConfig(&opencode.Config{
-			BaseURL:                c.BaseURL,
-			APIKeyProvider:         getAPIKeyProvider(ch),
-			ReasoningEffortMapping: reasoningEffortMapping,
+			BaseURL:        c.BaseURL,
+			APIKeyProvider: getAPIKeyProvider(ch),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
+		}
+
+		ch.Outbound = transformer
+
+		return ch, nil
+	case channel.TypeCommandcode:
+		transformer, err := openai.NewOutboundTransformerWithConfig(&openai.Config{
+			PlatformType:   openai.PlatformOpenAI,
+			BaseURL:        c.BaseURL,
+			APIKeyProvider: getAPIKeyProvider(ch),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
@@ -980,7 +1170,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		return ch, nil
 	case channel.TypeCodex, channel.TypeFenno:
 		transport := primaryEndpointTransport(c, llm.APIFormatOpenAIResponse.String())
-		transformer, err := svc.buildCodexOutbound(c, ch, c.BaseURL, transport, httpClient)
+		transformer, err := svc.buildCodexOutbound(c, ch, c.BaseURL, transport, "", httpClient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create codex outbound transformer: %w", err)
 		}
@@ -1047,19 +1237,14 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		})
 
 		return ch, nil
-	case channel.TypeOpenai, channel.TypeAtlascloud, channel.TypeDeepinfra, channel.TypeQiniu, channel.TypeMinimax,
+	case channel.TypeOpenai, channel.TypeZenmux, channel.TypeAtlascloud, channel.TypeDeepinfra, channel.TypeQiniu, channel.TypeMinimax,
 		channel.TypePpio, channel.TypeSiliconflow,
 		channel.TypeVercel, channel.TypeAihubmix, channel.TypeBurncloud, channel.TypeGithub,
 		channel.TypeEvolink, channel.TypeGroq:
-		var reasoningEffortMapping []llm.ReasoningEffortMapping
-		if c.Settings != nil {
-			reasoningEffortMapping = c.Settings.TransformOptions.ReasoningEffortMapping
-		}
 		transformer, err := openai.NewOutboundTransformerWithConfig(&openai.Config{
-			PlatformType:           openai.PlatformOpenAI,
-			BaseURL:                c.BaseURL,
-			APIKeyProvider:         getAPIKeyProvider(ch),
-			ReasoningEffortMapping: reasoningEffortMapping,
+			PlatformType:   openai.PlatformOpenAI,
+			BaseURL:        c.BaseURL,
+			APIKeyProvider: getAPIKeyProvider(ch),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create outbound transformer: %w", err)
@@ -1081,7 +1266,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOve
 		ch.Outbound = transformer
 
 		return ch, nil
-	case channel.TypeGemini:
+	case channel.TypeGemini, channel.TypeZenmuxGemini:
 		transformer, err := gemini.NewOutboundTransformerWithConfig(gemini.Config{
 			BaseURL:        c.BaseURL,
 			APIKeyProvider: getAPIKeyProvider(ch),
@@ -1238,82 +1423,26 @@ func (svc *ChannelService) refreshOAuthToken(ctx context.Context, ch *ent.Channe
 // DO NOT modify the returned map or its ChannelModelEntry values.
 // Modifications will not persist and may cause data inconsistency.
 func (ch *Channel) GetModelEntries() map[string]ChannelModelEntry {
-	ch.modelEntriesOnce.Do(func() {
-		groups := ch.GetModelEntryGroups()
-		entries := make(map[string]ChannelModelEntry, len(groups))
-
-		for requestModel, entriesForModel := range groups {
-			if len(entriesForModel) == 0 {
-				continue
-			}
-
-			entries[requestModel] = entriesForModel[0]
-		}
-
-		ch.cachedModelEntries = entries
-	})
-
-	return ch.cachedModelEntries
-}
-
-// GetModelEntryGroups returns all models this channel can handle, grouped by request model.
-// Explicit ModelMappings may define the same alias multiple times, which allows the
-// same request model to resolve to several actual provider models. Callers must not
-// modify the returned map or its slices.
-//
-// The result is computed at most once per channel instance. Concurrent callers
-// all observe the same map.
-func (ch *Channel) GetModelEntryGroups() map[string][]ChannelModelEntry {
-	ch.modelEntryGroupsOnce.Do(func() {
-		ch.cachedModelEntryGroups = ch.buildModelEntryGroups()
-	})
-
-	return ch.cachedModelEntryGroups
-}
-
-// buildModelEntryGroups computes the model entry groups from the channel's
-// supported models and settings. Callers should go through GetModelEntryGroups.
-func (ch *Channel) buildModelEntryGroups() map[string][]ChannelModelEntry {
-	entries := make(map[string][]ChannelModelEntry)
-
-	addEntry := func(entry ChannelModelEntry) bool {
-		current := entries[entry.RequestModel]
-		if len(current) > 0 {
-			return false
-		}
-
-		entries[entry.RequestModel] = []ChannelModelEntry{entry}
-
-		return true
+	// Return cached result if available
+	if ch.cachedModelEntries != nil {
+		return ch.cachedModelEntries
 	}
 
-	appendMappingEntry := func(entry ChannelModelEntry) bool {
-		current := entries[entry.RequestModel]
-		if len(current) > 0 && current[0].Source != "mapping" {
-			return false
-		}
-
-		for _, existing := range current {
-			if existing.ActualModel == entry.ActualModel {
-				return false
-			}
-		}
-
-		entries[entry.RequestModel] = append(current, entry)
-
-		return true
-	}
+	entries := make(map[string]ChannelModelEntry)
 
 	// 1. Direct models from SupportedModels
 	for _, model := range ch.SupportedModels {
-		addEntry(ChannelModelEntry{
-			RequestModel: model,
-			ActualModel:  model,
-			Source:       "direct",
-		})
+		if _, exists := entries[model]; !exists {
+			entries[model] = ChannelModelEntry{
+				RequestModel: model,
+				ActualModel:  model,
+				Source:       "direct",
+			}
+		}
 	}
 
 	if ch.Settings == nil {
+		ch.cachedModelEntries = entries
 		return entries
 	}
 
@@ -1322,11 +1451,13 @@ func (ch *Channel) buildModelEntryGroups() map[string][]ChannelModelEntry {
 		prefix := ch.Settings.ExtraModelPrefix
 		for _, model := range ch.SupportedModels {
 			prefixedModel := prefix + "/" + model
-			addEntry(ChannelModelEntry{
-				RequestModel: prefixedModel,
-				ActualModel:  model,
-				Source:       "prefix",
-			})
+			if _, exists := entries[prefixedModel]; !exists {
+				entries[prefixedModel] = ChannelModelEntry{
+					RequestModel: prefixedModel,
+					ActualModel:  model,
+					Source:       "prefix",
+				}
+			}
 		}
 	}
 
@@ -1341,11 +1472,13 @@ func (ch *Channel) buildModelEntryGroups() map[string][]ChannelModelEntry {
 			// Only process models that have the prefix
 			if after, ok := strings.CutPrefix(model, prefix); ok {
 				trimmedModel := after
-				addEntry(ChannelModelEntry{
-					RequestModel: trimmedModel,
-					ActualModel:  model,
-					Source:       "auto_trim",
-				})
+				if _, exists := entries[trimmedModel]; !exists {
+					entries[trimmedModel] = ChannelModelEntry{
+						RequestModel: trimmedModel,
+						ActualModel:  model,
+						Source:       "auto_trim",
+					}
+				}
 			}
 		}
 	}
@@ -1354,18 +1487,19 @@ func (ch *Channel) buildModelEntryGroups() map[string][]ChannelModelEntry {
 	for _, mapping := range ch.Settings.ModelMappings {
 		// Only add if the target model is supported
 		if slices.Contains(ch.SupportedModels, mapping.To) {
-			if appendMappingEntry(ChannelModelEntry{
-				RequestModel: mapping.From,
-				ActualModel:  mapping.To,
-				Source:       "mapping",
-			}) {
+			if _, exists := entries[mapping.From]; !exists {
+				entries[mapping.From] = ChannelModelEntry{
+					RequestModel: mapping.From,
+					ActualModel:  mapping.To,
+					Source:       "mapping",
+				}
 				// When hideMappedModels is enabled, remove all entries that resolve
 				// to the mapped target model (mapping.To), except for mapping entries
 				// themselves. This covers direct, prefixed, and auto-trimmed variants,
 				// since they are all alternative access paths to the same underlying model.
 				if ch.Settings.HideMappedModels {
-					for key, entriesForModel := range entries {
-						if len(entriesForModel) > 0 && entriesForModel[0].ActualModel == mapping.To && entriesForModel[0].Source != "mapping" {
+					for key, entry := range entries {
+						if entry.ActualModel == mapping.To && entry.Source != "mapping" {
 							delete(entries, key)
 						}
 					}
@@ -1378,8 +1512,8 @@ func (ch *Channel) buildModelEntryGroups() map[string][]ChannelModelEntry {
 	// When hideOriginalModels is enabled, remove direct models from the entries
 	// This allows only transformed models (prefix, auto_trim, mapping) to be exposed
 	if ch.Settings.HideOriginalModels {
-		for key, entriesForModel := range entries {
-			if len(entriesForModel) > 0 && entriesForModel[0].Source == "direct" {
+		for key, entry := range entries {
+			if entry.Source == "direct" {
 				delete(entries, key)
 			}
 		}
@@ -1392,41 +1526,18 @@ func (ch *Channel) buildModelEntryGroups() map[string][]ChannelModelEntry {
 	if ch.Settings.LowercaseModelID {
 		// If two entries collide after lowercasing (e.g., "GPT-4" and "gpt-4"),
 		// the one with higher source priority wins: direct > auto_trim > mapping > prefix.
-		lowercased := make(map[string][]ChannelModelEntry, len(entries))
-		for key, entriesForModel := range entries {
+		lowercased := make(map[string]ChannelModelEntry, len(entries))
+		for key, entry := range entries {
 			lowerKey := strings.ToLower(key)
-
-			loweredEntries := make([]ChannelModelEntry, 0, len(entriesForModel))
-			for _, entry := range entriesForModel {
-				entry.RequestModel = strings.ToLower(entry.RequestModel)
-				loweredEntries = append(loweredEntries, entry)
-			}
-
-			existing, exists := lowercased[lowerKey]
-			if !exists || sourcePriority[loweredEntries[0].Source] > sourcePriority[existing[0].Source] {
-				lowercased[lowerKey] = loweredEntries
-				continue
-			}
-
-			if loweredEntries[0].Source == "mapping" && sourcePriority[loweredEntries[0].Source] == sourcePriority[existing[0].Source] {
-				for _, entry := range loweredEntries {
-					duplicateActualModel := false
-					for _, existingEntry := range existing {
-						if existingEntry.ActualModel == entry.ActualModel {
-							duplicateActualModel = true
-							break
-						}
-					}
-					if duplicateActualModel {
-						continue
-					}
-
-					lowercased[lowerKey] = append(lowercased[lowerKey], entry)
-				}
+			entry.RequestModel = strings.ToLower(entry.RequestModel)
+			if existing, exists := lowercased[lowerKey]; !exists || sourcePriority[entry.Source] > sourcePriority[existing.Source] {
+				lowercased[lowerKey] = entry
 			}
 		}
 		entries = lowercased
 	}
+
+	ch.cachedModelEntries = entries
 
 	return entries
 }
@@ -1450,4 +1561,47 @@ func (ch *Channel) GetDirectModelEntries() map[string]ChannelModelEntry {
 	}
 
 	return entries
+}
+
+// GetModelEntryGroups returns every actual target for each request-model alias.
+// Association matching may intentionally keep duplicate aliases instead of
+// collapsing them to the first mapping.
+func (ch *Channel) GetModelEntryGroups() map[string][]ChannelModelEntry {
+	groups := make(map[string][]ChannelModelEntry)
+	entries := ch.GetModelEntries()
+	for requestModel, entry := range entries {
+		if entry.Source != "mapping" {
+			groups[requestModel] = []ChannelModelEntry{entry}
+		}
+	}
+	if ch.Settings == nil {
+		return groups
+	}
+	direct := ch.GetDirectModelEntries()
+	for _, mapping := range ch.Settings.ModelMappings {
+		if mapping.From == "" || mapping.To == "" {
+			continue
+		}
+		if entry, ok := direct[mapping.From]; ok {
+			groups[mapping.From] = []ChannelModelEntry{entry}
+			continue
+		}
+		for _, model := range ch.SupportedModels {
+			if model == mapping.To {
+				entry := ChannelModelEntry{
+					RequestModel: mapping.From,
+					ActualModel:  mapping.To,
+					Source:       "mapping",
+				}
+				seen := false
+				for _, existing := range groups[mapping.From] {
+					seen = seen || existing.ActualModel == entry.ActualModel
+				}
+				if !seen {
+					groups[mapping.From] = append(groups[mapping.From], entry)
+				}
+			}
+		}
+	}
+	return groups
 }

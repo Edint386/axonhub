@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -12,7 +14,6 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
-	"github.com/looplj/axonhub/llm/streams"
 )
 
 func TestExtractErrorMessageForMatchingCapsResponseBody(t *testing.T) {
@@ -343,40 +344,103 @@ func TestPerformanceRecording_StreamFlagBugRegression(t *testing.T) {
 
 // TestRecordPerformanceStream_MarksFirstToken verifies that recordPerformanceStream
 // correctly marks the first token time.
-func TestRecordPerformanceStream_DoesNotMarkFirstTokenForUsageOnlyChunk(t *testing.T) {
-	perf := &biz.PerformanceRecord{Stream: true}
-	state := &PersistenceState{
-		Perf: perf,
+func TestRecordPerformanceStream_UsageDoesNotMarkFirstTokenOrComplete(t *testing.T) {
+	perf := &biz.PerformanceRecord{
+		StartTime: time.Now(),
+		Stream:    true,
 	}
-
-	usageOnlyChunk := &llm.Response{
-		Usage: &llm.Usage{
-			PromptTokens: 10,
-			TotalTokens:  10,
-		},
-	}
-	content := "hello"
-	contentChunk := &llm.Response{
-		Choices: []llm.Choice{
+	state := &PersistenceState{Perf: perf}
+	stream := &responseSliceStream{
+		events: []*llm.Response{
 			{
-				Delta: &llm.Message{
-					Content: llm.MessageContent{Content: &content},
-				},
+				Choices: []llm.Choice{{Delta: &llm.Message{Role: "assistant"}}},
+				Usage:   &llm.Usage{CompletionTokens: 2},
+			},
+			{
+				Choices: []llm.Choice{{Delta: &llm.Message{Content: llm.MessageContent{Content: lo.ToPtr("hello")}}}},
 			},
 		},
 	}
+	recording := &recordPerformanceStream{stream: stream, state: state}
 
-	stream := &recordPerformanceStream{
-		ctx:    context.Background(),
-		stream: streams.SliceStream([]*llm.Response{usageOnlyChunk, contentChunk}),
-		state:  state,
+	require.True(t, recording.Next())
+	recording.Current()
+
+	assert.Nil(t, perf.FirstTokenTime, "usage on a lifecycle event must not count as the first token")
+	assert.Equal(t, int64(2), perf.CompletionTokens)
+	assert.False(t, perf.RequestCompleted, "usage must not complete an active stream")
+
+	require.True(t, recording.Next())
+	recording.Current()
+
+	assert.NotNil(t, perf.FirstTokenTime, "the first non-empty output delta should mark first token")
+}
+
+func TestRecordPerformanceStream_QueuesCompletedPerformanceAfterFinalUsage(t *testing.T) {
+	perf := &biz.PerformanceRecord{
+		StartTime: time.Now(),
+		Stream:    true,
+	}
+	state := &PersistenceState{Perf: perf}
+	stream := &responseSliceStream{
+		events: []*llm.Response{
+			{Choices: []llm.Choice{{Delta: &llm.Message{}, FinishReason: lo.ToPtr("stop")}}},
+			{Usage: &llm.Usage{CompletionTokens: 9}},
+		},
 	}
 
-	require.True(t, stream.Next())
-	require.Same(t, usageOnlyChunk, stream.Current())
-	require.Nil(t, perf.FirstTokenTime, "usage-only chunks should not start first-token latency")
+	var recorded *biz.PerformanceRecord
+	recordCalls := 0
+	recording := &recordPerformanceStream{
+		stream: stream,
+		state:  state,
+		onClose: func() {
+			recordCalls++
+			recorded = state.Perf
+		},
+	}
 
-	require.True(t, stream.Next())
-	require.Same(t, contentChunk, stream.Current())
-	require.NotNil(t, perf.FirstTokenTime, "content chunks should start first-token latency")
+	// The raw terminal event is observed before the normalized finish and usage events.
+	perf.MarkSuccess()
+	require.True(t, recording.Next())
+	recording.Current()
+	assert.Nil(t, recorded, "finish event must not submit metrics before the final usage event")
+
+	require.True(t, recording.Next())
+	recording.Current()
+	assert.Nil(t, recorded, "usage must be applied before metrics are submitted")
+
+	require.NoError(t, recording.Close())
+
+	require.Same(t, perf, recorded)
+	assert.Equal(t, int64(9), recorded.CompletionTokens)
+	assert.Equal(t, 1, recordCalls)
+	require.NoError(t, recording.Close())
+	assert.Equal(t, 1, recordCalls)
+}
+
+type responseSliceStream struct {
+	events []*llm.Response
+	index  int
+}
+
+func (s *responseSliceStream) Next() bool {
+	if s.index >= len(s.events) {
+		return false
+	}
+
+	s.index++
+	return true
+}
+
+func (s *responseSliceStream) Current() *llm.Response {
+	return s.events[s.index-1]
+}
+
+func (s *responseSliceStream) Err() error {
+	return nil
+}
+
+func (s *responseSliceStream) Close() error {
+	return nil
 }

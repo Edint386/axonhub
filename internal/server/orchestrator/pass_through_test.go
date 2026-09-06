@@ -1421,6 +1421,153 @@ func TestApplyPassThroughBodyPreservesMappedModel(t *testing.T) {
 	require.Equal(t, `{"model":"my-alias","messages":[{"role":"user","content":"hi"}],"temperature":0.4}`, string(outbound.state.LlmRequest.RawRequest.Body))
 }
 
+func TestOpenAIJSONRequestBodyRoutingContracts(t *testing.T) {
+	formats := []llm.APIFormat{
+		llm.APIFormatOpenAIChatCompletion,
+		llm.APIFormatOpenAICompletion,
+		llm.APIFormatOpenAIResponse,
+		llm.APIFormatOpenAIResponseCompact,
+		llm.APIFormatOpenAIEmbedding,
+		llm.APIFormatOpenAIModeration,
+		llm.APIFormatOpenAIAlphaSearch,
+		llm.APIFormatOpenAIImageGeneration,
+		llm.APIFormatOpenAIVideo,
+		llm.APIFormatOpenAISpeech,
+	}
+
+	for _, format := range formats {
+		t.Run(format.String()+" pass-through", func(t *testing.T) {
+			channel := &biz.Channel{Channel: &ent.Channel{
+				ID:   1,
+				Name: "openai-pass-through",
+				Settings: &objects.ChannelSettings{
+					PassThroughBody: lo.ToPtr(true),
+				},
+			}}
+			outbound := &PersistentOutboundTransformer{state: &PersistenceState{
+				CurrentCandidate: &ChannelModelsCandidate{Channel: channel},
+				LlmRequest: &llm.Request{
+					Model:     "provider-model",
+					APIFormat: format,
+					RawRequest: &httpclient.Request{
+						APIFormat: format.String(),
+						Body:      []byte(`{"model":"client-alias","official_future_field":{"enabled":true}}`),
+					},
+				},
+			}}
+			transformed := &httpclient.Request{
+				APIFormat: format.String(),
+				Body:      []byte(`{"model":"provider-model","converted_only":true}`),
+			}
+
+			processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(t.Context(), transformed)
+			require.NoError(t, err)
+			require.True(t, outbound.state.PassThroughApplied)
+			require.Equal(t, "provider-model", gjson.GetBytes(processed.Body, "model").String())
+			require.True(t, gjson.GetBytes(processed.Body, "official_future_field.enabled").Bool())
+			require.False(t, gjson.GetBytes(processed.Body, "converted_only").Exists())
+		})
+
+		t.Run(format.String()+" conversion", func(t *testing.T) {
+			channel := &biz.Channel{Channel: &ent.Channel{
+				ID:   1,
+				Name: "openai-conversion",
+				Settings: &objects.ChannelSettings{
+					PassThroughBody: lo.ToPtr(true),
+				},
+			}}
+			outbound := &PersistentOutboundTransformer{state: &PersistenceState{
+				CurrentCandidate: &ChannelModelsCandidate{Channel: channel},
+				LlmRequest: &llm.Request{
+					Model:     "provider-model",
+					APIFormat: format,
+					RawRequest: &httpclient.Request{
+						APIFormat: format.String(),
+						Body:      []byte(`{"model":"client-alias","original_only":true}`),
+					},
+				},
+			}}
+			transformed := &httpclient.Request{
+				APIFormat: llm.APIFormatAnthropicMessage.String(),
+				Body:      []byte(`{"model":"provider-model","converted_only":true}`),
+			}
+
+			processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(t.Context(), transformed)
+			require.NoError(t, err)
+			require.False(t, outbound.state.PassThroughApplied)
+			require.Equal(t, transformed, processed)
+			require.True(t, gjson.GetBytes(processed.Body, "converted_only").Bool())
+			require.False(t, gjson.GetBytes(processed.Body, "original_only").Exists())
+		})
+	}
+}
+
+func TestOpenAIResponseBodyRoutingContracts(t *testing.T) {
+	formats := []llm.APIFormat{
+		llm.APIFormatOpenAIChatCompletion,
+		llm.APIFormatOpenAICompletion,
+		llm.APIFormatOpenAIResponse,
+		llm.APIFormatOpenAIResponseCompact,
+		llm.APIFormatOpenAIEmbedding,
+		llm.APIFormatOpenAIModeration,
+		llm.APIFormatOpenAIAlphaSearch,
+		llm.APIFormatOpenAIImageGeneration,
+		llm.APIFormatOpenAIImageEdit,
+		llm.APIFormatOpenAIVideo,
+		llm.APIFormatOpenAISpeech,
+		llm.APIFormatOpenAITranscription,
+		llm.APIFormatOpenAITranslation,
+	}
+
+	for _, format := range formats {
+		t.Run(format.String()+" pass-through", func(t *testing.T) {
+			channel := &biz.Channel{Channel: &ent.Channel{
+				ID:   1,
+				Name: "openai-response-pass-through",
+				Settings: &objects.ChannelSettings{
+					PassThroughBody: lo.ToPtr(true),
+				},
+			}}
+			raw := &httpclient.Response{StatusCode: http.StatusOK, Body: []byte(`{"raw":true}`)}
+			outbound := &PersistentOutboundTransformer{state: &PersistenceState{
+				CurrentCandidate:    &ChannelModelsCandidate{Channel: channel},
+				LlmRequest:          &llm.Request{APIFormat: format},
+				RawProviderRequest:  &httpclient.Request{APIFormat: format.String()},
+				RawProviderResponse: raw,
+			}}
+			transformed := &httpclient.Response{StatusCode: http.StatusOK, Body: []byte(`{"transformed":true}`)}
+
+			processed, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(t.Context(), transformed)
+			require.NoError(t, err)
+			require.Equal(t, raw, processed)
+		})
+
+		t.Run(format.String()+" conversion", func(t *testing.T) {
+			channel := &biz.Channel{Channel: &ent.Channel{
+				ID:   1,
+				Name: "openai-response-conversion",
+				Settings: &objects.ChannelSettings{
+					PassThroughBody: lo.ToPtr(true),
+				},
+			}}
+			outbound := &PersistentOutboundTransformer{state: &PersistenceState{
+				CurrentCandidate:   &ChannelModelsCandidate{Channel: channel},
+				LlmRequest:         &llm.Request{APIFormat: format},
+				RawProviderRequest: &httpclient.Request{APIFormat: llm.APIFormatAnthropicMessage.String()},
+				RawProviderResponse: &httpclient.Response{
+					StatusCode: http.StatusOK,
+					Body:       []byte(`{"raw":true}`),
+				},
+			}}
+			transformed := &httpclient.Response{StatusCode: http.StatusOK, Body: []byte(`{"transformed":true}`)}
+
+			processed, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(t.Context(), transformed)
+			require.NoError(t, err)
+			require.Equal(t, transformed, processed)
+		})
+	}
+}
+
 func TestApplyPassThroughBodySkipsWhenOutboundPolicyRejects(t *testing.T) {
 	ctx := context.Background()
 
@@ -1998,6 +2145,116 @@ func TestApplyPassThroughBodySkipsMultipartFormats(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, outboundBody, processed.Body)
 			require.False(t, outbound.state.PassThroughApplied)
+		})
+	}
+}
+
+func TestApplyPassThroughBodySkipsMultipartVideo(t *testing.T) {
+	channel := &biz.Channel{Channel: &ent.Channel{
+		ID:   1,
+		Name: "pass-through-multipart-video",
+		Settings: &objects.ChannelSettings{
+			PassThroughBody: lo.ToPtr(true),
+		},
+	}}
+	inboundBody := []byte("--client-boundary\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nclient-alias\r\n--client-boundary--\r\n")
+	outboundBody := []byte("--provider-boundary\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nprovider-model\r\n--provider-boundary--\r\n")
+	outbound := &PersistentOutboundTransformer{state: &PersistenceState{
+		CurrentCandidate: &ChannelModelsCandidate{Channel: channel},
+		LlmRequest: &llm.Request{
+			Model:     "provider-model",
+			APIFormat: llm.APIFormatOpenAIVideo,
+			RawRequest: &httpclient.Request{
+				APIFormat: llm.APIFormatOpenAIVideo.String(),
+				Headers:   http.Header{"Content-Type": []string{"multipart/form-data; boundary=client-boundary"}},
+				Body:      inboundBody,
+			},
+		},
+	}}
+	request := &httpclient.Request{
+		APIFormat: llm.APIFormatOpenAIVideo.String(),
+		Headers:   http.Header{"Content-Type": []string{"multipart/form-data; boundary=provider-boundary"}},
+		Body:      outboundBody,
+	}
+
+	processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(t.Context(), request)
+	require.NoError(t, err)
+	require.False(t, outbound.state.PassThroughApplied)
+	require.Equal(t, outboundBody, processed.Body)
+}
+
+func TestApplyPassThroughBodyAppliesJSONImageEdit(t *testing.T) {
+	ctx := context.Background()
+
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:   1,
+			Name: "pass-through-json-image-edit",
+			Settings: &objects.ChannelSettings{
+				PassThroughBody: lo.ToPtr(true),
+			},
+		},
+	}
+
+	inboundBody := []byte(`{"model":"my-edit-alias","prompt":"make it blue","image":"data:image/png;base64,aGk="}`)
+	outboundBody := []byte("--new-boundary\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nmake it blue\r\n--new-boundary--\r\n")
+
+	outbound := &PersistentOutboundTransformer{
+		state: &PersistenceState{
+			CurrentCandidate: &ChannelModelsCandidate{Channel: channel},
+			LlmRequest: &llm.Request{
+				Model:     "sensenova-u1.5-lite",
+				APIFormat: llm.APIFormatOpenAIImageEdit,
+				RawRequest: &httpclient.Request{
+					APIFormat: string(llm.APIFormatOpenAIImageEdit),
+					Headers:   http.Header{"Content-Type": []string{"application/json"}},
+					Body:      inboundBody,
+				},
+			},
+		},
+	}
+
+	request := &httpclient.Request{
+		APIFormat:   string(llm.APIFormatOpenAIImageEdit),
+		Headers:     http.Header{"Content-Type": []string{"multipart/form-data; boundary=new-boundary"}},
+		ContentType: "multipart/form-data; boundary=new-boundary",
+		Body:        outboundBody,
+	}
+
+	processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(ctx, request)
+	require.NoError(t, err)
+	require.True(t, outbound.state.PassThroughApplied)
+
+	// The raw JSON body replaces the rebuilt multipart body, with the mapped model patched in.
+	require.Equal(t, "sensenova-u1.5-lite", gjson.GetBytes(processed.Body, "model").String())
+	require.Equal(t, "make it blue", gjson.GetBytes(processed.Body, "prompt").String())
+
+	// Content-Type must match the replayed JSON body instead of the rebuilt multipart one.
+	require.Equal(t, "application/json", processed.Headers.Get("Content-Type"))
+	require.Equal(t, "application/json", processed.ContentType)
+}
+
+func TestPassThroughBodySupported_ImageEditContentType(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		supported   bool
+	}{
+		{name: "json", contentType: "application/json", supported: true},
+		{name: "json with charset", contentType: "application/json; charset=utf-8", supported: true},
+		{name: "json patch", contentType: "application/json-patch+json", supported: false},
+		{name: "invalid", contentType: "application/json; charset", supported: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &llm.Request{
+				APIFormat: llm.APIFormatOpenAIImageEdit,
+				RawRequest: &httpclient.Request{
+					Headers: http.Header{"Content-Type": []string{tt.contentType}},
+				},
+			}
+			require.Equal(t, tt.supported, passThroughBodySupported(req))
 		})
 	}
 }

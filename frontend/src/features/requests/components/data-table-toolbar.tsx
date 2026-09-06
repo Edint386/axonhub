@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { Table } from '@tanstack/react-table';
 import { Filter, GripVertical, X } from 'lucide-react';
@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useSelectedProjectId } from '@/stores/projectStore';
 import type { DateTimeRangeValue } from '@/utils/date-range';
 import type { AutoRefreshInterval } from '@/hooks/use-auto-refresh-interval';
+import { useDebounce } from '@/hooks/use-debounce';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,7 +17,7 @@ import { AutoRefreshControl } from '@/components/auto-refresh-control';
 import { DataTableColumnOrderDialog } from '@/components/data-table-column-order-dialog';
 import { DataTableFacetedFilter } from '@/components/data-table-faceted-filter';
 import { DateRangePicker } from '@/components/date-range-picker';
-import { useApiKeys } from '@/features/apikeys/data';
+import { useApiKeyOptions, useApiKeyOptionsByIDs } from '@/features/apikeys/data';
 import { useMe } from '@/features/auth/data/auth';
 import { useAllChannelSummarys } from '@/features/channels/data/channels';
 import { RequestStatus } from '../data/schema';
@@ -53,12 +54,20 @@ interface RequestFilterControlsProps {
   canViewApiKeys: boolean;
   apiKeyOptions: { value: string; label: string }[];
   isFetchingApiKeys: boolean;
+  apiKeySearch: string;
+  onApiKeySearchChange: (value: string) => void;
+  hasMoreApiKeys: boolean;
+  isFetchingMoreApiKeys: boolean;
+  onLoadMoreApiKeys: () => void;
   showArchivedApiKeys: boolean;
   handleToggleShowArchivedApiKeys: (checked: boolean) => void;
   isMobile?: boolean;
   onCloseAfterAction?: () => void;
 }
 
+/**
+ * Renders request filters for desktop and mobile layouts, including empty API key results.
+ */
 function RequestFilterControls({
   table,
   dateRange,
@@ -76,6 +85,11 @@ function RequestFilterControls({
   canViewApiKeys,
   apiKeyOptions,
   isFetchingApiKeys,
+  apiKeySearch,
+  onApiKeySearchChange,
+  hasMoreApiKeys,
+  isFetchingMoreApiKeys,
+  onLoadMoreApiKeys,
   showArchivedApiKeys,
   handleToggleShowArchivedApiKeys,
   isMobile = false,
@@ -136,11 +150,17 @@ function RequestFilterControls({
           footer={channelFooter}
         />
       )}
-      {canViewApiKeys && table.getColumn('caller') && (apiKeyOptions.length > 0 || isFetchingApiKeys) && (
+      {canViewApiKeys && table.getColumn('caller') && (
         <DataTableFacetedFilter
           column={table.getColumn('caller')}
           title={t('requests.filters.apiKey')}
           options={apiKeyOptions}
+          searchValue={apiKeySearch}
+          onSearchValueChange={onApiKeySearchChange}
+          isLoading={isFetchingApiKeys}
+          hasMore={hasMoreApiKeys}
+          isLoadingMore={isFetchingMoreApiKeys}
+          onLoadMore={onLoadMoreApiKeys}
           footer={apiKeyFooter}
         />
       )}
@@ -196,14 +216,17 @@ export function DataTableToolbar<TData>({
 }: DataTableToolbarProps<TData>) {
   const { t } = useTranslation();
   const [showArchivedApiKeys, setShowArchivedApiKeys] = useState(false);
+  const [apiKeySearch, setApiKeySearch] = useState('');
   const [showArchivedChannels, setShowArchivedChannels] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [columnOrderOpen, setColumnOrderOpen] = useState(false);
+  const debouncedApiKeySearch = useDebounce(apiKeySearch, 300);
   const hasDateRange = !!dateRange?.from || !!dateRange?.to;
   const isFiltered = table.getState().columnFilters.length > 0 || hasDateRange;
 
   // Active filter count for mobile badge (excludes model ID filter)
   const columnFilters = table.getState().columnFilters;
+  const selectedApiKeyIDs = columnFilters.find((filter) => filter.id === 'caller')?.value as string[] | undefined;
   const activeFilterCount = useMemo(() => {
     let count = 0;
     for (const filter of columnFilters) {
@@ -221,11 +244,16 @@ export function DataTableToolbar<TData>({
       // When turning off show archived, prune any archived IDs from the filter
       const currentFilter = table.getColumn('caller')?.getFilterValue() as string[] | undefined;
       if (currentFilter && currentFilter.length > 0) {
-        // Compute visible IDs from raw data (filtering for non-archived status)
-        const visibleIds = new Set(
-          apiKeysData?.edges?.filter((edge) => edge.node.status !== 'archived')?.map((edge) => edge.node.id) ?? []
+        // Only prune IDs confirmed archived; search results do not contain every selected key.
+        const archivedIds = new Set(
+          selectedApiKeysData?.edges?.filter((edge) => edge.node.status === 'archived').map((edge) => edge.node.id) ?? []
         );
-        const prunedFilter = currentFilter.filter((id) => visibleIds.has(id));
+        for (const page of apiKeysData?.pages ?? []) {
+          for (const edge of page.edges) {
+            if (edge.node.status === 'archived') archivedIds.add(edge.node.id);
+          }
+        }
+        const prunedFilter = currentFilter.filter((id) => !archivedIds.has(id));
         table.getColumn('caller')?.setFilterValue(prunedFilter.length > 0 ? prunedFilter : undefined);
       }
     }
@@ -264,22 +292,21 @@ export function DataTableToolbar<TData>({
     includeArchived: showArchivedChannels,
   });
 
-  const { data: apiKeysData, isFetching: isFetchingApiKeys } = useApiKeys(
-    {
-      first: 100,
-      orderBy: { field: 'CREATED_AT', direction: 'DESC' },
-      where: showArchivedApiKeys
-        ? {
-            statusIn: ['enabled', 'disabled', 'archived'],
-          }
-        : {
-            statusIn: ['enabled', 'disabled'],
-          },
-    },
-    {
-      disableAutoFetch: !canViewApiKeys,
-    }
-  );
+  const {
+    data: apiKeysData,
+    isFetching: isFetchingApiKeyOptions,
+    fetchNextPage: fetchNextApiKeyPage,
+    hasNextPage: hasNextApiKeyPage,
+    isFetchingNextPage: isFetchingNextApiKeyPage,
+  } = useApiKeyOptions({
+    search: debouncedApiKeySearch,
+    includeArchived: showArchivedApiKeys,
+    enabled: canViewApiKeys,
+  });
+  const { data: selectedApiKeysData, isFetching: isFetchingSelectedApiKeys } = useApiKeyOptionsByIDs(selectedApiKeyIDs, {
+    enabled: canViewApiKeys && !!selectedApiKeyIDs?.length,
+  });
+  const isFetchingApiKeys = isFetchingApiKeyOptions || isFetchingSelectedApiKeys;
 
   const channelOptions = useMemo(() => {
     if (!canViewChannels || !channelsData?.edges) return [];
@@ -291,13 +318,19 @@ export function DataTableToolbar<TData>({
   }, [canViewChannels, channelsData]);
 
   const apiKeyOptions = useMemo(() => {
-    if (!canViewApiKeys || !apiKeysData?.edges) return [];
+    if (!canViewApiKeys) return [];
 
-    return apiKeysData.edges.map((edge) => ({
-      value: edge.node.id,
-      label: edge.node.name,
-    }));
-  }, [canViewApiKeys, apiKeysData]);
+    const options = new Map<string, { value: string; label: string }>();
+    for (const edge of selectedApiKeysData?.edges ?? []) {
+      options.set(edge.node.id, { value: edge.node.id, label: edge.node.name });
+    }
+    for (const page of apiKeysData?.pages ?? []) {
+      for (const edge of page.edges) {
+        options.set(edge.node.id, { value: edge.node.id, label: edge.node.name });
+      }
+    }
+    return Array.from(options.values());
+  }, [canViewApiKeys, apiKeysData, selectedApiKeysData]);
 
   const requestStatuses = [
     {
@@ -388,6 +421,11 @@ export function DataTableToolbar<TData>({
               canViewApiKeys={canViewApiKeys}
               apiKeyOptions={apiKeyOptions}
               isFetchingApiKeys={isFetchingApiKeys}
+              hasMoreApiKeys={!!hasNextApiKeyPage}
+              isFetchingMoreApiKeys={isFetchingNextApiKeyPage}
+              onLoadMoreApiKeys={fetchNextApiKeyPage}
+              apiKeySearch={apiKeySearch}
+              onApiKeySearchChange={setApiKeySearch}
               showArchivedApiKeys={showArchivedApiKeys}
               handleToggleShowArchivedApiKeys={handleToggleShowArchivedApiKeys}
               isMobile
@@ -415,6 +453,11 @@ export function DataTableToolbar<TData>({
         canViewApiKeys={canViewApiKeys}
         apiKeyOptions={apiKeyOptions}
         isFetchingApiKeys={isFetchingApiKeys}
+        hasMoreApiKeys={!!hasNextApiKeyPage}
+        isFetchingMoreApiKeys={isFetchingNextApiKeyPage}
+        onLoadMoreApiKeys={fetchNextApiKeyPage}
+        apiKeySearch={apiKeySearch}
+        onApiKeySearchChange={setApiKeySearch}
         showArchivedApiKeys={showArchivedApiKeys}
         handleToggleShowArchivedApiKeys={handleToggleShowArchivedApiKeys}
       />

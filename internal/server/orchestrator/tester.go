@@ -398,7 +398,7 @@ func (processor *TestChannelOrchestrator) handleStreamResponse(
 			continue
 		}
 
-		if responseHasOutput(&chunk) {
+		if hasMeaningfulStreamOutput(&chunk) {
 			markTestChannelFirstToken(result, startTime)
 		}
 

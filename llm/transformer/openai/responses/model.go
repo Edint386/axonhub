@@ -141,7 +141,7 @@ type Request struct {
 	Temperature *float64 `json:"temperature,omitempty"`
 
 	// Input can be a string prompt or an array of input items.
-	Input Input `json:"input"`
+	Input Input `json:"input,omitzero"`
 	// Tools includes the function/image_generation/web_search/custom tools.
 	Tools []Tool `json:"tools,omitzero"`
 	// Parallel tool calls preference.
@@ -586,6 +586,11 @@ type Item struct {
 
 	// The detail of the image. high, low, or auto, for input_image type.
 	Detail *string `json:"detail,omitempty"`
+	// File fields for input_file content.
+	FileData *string `json:"file_data,omitempty"`
+	FileID   *string `json:"file_id,omitempty"`
+	FileURL  *string `json:"file_url,omitempty"`
+	Filename *string `json:"filename,omitempty"`
 
 	// Text for output_text/input_text type.
 	Text *string `json:"text,omitempty"`
@@ -1099,6 +1104,7 @@ type Error struct {
 	Type    string `json:"type,omitempty"`
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message"`
+	Param   string `json:"param,omitempty"`
 }
 
 type rawJSONSchema struct {

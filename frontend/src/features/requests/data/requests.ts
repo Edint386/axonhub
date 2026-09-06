@@ -76,6 +76,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
                   createdAt
                   updatedAt
                   modelID
+                  format
                   status
                   reasoningEffort
                   passThroughApplied${executionChannelFields}

@@ -9,6 +9,7 @@ import {
   Moonshot,
   Zhipu,
   OpenRouter,
+  ZenMux,
   XAI,
   Volcengine,
   SiliconCloud,
@@ -34,6 +35,7 @@ import {
   Groq,
 } from '@lobehub/icons';
 import { AtlasCloudIcon } from '../components/atlas-cloud-icon';
+import { CommandCodeIcon } from '../components/commandcode-icon';
 import { EvolinkIcon } from '../components/evolink-icon';
 import { FennoIcon } from '../components/fenno-icon';
 import { NanoGPTIcon } from '../components/nanogpt-icon';
@@ -124,7 +126,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   codex: {
     channelType: 'codex',
     baseURL: 'https://chatgpt.com/backend-api/codex#',
-    defaultModels: ['gpt-5.2', 'gpt-5.2-codex'],
+    defaultModels: ['gpt-5.2', 'gpt-5.2-codex', 'gpt-6-astra'],
     apiFormat: OPENAI_RESPONSES,
     color: 'bg-[#32746D] text-white border-[#32746D]',
     icon: OpenAI,
@@ -802,6 +804,54 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
     color: 'bg-orange-100 text-orange-800 border-orange-200',
     icon: Groq,
   },
+  zenmux: {
+    channelType: 'zenmux',
+    baseURL: 'https://zenmux.ai/api/v1',
+    defaultModels: ['openai/gpt-5', 'anthropic/claude-sonnet-4.5'],
+    apiFormat: OPENAI_CHAT_COMPLETIONS,
+    color: 'bg-gray-100 text-gray-800 border-gray-200',
+    icon: ZenMux,
+  },
+  zenmux_responses: {
+    channelType: 'zenmux_responses',
+    baseURL: 'https://zenmux.ai/api/v1',
+    defaultModels: ['openai/gpt-5'],
+    apiFormat: OPENAI_RESPONSES,
+    color: 'bg-gray-100 text-gray-800 border-gray-200',
+    icon: ZenMux,
+  },
+  zenmux_anthropic: {
+    channelType: 'zenmux_anthropic',
+    baseURL: 'https://zenmux.ai/api/anthropic',
+    defaultModels: ['anthropic/claude-sonnet-4.5'],
+    apiFormat: ANTHROPIC_MESSAGES,
+    color: 'bg-gray-100 text-gray-800 border-gray-200',
+    icon: ZenMux,
+  },
+  zenmux_gemini: {
+    channelType: 'zenmux_gemini',
+    baseURL: 'https://zenmux.ai/api/vertex-ai',
+    defaultModels: ['google/gemini-2.5-pro'],
+    apiFormat: GEMINI_CONTENTS,
+    color: 'bg-gray-100 text-gray-800 border-gray-200',
+    icon: OpenRouter,
+  },
+  commandcode: {
+    channelType: 'commandcode',
+    baseURL: 'https://api.commandcode.ai/provider/v1',
+    defaultModels: [],
+    apiFormat: OPENAI_CHAT_COMPLETIONS,
+    color: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    icon: CommandCodeIcon,
+  },
+  commandcode_anthropic: {
+    channelType: 'commandcode_anthropic',
+    baseURL: 'https://api.commandcode.ai/provider/v1',
+    defaultModels: [],
+    apiFormat: ANTHROPIC_MESSAGES,
+    color: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    icon: CommandCodeIcon,
+  },
 };
 
 /**
@@ -861,7 +911,9 @@ export type Provider =
   | 'opencode_go'
   | 'ollama'
   | 'evolink'
-  | 'groq';
+  | 'groq'
+  | 'zenmux'
+  | 'commandcode';
 
 /**
  * Map channel type to provider
@@ -932,6 +984,12 @@ export const CHANNEL_TYPE_TO_PROVIDER: Record<ChannelType, Provider> = {
   evolink: 'evolink',
   evolink_anthropic: 'evolink',
   groq: 'groq',
+  zenmux: 'zenmux',
+  zenmux_responses: 'zenmux',
+  zenmux_anthropic: 'zenmux',
+  zenmux_gemini: 'zenmux',
+  commandcode: 'commandcode',
+  commandcode_anthropic: 'commandcode',
 };
 
 /**

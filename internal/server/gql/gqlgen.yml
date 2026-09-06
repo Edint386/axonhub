@@ -105,9 +105,12 @@ models:
   ModelMappingInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ModelMapping
-  RequestCallerUser:
+  ModelProtocol:
     model:
-      - github.com/looplj/axonhub/internal/objects.RequestCallerUser
+      - github.com/looplj/axonhub/internal/objects.ModelProtocol
+  ModelProtocolInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ModelProtocol
   ReasoningEffortMapping:
     model:
       - github.com/looplj/axonhub/llm.ReasoningEffortMapping
@@ -159,24 +162,18 @@ models:
   RetryableErrorPatternInput:
     model:
       - github.com/looplj/axonhub/internal/objects.RetryableErrorPattern
-  OpenCodeGoQuotaSettings:
-    model:
-      - github.com/looplj/axonhub/internal/objects.OpenCodeGoQuotaSettings
-  OpenCodeGoQuotaSettingsInput:
-    model:
-      - github.com/looplj/axonhub/internal/objects.OpenCodeGoQuotaSettings
   ChannelProviderQuotaSettings:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelProviderQuotaSettings
   ChannelProviderQuotaSettingsInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelProviderQuotaSettings
-  ChannelHealthProbeSettings:
+  CommandCodeQuotaSettings:
     model:
-      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeSettings
-  ChannelHealthProbeSettingsInput:
+      - github.com/looplj/axonhub/internal/objects.CommandCodeQuotaSettings
+  CommandCodeQuotaSettingsInput:
     model:
-      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeSettings
+      - github.com/looplj/axonhub/internal/objects.CommandCodeQuotaSettings
   ChannelRateLimit:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelRateLimit
@@ -189,6 +186,15 @@ models:
   ChannelCredentialsInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelCredentials
+  ChannelHealthProbeSettings:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeSettings
+  ChannelHealthProbeSettingsInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelHealthProbeSettings
+  RequestCallerUser:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RequestCallerUser
   ChannelCallerAccessMode:
     model:
       - github.com/looplj/axonhub/internal/ent/channel.CallerAccessMode

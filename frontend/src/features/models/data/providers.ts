@@ -1,86 +1,131 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { graphqlRequest } from '@/gql/graphql';
+import i18n from '@/lib/i18n';
 import providersDataRaw from './providers.json';
 import { providersDataSchema, type ProvidersData } from './providers.schema';
 
-const PROVIDERS_URL = 'https://raw.githubusercontent.com/ThinkInAIXYZ/PublicProviderConf/refs/heads/dev/dist/all.json';
-const DEVELOPERS_URL =
-  'https://raw.githubusercontent.com/looplj/axonhub/refs/heads/unstable/frontend/src/features/models/data/providers.json';
+const fallbackProvidersData = providersDataSchema.parse(providersDataRaw);
 
-const EMPTY_PROVIDERS_DATA: ProvidersData = { providers: {} };
-
-/**
- * Validate a providers catalog WITHOUT ever throwing.
- *
- * Every source feeding these hooks is untrusted input: two are fetched at runtime
- * from repositories we do not control, and the bundled copy is rewritten by an
- * automated upstream sync. A throwing `.parse` on any of them is therefore a
- * liability rather than a safeguard -- and when it threw from `placeholderData` it
- * threw during RENDER, which the root error boundary turns into a full-page 500. That
- * is how a single boolean `experimental` in one DeepSeek entry took down both the
- * channels and models pages at once.
- *
- * A catalog that fails validation degrades to an empty one: the pages then render
- * without provider metadata instead of not rendering at all.
- */
-function parseProvidersData(data: unknown, source: string): ProvidersData {
-  const result = providersDataSchema.safeParse(data);
-  if (result.success) {
-    return result.data;
+const PROVIDERS_CATALOG_QUERY = `
+  query ProvidersCatalog($filtered: Boolean) {
+    providersCatalog(filtered: $filtered) {
+      data
+      fetchedAt
+      source
+      filtered
+    }
   }
+`;
 
-  console.error(`Invalid providers data from ${source}; falling back to an empty catalog`, result.error.issues);
+const REFRESH_PROVIDERS_CATALOG_MUTATION = `
+  mutation RefreshProvidersCatalog {
+    refreshProvidersCatalog {
+      data
+      fetchedAt
+      source
+      filtered
+    }
+  }
+`;
 
-  return EMPTY_PROVIDERS_DATA;
-}
+export type ProvidersCatalogInfo = {
+  data: ProvidersData;
+  source: string;
+  fetchedAt?: string | null;
+  filtered: boolean;
+};
 
-/**
- * The bundled catalog, validated ONCE at module load.
- *
- * This was previously re-parsed on every render through `placeholderData`, which both
- * re-validated the whole catalog needlessly and put the throw directly in the render
- * path.
- */
-const BUNDLED_PROVIDERS_DATA = parseProvidersData(providersDataRaw, 'the bundled providers.json');
-
-/**
- * Fetch a remote catalog, falling back to the bundled copy when the network fails OR
- * when the remote payload does not match the schema. A remote shape change must not
- * be able to leave the caller with nothing.
- */
-async function fetchProvidersData(url: string, label: string): Promise<ProvidersData> {
+async function loadProvidersCatalog(filtered: boolean): Promise<ProvidersCatalogInfo> {
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${label}: ${response.status}`);
-    }
+    const result = await graphqlRequest<{
+      providersCatalog: {
+        data: unknown;
+        fetchedAt?: string | null;
+        source: string;
+        filtered: boolean;
+      };
+    }>(PROVIDERS_CATALOG_QUERY, { filtered });
 
-    const result = providersDataSchema.safeParse(await response.json());
-    if (result.success) {
-      return result.data;
-    }
-
-    console.error(`Remote ${label} failed validation, falling back to the bundled copy`, result.error.issues);
+    return {
+      data: providersDataSchema.parse(result.providersCatalog.data),
+      source: result.providersCatalog.source,
+      fetchedAt: result.providersCatalog.fetchedAt,
+      filtered: result.providersCatalog.filtered,
+    };
   } catch (error) {
-    console.error(`Failed to fetch remote ${label}, falling back to the bundled copy:`, error);
+    console.error('Failed to load providers catalog, falling back to bundled data:', error);
+    return {
+      data: fallbackProvidersData,
+      source: 'fallback',
+      fetchedAt: null,
+      filtered,
+    };
   }
-
-  return BUNDLED_PROVIDERS_DATA;
 }
 
-export function useProvidersData() {
-  return useQuery<ProvidersData>({
-    queryKey: ['providers-data'],
-    queryFn: () => fetchProvidersData(PROVIDERS_URL, 'providers data'),
-    staleTime: 1000 * 60 * 60 * 24, // 1 day
-    placeholderData: BUNDLED_PROVIDERS_DATA,
+export function useProvidersCatalog(filtered: boolean) {
+  return useQuery({
+    queryKey: ['providers-catalog', filtered],
+    queryFn: () => loadProvidersCatalog(filtered),
+    staleTime: 5 * 60 * 1000,
+    placeholderData: {
+      data: fallbackProvidersData,
+      source: 'fallback',
+      fetchedAt: null,
+      filtered,
+    },
   });
 }
 
+export function useProvidersData() {
+  const query = useProvidersCatalog(false);
+  return {
+    ...query,
+    data: query.data?.data ?? fallbackProvidersData,
+    source: query.data?.source ?? 'fallback',
+    fetchedAt: query.data?.fetchedAt ?? null,
+  };
+}
+
 export function useDevelopersData() {
-  return useQuery<ProvidersData>({
-    queryKey: ['developers-data'],
-    queryFn: () => fetchProvidersData(DEVELOPERS_URL, 'developers data'),
-    staleTime: 1000 * 60 * 60 * 24, // 1 day
-    placeholderData: BUNDLED_PROVIDERS_DATA,
+  const query = useProvidersCatalog(true);
+  return {
+    ...query,
+    data: query.data?.data ?? fallbackProvidersData,
+    source: query.data?.source ?? 'fallback',
+    fetchedAt: query.data?.fetchedAt ?? null,
+  };
+}
+
+export function useRefreshProvidersCatalog() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const result = await graphqlRequest<{
+        refreshProvidersCatalog: {
+          data: unknown;
+          fetchedAt?: string | null;
+          source: string;
+          filtered: boolean;
+        };
+      }>(REFRESH_PROVIDERS_CATALOG_MUTATION);
+
+      return {
+        data: providersDataSchema.parse(result.refreshProvidersCatalog.data),
+        source: result.refreshProvidersCatalog.source,
+        fetchedAt: result.refreshProvidersCatalog.fetchedAt,
+        filtered: result.refreshProvidersCatalog.filtered,
+      } satisfies ProvidersCatalogInfo;
+    },
+    onSuccess: (catalog) => {
+      queryClient.setQueryData(['providers-catalog', true], catalog);
+      queryClient.invalidateQueries({ queryKey: ['providers-catalog'] });
+      toast.success(i18n.t('models.catalog.refreshSuccess'));
+    },
+    onError: () => {
+      toast.error(i18n.t('models.catalog.refreshFailed'));
+    },
   });
 }

@@ -39,8 +39,10 @@ const (
 //
 //nolint:containedctx // It is used as a transformer.
 type OutboundTransformer struct {
-	tokens    oauth.TokenGetter
-	transport string
+	tokens          oauth.TokenGetter
+	transport       string
+	baseURL         string
+	alphaSearchPath string
 
 	// official reports whether the configured upstream is the official Codex
 	// backend (chatgpt.com). Official endpoints always stream SSE, so they keep
@@ -55,9 +57,10 @@ type OutboundTransformer struct {
 }
 
 var (
-	_ transformer.Outbound               = (*OutboundTransformer)(nil)
-	_ transformer.PassThroughBodyPolicy  = (*OutboundTransformer)(nil)
-	_ pipeline.ChannelCustomizedExecutor = (*OutboundTransformer)(nil)
+	_ transformer.Outbound                  = (*OutboundTransformer)(nil)
+	_ transformer.PassThroughBodyPolicy     = (*OutboundTransformer)(nil)
+	_ transformer.TransportRequestFinalizer = (*OutboundTransformer)(nil)
+	_ pipeline.ChannelCustomizedExecutor    = (*OutboundTransformer)(nil)
 )
 
 var responsesBlockedPassThroughFields = []string{
@@ -67,9 +70,10 @@ var responsesBlockedPassThroughFields = []string{
 }
 
 type Params struct {
-	TokenProvider oauth.TokenGetter
-	BaseURL       string
-	Transport     string
+	TokenProvider   oauth.TokenGetter
+	BaseURL         string
+	Transport       string
+	AlphaSearchPath string
 }
 
 // isOfficialCodexBaseURL reports whether baseURL points at the official Codex
@@ -94,6 +98,10 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 	if baseURL == "" || baseURL == "https://api.openai.com/v1" {
 		baseURL = codexBaseURL
 	}
+	alphaSearchPath := params.AlphaSearchPath
+	if alphaSearchPath == "" {
+		alphaSearchPath = "/alpha/search"
+	}
 
 	// The underlying responses outbound requires baseURL/apiKey. We only need its request body logic.
 	// Use a dummy config and then override URL/auth.
@@ -109,6 +117,8 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 	return &OutboundTransformer{
 		tokens:            params.TokenProvider,
 		transport:         params.Transport,
+		baseURL:           strings.TrimSuffix(baseURL, "##"),
+		alphaSearchPath:   alphaSearchPath,
 		official:          isOfficialCodexBaseURL(baseURL),
 		responsesOutbound: ro,
 	}, nil
@@ -147,6 +157,9 @@ func (t *OutboundTransformer) TransformError(ctx context.Context, rawErr *httpcl
 func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.Request) (*httpclient.Request, error) {
 	if llmReq == nil {
 		return nil, errors.New("request is nil")
+	}
+	if llmReq.RequestType == llm.RequestTypeAlphaSearch {
+		return t.transformAlphaSearchRequest(ctx, llmReq)
 	}
 
 	rawSessionID := ""
@@ -233,6 +246,11 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	reqCopy.MaxTokens = nil
 
 	reqCopy.Metadata = nil
+
+	// The Codex backend rejects the `user` field with a 400 Bad Request, so
+	// strip it out as well. Chat Completions clients may set `user`, and the
+	// shared Responses outbound would otherwise forward it upstream.
+	reqCopy.User = nil
 
 	reqCopy.TransformOptions.ArrayInputs = lo.ToPtr(true)
 
@@ -343,6 +361,9 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 }
 
 func (t *OutboundTransformer) TransformResponse(ctx context.Context, httpResp *httpclient.Response) (*llm.Response, error) {
+	if httpResp != nil && httpResp.Request != nil && httpResp.Request.RequestType == llm.RequestTypeAlphaSearch.String() {
+		return t.transformAlphaSearchResponse(ctx, httpResp)
+	}
 	if httpResp != nil && httpResp.Request != nil && httpResp.Request.RequestType == llm.RequestTypeImage.String() {
 		if httpResp.StatusCode >= 400 {
 			return nil, fmt.Errorf("codex image HTTP error %d: %s", httpResp.StatusCode, httpResp.Body)
@@ -379,8 +400,9 @@ func (t *OutboundTransformer) CustomizeExecutor(executor pipeline.Executor) pipe
 	}
 
 	return &codexExecutor{
-		inner:       inner,
-		transformer: t,
+		inner:        inner,
+		httpExecutor: executor,
+		transformer:  t,
 	}
 }
 
@@ -424,13 +446,18 @@ func (t *OutboundTransformer) Stop() {
 }
 
 type codexExecutor struct {
-	inner       pipeline.Executor
-	transformer *OutboundTransformer
+	inner        pipeline.Executor
+	httpExecutor pipeline.Executor
+	transformer  *OutboundTransformer
 }
 
 func (e *codexExecutor) Do(ctx context.Context, request *httpclient.Request) (*httpclient.Response, error) {
-	if request.RequestType == string(llm.RequestTypeCompact) {
-		return e.inner.Do(ctx, request)
+	request = e.requestForTransport(request)
+	// Compact and alpha search are non-streaming endpoints; proxy them
+	// through the real HTTP client instead of the SSE stream path.
+	if request.RequestType == string(llm.RequestTypeCompact) ||
+		request.RequestType == llm.RequestTypeAlphaSearch.String() {
+		return e.httpExecutor.Do(ctx, request)
 	}
 
 	// The official Codex backend always streams SSE, so keep the historical
@@ -449,7 +476,7 @@ func (e *codexExecutor) Do(ctx context.Context, request *httpclient.Request) (*h
 // upstream SSE stream and aggregate the events into a completed Responses
 // JSON body.
 func (e *codexExecutor) doStreamAndAggregate(ctx context.Context, request *httpclient.Request) (*httpclient.Response, error) {
-	stream, err := e.inner.DoStream(ctx, request)
+	stream, err := e.executor(ctx).DoStream(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -576,5 +603,28 @@ func decodeSSEChunks(ctx context.Context, body []byte) ([]*httpclient.StreamEven
 }
 
 func (e *codexExecutor) DoStream(ctx context.Context, request *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
-	return e.inner.DoStream(ctx, request)
+	return e.executor(ctx).DoStream(ctx, e.requestForTransport(request))
+}
+
+func (e *codexExecutor) executor(_ context.Context) pipeline.Executor {
+	if e == nil {
+		return nil
+	}
+	return e.inner
+}
+
+func (e *codexExecutor) requestForTransport(request *httpclient.Request) *httpclient.Request {
+	if e == nil || e.transformer == nil {
+		return request
+	}
+
+	return e.transformer.FinalizeTransportRequest(request)
+}
+
+func (t *OutboundTransformer) FinalizeTransportRequest(request *httpclient.Request) *httpclient.Request {
+	if t == nil || t.transport == responses.TransportWebSocket {
+		return request
+	}
+
+	return responses.PrepareHTTPTransportRequest(request, true)
 }

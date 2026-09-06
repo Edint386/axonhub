@@ -421,6 +421,16 @@ type OnboardingInfo struct {
 	AutoDisableChannel *AutoDisableChannelOnboarding `json:"autoDisableChannel,omitempty"`
 }
 
+type OpenCodeGoQuotaSettings struct {
+	WorkspaceID *string `json:"workspaceId,omitempty"`
+	AuthCookie  *string `json:"authCookie,omitempty"`
+}
+
+type OpenCodeGoQuotaSettingsInput struct {
+	WorkspaceID *string `json:"workspaceId,omitempty"`
+	AuthCookie  *string `json:"authCookie,omitempty"`
+}
+
 type PassThroughSettings struct {
 	Enabled bool `json:"enabled"`
 }
@@ -439,6 +449,13 @@ type PromptProtectionRulePreviewResult struct {
 type ProviderQuotaCollectionProviderInput struct {
 	Provider string `json:"provider"`
 	Enabled  bool   `json:"enabled"`
+}
+
+type ProvidersCatalog struct {
+	Data      objects.JSONRawMessage `json:"data"`
+	FetchedAt *time.Time             `json:"fetchedAt,omitempty"`
+	Source    string                 `json:"source"`
+	Filtered  bool                   `json:"filtered"`
 }
 
 type QueryModelsInput struct {
@@ -635,6 +652,11 @@ type UpdateBrandSettingsInput struct {
 	Title     *string `json:"title,omitempty"`
 }
 
+type UpdateCatalogSettingsInput struct {
+	UpstreamURL    *string `json:"upstreamURL,omitempty"`
+	RefreshSeconds *int    `json:"refreshSeconds,omitempty"`
+}
+
 type UpdateDefaultDataStorageInput struct {
 	DataStorageID objects.GUID `json:"dataStorageID"`
 }
@@ -680,7 +702,15 @@ type UpdateSecuritySettingsInput struct {
 	ShowRequestLogIPBanIcon *bool    `json:"showRequestLogIPBanIcon,omitempty"`
 }
 
+type UpdateUsageCostInjectionSettingsInput struct {
+	Enabled bool `json:"enabled"`
+}
+
 type UpdateUserAgentPassThroughSettingsInput struct {
+	Enabled bool `json:"enabled"`
+}
+
+type UsageCostInjectionSettings struct {
 	Enabled bool `json:"enabled"`
 }
 

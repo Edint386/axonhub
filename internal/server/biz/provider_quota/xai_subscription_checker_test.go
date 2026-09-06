@@ -40,11 +40,13 @@ func TestXAISubscriptionQuotaChecker_CheckQuota_merges_billing_windows(t *testin
 	require.True(t, result.Ready)
 	require.Len(t, result.Limits, 2)
 	require.Equal(t, "warning", result.Limits[0].Status)
+	require.Equal(t, QuotaWindowWeekly, result.Limits[0].Window)
 	require.InDelta(t, 0.825, result.Limits[0].UsageRatio, 1e-9)
 	require.Equal(t, QuotaWindowWeekly, result.Limits[0].Window)
 	require.Equal(t, time.Date(2026, 7, 9, 3, 25, 0, 0, time.UTC), *result.Limits[0].PeriodStart)
 	require.Equal(t, time.Date(2026, 7, 16, 3, 25, 0, 0, time.UTC), *result.Limits[0].NextResetAt)
 	require.Equal(t, "available", result.Limits[1].Status)
+	require.Equal(t, QuotaWindowMonthly, result.Limits[1].Window)
 	require.InDelta(t, 0.5, result.Limits[1].UsageRatio, 1e-9)
 	require.Equal(t, QuotaWindowMonthly, result.Limits[1].Window)
 	require.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), *result.Limits[1].PeriodStart)
@@ -120,6 +122,15 @@ func TestXAISubscriptionQuotaData_does_not_invent_missing_windows(t *testing.T) 
 	require.Equal(t, "unknown", result.Status)
 	require.False(t, result.Ready)
 	require.Empty(t, result.Limits)
+}
+
+func TestXAISubscriptionQuotaData_labels_monthly_only_window(t *testing.T) {
+	result := xaiBillingQuotaData(subscription.BillingSummary{
+		Monthly: &subscription.BillingWindow{UsagePercent: 50},
+	})
+
+	require.Len(t, result.Limits, 1)
+	require.Equal(t, QuotaWindowMonthly, result.Limits[0].Window)
 }
 
 func newXAIBillingTestClient(t *testing.T, accessToken, weeklyBody, monthlyBody string) *httpclient.HttpClient {

@@ -36,6 +36,7 @@ var Module = fx.Module("biz",
 	fx.Provide(NewProviderQuotaService),
 	fx.Provide(NewOIDCService),
 	fx.Provide(NewAPIKeyProfileTemplateService),
+	fx.Provide(NewCatalogService),
 	fx.Invoke(func(channelSvc *ChannelService, quotaSvc *ProviderQuotaService) {
 		channelSvc.SetChannelProviderQuotaInvalidator(quotaSvc)
 	}),
@@ -117,6 +118,14 @@ var Module = fx.Module("biz",
 			OnStart: func(ctx context.Context) error {
 				return svc.RegisterScheduledTasks(ctx, s)
 			},
+		})
+	}),
+	fx.Invoke(func(lc fx.Lifecycle, svc *CatalogService, s *scheduler.Scheduler) {
+		lc.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				return svc.RegisterScheduledTasks(ctx, s)
+			},
+			OnStop: nil,
 		})
 	}),
 )

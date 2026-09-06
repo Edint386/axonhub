@@ -85,10 +85,16 @@ func (svc *ChannelService) DisableAPIKey(
 
 	// 如果没有可用 key 了，禁用整个 channel
 	channelDisabled := len(enabledKeys) == 0
+	var (
+		autoDisabledAt     time.Time
+		autoDisabledReason string
+	)
 	if channelDisabled {
+		autoDisabledAt = time.Now()
+		autoDisabledReason = fmt.Sprintf("%s (last error: %d)", allKeysDisabledErrorPrefix, errorCode)
 		update.SetStatus(channel.StatusDisabled)
-		update.SetErrorMessage(fmt.Sprintf("%s (last error: %d)", allKeysDisabledErrorPrefix, errorCode))
-		update.SetAutoDisabledAt(time.Now())
+		update.SetErrorMessage(autoDisabledReason)
+		update.SetAutoDisabledAt(autoDisabledAt)
 		log.Warn(ctx, "Channel disabled because all API keys are disabled",
 			log.Int("channel_id", channelID),
 			log.String("channel_name", ch.Name),
@@ -108,6 +114,13 @@ func (svc *ChannelService) DisableAPIKey(
 	// the local reload or the cross-instance notification before commit would
 	// reload the old disabled-key snapshot and retain it in cache.
 	runAfterCommit(ctx, func(afterCommitCtx context.Context) {
+		if channelDisabled {
+			svc.asyncNotifyChannelAutoDisabled(afterCommitCtx, ChannelAutoDisabledEvent{
+				ChannelID: ch.ID, ChannelName: ch.Name, ChannelProvider: ch.Type.String(),
+				ChannelBaseURL: ch.BaseURL, ChannelStatus: channel.StatusDisabled.String(),
+				StatusCode: errorCode, Reason: autoDisabledReason, OccurredAt: autoDisabledAt,
+			})
+		}
 		if channelDisabled {
 			// Synchronously reload the local cache to immediately stop selecting this channel.
 			// This matches the behavior of markChannelUnavailable.

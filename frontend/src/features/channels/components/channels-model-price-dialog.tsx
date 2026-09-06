@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { IconPlus, IconTrash, IconCopy } from '@tabler/icons-react';
+import { IconCopy, IconDownload, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -21,7 +21,13 @@ import { useProvidersData } from '@/features/models/data/providers';
 import { useGeneralSettings } from '@/features/system/data/system';
 import { useChannels } from '../context/channels-context';
 import { useChannelModelPrices, useSaveChannelModelPrices } from '../data/channels';
-import { PricingMode, PriceItemCode } from '../data/schema';
+import {
+  PricingMode,
+  PriceItemCode,
+  saveChannelModelPriceInputSchema,
+  type ModelPrice,
+  type SaveChannelModelPriceInput,
+} from '../data/schema';
 
 const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens'] as const;
 const pricingModes = ['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume'] as const;
@@ -150,14 +156,14 @@ const createPriceFormSchema = (t: (key: string) => string) =>
       const validatePricing = (pricing: PricingLike | null | undefined, pathPrefix: Array<string | number>) => {
         const requiredMsg = t('price.validation.priceRequired');
         const { mode, flatFee, usagePerUnit, usageTiered } = pricing || {};
-        if (mode === 'flat_fee' && !flatFee) {
+        if (mode === 'flat_fee' && !flatFee?.trim()) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: requiredMsg,
             path: [...pathPrefix, 'flatFee'],
           });
         }
-        if (mode === 'usage_per_unit' && !usagePerUnit) {
+        if (mode === 'usage_per_unit' && !usagePerUnit?.trim()) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: requiredMsg,
@@ -176,7 +182,7 @@ const createPriceFormSchema = (t: (key: string) => string) =>
 
           const lastTierIndex = tiers.length - 1;
           tiers.forEach((tier: UsageTier, tierIndex: number) => {
-            if (!tier.pricePerUnit) {
+            if (!tier.pricePerUnit?.trim()) {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: requiredMsg,
@@ -299,7 +305,14 @@ const createPriceFormSchema = (t: (key: string) => string) =>
     });
 type PriceFormData = z.infer<ReturnType<typeof createPriceFormSchema>>;
 
-type ChannelModelPricing = NonNullable<ReturnType<typeof useChannelModelPrices>['data']>;
+function trimPriceValue(value: string | number | null | undefined): string | number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return value;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+type ChannelModelPrices = NonNullable<ReturnType<typeof useChannelModelPrices>['data']>;
 
 function buildAvailableModelsByIndex(prices: Array<PriceFormData['prices'][number] | undefined>, supportedModels: string[]) {
   return prices.map((p, currentIndex) => {
@@ -314,75 +327,88 @@ function buildAvailableModelsByIndex(prices: Array<PriceFormData['prices'][numbe
   });
 }
 
-function mapServerPricesToFormData(currentPrices: ChannelModelPricing['prices']): PriceFormData {
+function mapPriceToForm(price: ModelPrice): PriceFormData['prices'][number]['price'] {
   return {
-    prices: currentPrices.map((p) => ({
-      modelId: p.modelID,
-      price: {
-        items: p.price.items.map((item) => ({
-          itemCode: item.itemCode,
+    items: price.items.map((item) => ({
+      itemCode: item.itemCode,
+      pricing: {
+        mode: item.pricing.mode,
+        flatFee: item.pricing.flatFee?.toString() || '',
+        usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
+        usageTiered: item.pricing.usageTiered
+          ? {
+              tiers: item.pricing.usageTiered.tiers.map((t) => ({
+                upTo: t.upTo,
+                pricePerUnit: t.pricePerUnit.toString(),
+              })),
+            }
+          : null,
+      },
+      promptWriteCacheVariants:
+        item.promptWriteCacheVariants?.map((v) => ({
+          variantCode: v.variantCode,
           pricing: {
-            mode: item.pricing.mode,
-            flatFee: item.pricing.flatFee?.toString() || '',
-            usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
-            usageTiered: item.pricing.usageTiered
+            mode: v.pricing.mode,
+            flatFee: v.pricing.flatFee?.toString() || '',
+            usagePerUnit: v.pricing.usagePerUnit?.toString() || '',
+            usageTiered: v.pricing.usageTiered
               ? {
-                  tiers: item.pricing.usageTiered.tiers.map((t) => ({
+                  tiers: v.pricing.usageTiered.tiers.map((t) => ({
                     upTo: t.upTo,
                     pricePerUnit: t.pricePerUnit.toString(),
                   })),
                 }
               : null,
           },
-          promptWriteCacheVariants:
-            item.promptWriteCacheVariants?.map((v) => ({
-              variantCode: v.variantCode,
+        })) || [],
+    })),
+    schedule: price.schedule
+      ? {
+          timezone: price.schedule.timezone,
+          overrides: price.schedule.overrides.map((o) => ({
+            name: o.name,
+            priority: o.priority,
+            when: {
+              dailyTime: o.when.dailyTime || null,
+              weekdays: o.when.weekdays || null,
+              dateRange: o.when.dateRange || null,
+            },
+            items: o.items.map((item) => ({
+              itemCode: item.itemCode,
               pricing: {
-                mode: v.pricing.mode,
-                flatFee: v.pricing.flatFee?.toString() || '',
-                usagePerUnit: v.pricing.usagePerUnit?.toString() || '',
-                usageTiered: v.pricing.usageTiered
+                mode: item.pricing.mode,
+                flatFee: item.pricing.flatFee?.toString() || '',
+                usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
+                usageTiered: item.pricing.usageTiered
                   ? {
-                      tiers: v.pricing.usageTiered.tiers.map((t) => ({
+                      tiers: item.pricing.usageTiered.tiers.map((t) => ({
                         upTo: t.upTo,
                         pricePerUnit: t.pricePerUnit.toString(),
                       })),
                     }
                   : null,
               },
-            })) || [],
-        })),
-        schedule: p.price.schedule
-          ? {
-              timezone: p.price.schedule.timezone,
-              overrides: p.price.schedule.overrides.map((o) => ({
-                name: o.name,
-                priority: o.priority,
-                when: {
-                  dailyTime: o.when.dailyTime || null,
-                  weekdays: o.when.weekdays || null,
-                  dateRange: o.when.dateRange || null,
-                },
-                items: o.items.map((item) => ({
-                  itemCode: item.itemCode,
-                  pricing: {
-                    mode: item.pricing.mode,
-                    flatFee: item.pricing.flatFee?.toString() || '',
-                    usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
-                    usageTiered: item.pricing.usageTiered
-                      ? {
-                          tiers: item.pricing.usageTiered.tiers.map((t) => ({
-                            upTo: t.upTo,
-                            pricePerUnit: t.pricePerUnit.toString(),
-                          })),
-                        }
-                      : null,
-                  },
-                })),
-              })),
-            }
-          : null,
-      },
+            })),
+          })),
+        }
+      : null,
+  };
+}
+
+function mapServerPricesToFormData(currentPrices: ChannelModelPrices): PriceFormData {
+  return {
+    prices: currentPrices.map((p) => ({
+      modelId: p.modelID,
+      price: mapPriceToForm(p.price),
+    })),
+  };
+}
+
+function mapSaveInputsToFormData(inputs: SaveChannelModelPriceInput[]): PriceFormData {
+  return {
+    prices: inputs.map((p) => ({
+      modelId: p.modelId,
+      price: mapPriceToForm(p.price),
     })),
   };
 }
@@ -414,7 +440,7 @@ function findProviderModelById(providersData: ProvidersData, modelId: string, pr
   return null;
 }
 
-function buildItemsFromProviderModel(model: ProviderModel): PriceFormData['prices'][number]['price']['items'] {
+function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 1): PriceFormData['prices'][number]['price']['items'] {
   const items: PriceFormData['prices'][number]['price']['items'] = [];
   const cost = model.cost;
 
@@ -423,7 +449,7 @@ function buildItemsFromProviderModel(model: ProviderModel): PriceFormData['price
       itemCode,
       pricing: {
         mode: 'usage_per_unit',
-        usagePerUnit: value.toFixed(4),
+        usagePerUnit: (value * multiplier).toFixed(4),
       },
     });
   };
@@ -445,7 +471,8 @@ function buildItemsFromProviderModel(model: ProviderModel): PriceFormData['price
 
 function mergeItemsWithProviderCost(
   currentItems: PriceFormData['prices'][number]['price']['items'],
-  model: ProviderModel
+  model: ProviderModel,
+  multiplier: number = 1
 ): PriceFormData['prices'][number]['price']['items'] {
   const byCode = new Map<(typeof priceItemCodes)[number], PriceFormData['prices'][number]['price']['items'][number]>();
   currentItems.forEach((item) => {
@@ -459,7 +486,7 @@ function mergeItemsWithProviderCost(
         ...existing,
         pricing: {
           mode: 'usage_per_unit',
-          usagePerUnit: value.toFixed(4),
+          usagePerUnit: (value * multiplier).toFixed(4),
           flatFee: '',
           usageTiered: null,
         },
@@ -468,7 +495,7 @@ function mergeItemsWithProviderCost(
     }
     byCode.set(itemCode, {
       itemCode,
-      pricing: { mode: 'usage_per_unit', usagePerUnit: value.toFixed(4) },
+      pricing: { mode: 'usage_per_unit', usagePerUnit: (value * multiplier).toFixed(4) },
     });
   };
 
@@ -696,13 +723,14 @@ export function ChannelsModelPriceDialog() {
   const defaultProviderId = useMemo(() => normalizeProviderKeyFromChannelType(currentRow?.type), [currentRow?.type]);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModelId, setSelectedModelId] = useState<string>('');
-  const [multiplierInput, setMultiplierInput] = useState('1');
+  const [multiplier, setMultiplier] = useState<number>(1);
 
   useEffect(() => {
     if (!isOpen || !providersData) return;
     const next = defaultProviderId && providersData.providers[defaultProviderId] ? defaultProviderId : '';
     setSelectedProviderId(next);
     setSelectedModelId('');
+    setMultiplier(1);
   }, [defaultProviderId, isOpen, providersData]);
 
   const providerModels = useMemo(() => {
@@ -721,16 +749,116 @@ export function ChannelsModelPriceDialog() {
 
   useEffect(() => {
     if (isOpen && currentPrices) {
-      reset(mapServerPricesToFormData(currentPrices.prices));
-      setMultiplierInput(String(currentPrices.multiplier));
+      reset(mapServerPricesToFormData(currentPrices));
     }
   }, [isOpen, currentPrices, reset]);
 
+  // Tracks the channel/dialog the import was started in, so a stale async file
+  // read can be discarded if the user switches channels or closes the dialog
+  // before it resolves (the dialog is a single shared instance).
+  const importSessionRef = useRef({ channelId: '', open: false });
+  useEffect(() => {
+    importSessionRef.current = { channelId: currentRow?.id ?? '', open: isOpen };
+  }, [currentRow, isOpen]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleClose = useCallback(() => {
+    // Synchronously invalidate any in-flight import. Without this, a pending
+    // file read could resolve after the dialog is closed but before the effect
+    // above records the closed state, and slip past the session guard.
+    importSessionRef.current = { channelId: '', open: false };
     setOpen(null);
     reset();
-    setMultiplierInput('1');
   }, [setOpen, reset]);
+
+  const handleExport = useCallback(() => {
+    if (!currentRow || !currentPrices || currentPrices.length === 0) {
+      toast.error(t('price.export.empty'));
+      return;
+    }
+
+    const payload = currentPrices.map((p) => ({
+      modelId: p.modelID,
+      price: p.price,
+    }));
+    const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const safeName = currentRow.name.trim().replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '') || 'channel';
+    anchor.href = url;
+    anchor.download = `${safeName}-model-prices.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    toast.success(t('price.export.success', { name: currentRow.name }));
+  }, [currentPrices, currentRow, t]);
+
+  const handleImportFile = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return;
+
+      // Capture the session object before the async file read, and compare by
+      // reference afterwards: any close/reopen/channel switch replaces the
+      // object (even with identical values), which invalidates stale imports.
+      const startedSession = importSessionRef.current;
+      if (!startedSession.open || !startedSession.channelId) return;
+      if (file.size > 1024 * 1024) {
+        toast.error(t('price.import.fileTooLarge'));
+        return;
+      }
+
+      let raw: string;
+      try {
+        raw = await file.text();
+      } catch {
+        toast.error(t('price.import.invalidFile'));
+        return;
+      }
+
+      // Discard the import if the dialog closed, reopened, or the channel
+      // switched while the file was being read, so stale data never lands in
+      // another channel or a fresh session.
+      if (importSessionRef.current !== startedSession) return;
+
+      let parsed: SaveChannelModelPriceInput[];
+      try {
+        parsed = z.array(saveChannelModelPriceInputSchema).min(1).parse(JSON.parse(raw));
+      } catch {
+        toast.error(t('price.import.invalidFile'));
+        return;
+      }
+
+      // Reject duplicate model IDs up front: the backend refuses them at save time.
+      const seen = new Set<string>();
+      for (const p of parsed) {
+        if (seen.has(p.modelId)) {
+          toast.error(t('price.import.duplicateModel', { modelId: p.modelId }));
+          return;
+        }
+        seen.add(p.modelId);
+      }
+
+      // Skip models the channel does not support, so no unusable pricing records can be persisted.
+      const supported = new Set(currentRow?.supportedModels || []);
+      const filtered = parsed.filter((p) => supported.has(p.modelId));
+      const skipped = parsed.length - filtered.length;
+      if (filtered.length === 0) {
+        toast.error(t('price.import.noSupportedModels'));
+        return;
+      }
+
+      reset(mapSaveInputsToFormData(filtered));
+      rowVirtualizer.scrollToIndex(0, { align: 'start' });
+      if (skipped > 0) {
+        toast.success(t('price.import.successSkipped', { count: filtered.length, skipped }));
+      } else {
+        toast.success(t('price.import.success', { count: filtered.length }));
+      }
+    },
+    [currentRow, reset, rowVirtualizer, t]
+  );
 
   const onSubmitError = useCallback(
     (errors: Record<string, any>) => {
@@ -771,12 +899,6 @@ export function ChannelsModelPriceDialog() {
     async (data: PriceFormData) => {
       if (!currentRow) return;
 
-      const multiplier = Number(multiplierInput);
-      if (!multiplierInput.trim() || !Number.isFinite(multiplier) || multiplier < 0) {
-        toast.error(t('price.apply.multiplierInvalid'));
-        return;
-      }
-
       try {
         const input = data.prices.map((p) => ({
           modelId: p.modelId,
@@ -785,13 +907,13 @@ export function ChannelsModelPriceDialog() {
               itemCode: item.itemCode as PriceItemCode,
               pricing: {
                 mode: item.pricing.mode as PricingMode,
-                flatFee: item.pricing.flatFee || null,
-                usagePerUnit: item.pricing.usagePerUnit || null,
+                flatFee: trimPriceValue(item.pricing.flatFee),
+                usagePerUnit: trimPriceValue(item.pricing.usagePerUnit),
                 usageTiered: item.pricing.usageTiered
                   ? {
                       tiers: item.pricing.usageTiered.tiers.map((t) => ({
                         upTo: t.upTo,
-                        pricePerUnit: t.pricePerUnit,
+                        pricePerUnit: t.pricePerUnit.trim(),
                       })),
                     }
                   : null,
@@ -801,13 +923,13 @@ export function ChannelsModelPriceDialog() {
                   variantCode: v.variantCode,
                   pricing: {
                     mode: v.pricing.mode as PricingMode,
-                    flatFee: v.pricing.flatFee || null,
-                    usagePerUnit: v.pricing.usagePerUnit || null,
+                    flatFee: trimPriceValue(v.pricing.flatFee),
+                    usagePerUnit: trimPriceValue(v.pricing.usagePerUnit),
                     usageTiered: v.pricing.usageTiered
                       ? {
                           tiers: v.pricing.usageTiered.tiers.map((t) => ({
                             upTo: t.upTo,
-                            pricePerUnit: t.pricePerUnit,
+                            pricePerUnit: t.pricePerUnit.trim(),
                           })),
                         }
                       : null,
@@ -838,7 +960,7 @@ export function ChannelsModelPriceDialog() {
                           ? {
                               tiers: item.pricing.usageTiered.tiers.map((t) => ({
                                 upTo: t.upTo,
-                                pricePerUnit: t.pricePerUnit,
+                                pricePerUnit: t.pricePerUnit.trim(),
                               })),
                             }
                           : null,
@@ -852,7 +974,6 @@ export function ChannelsModelPriceDialog() {
 
         await savePrices.mutateAsync({
           channelId: currentRow.id,
-          multiplier,
           input,
         });
         handleClose();
@@ -860,7 +981,7 @@ export function ChannelsModelPriceDialog() {
         // Error handled by mutation
       }
     },
-    [currentRow, handleClose, multiplierInput, savePrices, t]
+    [currentRow, handleClose, savePrices]
   );
 
   const addPrice = useCallback(() => {
@@ -884,10 +1005,10 @@ export function ChannelsModelPriceDialog() {
   const applyProviderModelToIndex = useCallback(
     (priceIndex: number, providerModel: ProviderModel) => {
       const currentItems = getValues(`prices.${priceIndex}.price.items`) || [];
-      const merged = mergeItemsWithProviderCost(currentItems, providerModel);
+      const merged = mergeItemsWithProviderCost(currentItems, providerModel, multiplier);
       setValue(`prices.${priceIndex}.price.items`, merged, { shouldDirty: true, shouldValidate: true });
     },
-    [getValues, setValue]
+    [getValues, setValue, multiplier]
   );
 
   const applyProviderModelById = useCallback(
@@ -911,11 +1032,11 @@ export function ChannelsModelPriceDialog() {
       pendingScrollToNewCardRef.current = true;
       append({
         modelId,
-        price: { items: buildItemsFromProviderModel(found.model) },
+        price: { items: buildItemsFromProviderModel(found.model, multiplier) },
       });
       toast.success(t('price.apply.added', { modelId }));
     },
-    [append, applyProviderModelToIndex, getValues, providersData, t]
+    [append, applyProviderModelToIndex, getValues, providersData, t, multiplier]
   );
 
   const onModelSelected = useCallback(
@@ -1068,8 +1189,8 @@ export function ChannelsModelPriceDialog() {
                     <FormLabel className='text-sm'>{t('price.apply.multiplier')}</FormLabel>
                     <Input
                       type='number'
-                      value={multiplierInput}
-                      onChange={(e) => setMultiplierInput(e.target.value)}
+                      value={multiplier}
+                      onChange={(e) => setMultiplier(parseFloat(e.target.value) || 0)}
                       className='h-8'
                       step='0.01'
                       min='0'
@@ -1104,7 +1225,7 @@ export function ChannelsModelPriceDialog() {
                           if (existingModelIds.has(modelId)) return;
                           append({
                             modelId,
-                            price: { items: buildItemsFromProviderModel(found.model) },
+                            price: { items: buildItemsFromProviderModel(found.model, multiplier) },
                           });
                           added += 1;
                         });
@@ -1130,7 +1251,7 @@ export function ChannelsModelPriceDialog() {
                 </div>
               </CardContent>
             </Card>
-            <div ref={priceListRef} className='min-h-40 min-w-0 w-full flex-1 overflow-y-auto overflow-x-hidden pt-4 pr-4 md:min-h-0'>
+            <div ref={priceListRef} className='min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden pt-4 pr-4'>
               {fields.length === 0 && !isLoading && (
                 <div className='text-muted-foreground flex flex-col items-center justify-center py-12'>
                   <p>{t('price.noPrices')}</p>
@@ -1171,10 +1292,37 @@ export function ChannelsModelPriceDialog() {
             </div>
 
             <DialogFooter className='mt-6 shrink-0 gap-2 sm:justify-between'>
-              <Button type='button' variant='outline' onClick={addPrice}>
-                <IconPlus className='mr-2 h-4 w-4' />
-                {t('price.addPrice')}
-              </Button>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button type='button' variant='outline' onClick={addPrice}>
+                  <IconPlus className='mr-2 h-4 w-4' />
+                  {t('price.addPrice')}
+                </Button>
+                <Button type='button' variant='outline' onClick={handleExport} disabled={!currentPrices}>
+                  <IconDownload className='mr-2 h-4 w-4' />
+                  {t('price.export.button')}
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!currentPrices}
+                  title={!currentPrices ? t('price.import.disabledLoading') : undefined}
+                >
+                  <IconUpload className='mr-2 h-4 w-4' />
+                  {t('price.import.button')}
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  className='hidden'
+                  type='file'
+                  accept='.json,application/json'
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void handleImportFile(file);
+                  }}
+                />
+              </div>
               <div className='flex gap-2'>
                 <Button type='button' variant='ghost' onClick={handleClose}>
                   {t('common.buttons.cancel')}

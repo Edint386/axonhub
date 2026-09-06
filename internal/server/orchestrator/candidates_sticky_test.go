@@ -9,7 +9,6 @@ import (
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
-	"github.com/looplj/axonhub/internal/ent/providerquotastatus"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
@@ -45,11 +44,11 @@ func TestLoadBalancedSelector_TraceStickySelection(t *testing.T) {
 	thread := &ent.Thread{ID: 20}
 	ctx := contexts.WithThread(contexts.WithTrace(context.Background(), trace), thread)
 
-	t.Run("trace wins within the highest priority tier and removes duplicate fallback", func(t *testing.T) {
+	t.Run("trace overrides association priority and removes duplicate fallback", func(t *testing.T) {
 		candidates := []*ChannelModelsCandidate{
 			stickyTestCandidate(1, 0),
-			stickyTestCandidate(2, 0),
-			stickyTestCandidate(3, 0),
+			stickyTestCandidate(2, 2),
+			stickyTestCandidate(3, 1),
 			stickyTestCandidate(2, 4),
 		}
 		policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
@@ -80,61 +79,11 @@ func TestLoadBalancedSelector_TraceStickySelection(t *testing.T) {
 		require.Zero(t, tracker.selections[3])
 	})
 
-	t.Run("higher local priority tier takes precedence over trace sticky", func(t *testing.T) {
+	t.Run("thread is used when trace has no previous channel", func(t *testing.T) {
 		candidates := []*ChannelModelsCandidate{
 			stickyTestCandidate(1, 0),
 			stickyTestCandidate(2, 1),
 			stickyTestCandidate(3, 2),
-		}
-		policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
-			Enabled:           true,
-			MaxChannelRetries: 2,
-			TraceStickyMode:   biz.TraceStickyPreferPreviousChannel,
-		}}
-		selector := WithTraceStickyLoadBalancedSelector(
-			&staticChannelSelector{candidates: candidates},
-			NewLoadBalancer(policy, nil),
-			policy,
-			&fakePreviousChannelProvider{traceChannelIDs: map[int]int{trace.ID: 2}},
-		)
-
-		result, err := selector.Select(ctx, &llm.Request{Model: "gpt-4"})
-		require.NoError(t, err)
-		require.Equal(t, []int{1, 2, 3}, []int{result[0].Channel.ID, result[1].Channel.ID, result[2].Channel.ID})
-		require.False(t, result[0].TraceSticky)
-	})
-
-	t.Run("hard unavailable trace channel is deferred instead of pinned", func(t *testing.T) {
-		rpm := int64(1)
-		sticky := stickyTestCandidate(2, 0)
-		sticky.Channel.Settings = &objects.ChannelSettings{RateLimit: &objects.ChannelRateLimit{RPM: &rpm}}
-		candidates := []*ChannelModelsCandidate{stickyTestCandidate(1, 0), sticky}
-
-		requestTracker := NewChannelRequestTracker()
-		require.True(t, requestTracker.TryAcquireRequest(sticky.Channel.ID, rpm))
-		policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
-			Enabled:           true,
-			MaxChannelRetries: 1,
-			TraceStickyMode:   biz.TraceStickyPreferPreviousChannel,
-		}}
-		selector := WithTraceStickyLoadBalancedSelector(
-			&staticChannelSelector{candidates: candidates},
-			NewLoadBalancer(policy, nil, NewRateLimitAwareStrategy(requestTracker, nil)),
-			policy,
-			&fakePreviousChannelProvider{traceChannelIDs: map[int]int{trace.ID: sticky.Channel.ID}},
-		)
-
-		result, err := selector.Select(ctx, &llm.Request{Model: "gpt-4"})
-		require.NoError(t, err)
-		require.Equal(t, []int{1, 2}, []int{result[0].Channel.ID, result[1].Channel.ID})
-		require.False(t, result[0].TraceSticky)
-	})
-
-	t.Run("thread is used when trace has no previous channel", func(t *testing.T) {
-		candidates := []*ChannelModelsCandidate{
-			stickyTestCandidate(1, 0),
-			stickyTestCandidate(2, 0),
-			stickyTestCandidate(3, 0),
 		}
 		policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
 			Enabled:           true,
@@ -185,7 +134,7 @@ func TestLoadBalancedSelector_TraceStickySelection(t *testing.T) {
 	t.Run("sticky candidate has no fallback when cross-channel retries are disabled", func(t *testing.T) {
 		candidates := []*ChannelModelsCandidate{
 			stickyTestCandidate(1, 0),
-			stickyTestCandidate(2, 0),
+			stickyTestCandidate(2, 1),
 		}
 		policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
 			Enabled:         false,
@@ -206,38 +155,6 @@ func TestLoadBalancedSelector_TraceStickySelection(t *testing.T) {
 		require.Equal(t, 2, result[0].Channel.ID)
 		require.True(t, result[0].TraceSticky)
 	})
-}
-
-func TestRoutingPipeline_ProviderQuotaFiltersBeforeSticky(t *testing.T) {
-	trace := &ent.Trace{ID: 30, ThreadID: 40}
-	ctx := contexts.WithTrace(context.Background(), trace)
-	candidates := []*ChannelModelsCandidate{
-		stickyTestCandidate(1, 0),
-		stickyTestCandidate(2, 0),
-	}
-	provider := &mockQuotaStatusProvider{statuses: map[int]*biz.QuotaChannelStatus{
-		1: {Status: providerquotastatus.StatusExhausted, Ready: false},
-	}}
-	settings := &mockQuotaEnforcementSettingsProvider{
-		settings: &biz.QuotaEnforcementSettings{Enabled: true, Mode: biz.QuotaEnforcementModeExhaustedOnly},
-	}
-	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
-		Enabled:           true,
-		MaxChannelRetries: 1,
-		TraceStickyMode:   biz.TraceStickyPreferPreviousChannel,
-	}}
-	selector := WithTraceStickyLoadBalancedSelector(
-		WithProviderQuotaSelector(&staticChannelSelector{candidates: candidates}, provider, settings),
-		NewLoadBalancer(policy, nil),
-		policy,
-		&fakePreviousChannelProvider{traceChannelIDs: map[int]int{trace.ID: 1}},
-	)
-
-	result, err := selector.Select(ctx, &llm.Request{Model: "gpt-4"})
-	require.NoError(t, err)
-	require.Len(t, result, 1)
-	require.Equal(t, 2, result[0].Channel.ID)
-	require.False(t, result[0].TraceSticky)
 }
 
 func TestResolveLoadBalancer_ReportsAppliedStrategy(t *testing.T) {

@@ -93,11 +93,40 @@ test('xAI subscription is exposed as an OAuth Responses channel', () => {
   );
 });
 
+test('channel table shows provider quota only for OAuth channel types', () => {
+  const schema = read('features/channels/data/schema.ts');
+  const channelsData = read('features/channels/data/channels.ts');
+  const channelColumns = read('features/channels/components/channels-columns.tsx');
+
+  assert.match(schema, /providerQuotaStatus:\s*providerQuotaStatusSchema\.optional\(\)\.nullable\(\)/);
+  assert.match(
+    channelsData,
+    /providerQuotaStatus\s*\{[\s\S]*status[\s\S]*quotaData[\s\S]*providerType[\s\S]*\}/,
+    'channel list query should load the persisted provider quota status'
+  );
+  const oauthTypes = channelColumns.match(/const OAUTH_CHANNEL_TYPES\s*=\s*new Set<Channel\['type'\]>\(\[([\s\S]*?)\]\);/)?.[1];
+  assert.ok(oauthTypes, 'OAuth channel type Set declaration should exist');
+  for (const type of ['codex', 'claudecode', 'antigravity', 'github_copilot', 'xai_subscription']) {
+    assert.match(oauthTypes, new RegExp(`'${type}'`));
+  }
+  assert.match(channelColumns, /100\s*-\s*usageRatio\s*\*\s*100/, 'the table should display remaining quota percentage');
+  assert.match(channelColumns, /QUOTA_VISIBLE_LIMIT\s*=\s*5/, 'quota cells should initially show at most five rows');
+  assert.match(channelColumns, /isExpanded\s*\?\s*limits\s*:\s*limits\.slice\(0,\s*QUOTA_VISIBLE_LIMIT\)/);
+  assert.match(channelColumns, /channels\.quota\.expand/);
+  assert.match(channelColumns, /channels\.quota\.collapse/);
+  assert.doesNotMatch(channelColumns, /limit\.window\s*=\s*labels\[index\]/, 'xAI windows must not be labeled by array position');
+  assert.match(channelColumns, /Math\.abs\(limit\.usageRatio\s*-\s*usageRatio\)/, 'legacy xAI limits should match raw billing usage');
+  assert.match(
+    channelColumns,
+    /if\s*\(!OAUTH_CHANNEL_TYPES\.has\(channel\.type\)\)[\s\S]*?>-<\/span>/,
+    'non-OAuth channels should display a dash'
+  );
+});
+
 test('channel proxy connection reuse setting is submitted, echoed, and localized', () => {
   const schema = read('features/channels/data/schema.ts');
   const channelsData = read('features/channels/data/channels.ts');
   const proxyDialog = read('features/channels/components/channels-proxy-dialog.tsx');
-  const proxyConfig = read('features/channels/data/proxy-config.ts');
 
   assert.match(
     schema,
@@ -106,23 +135,24 @@ test('channel proxy connection reuse setting is submitted, echoed, and localized
   );
 
   const proxySelections = channelsData.match(/proxy\s*\{[\s\S]*?\}/g) ?? [];
-  assert.equal(proxySelections.length, 5, 'all five channel proxy selections should be covered by this assertion');
+  assert.equal(proxySelections.length, 6, 'all channel proxy selections should be covered by this assertion');
   for (const selection of proxySelections) {
     assert.match(selection, /disableConnectionReuse/, 'channel proxy queries should echo disableConnectionReuse');
   }
   assert.match(channelsData, /proxy\?:\s*ProxyConfig;/, 'channel test input should use the shared ProxyConfig type');
 
-  assert.match(proxyDialog, /export function ProxyConfigFields/, 'proxy fields should be reusable outside the saved-channel dialog');
   assert.match(proxyDialog, /name='disableConnectionReuse'/, 'proxy dialog should render the connection reuse switch');
   const submitSection = proxyDialog.slice(proxyDialog.indexOf('const onSubmit'), proxyDialog.indexOf('const handleTest'));
-  const handleTestStart = proxyDialog.indexOf('const handleTest');
-  const testSection = proxyDialog.slice(handleTestStart, proxyDialog.indexOf('\n  return (', handleTestStart));
-  assert.match(submitSection, /normalizeProxyConfig\(values\)/, 'channel save payload should use the shared proxy normalizer');
-  assert.match(testSection, /normalizeProxyConfig\(values\)/, 'channel test payload should use the shared proxy normalizer');
+  const testSection = proxyDialog.slice(proxyDialog.indexOf('const handleTest'), proxyDialog.indexOf('return ('));
   assert.match(
-    proxyConfig,
-    /normalizeProxyConfig[\s\S]*disableConnectionReuse:\s*values\.disableConnectionReuse/,
-    'the shared normalizer should preserve disableConnectionReuse for URL proxies'
+    submitSection,
+    /const proxyConfig[\s\S]*disableConnectionReuse:\s*values\.disableConnectionReuse/,
+    'channel save payload should send disableConnectionReuse'
+  );
+  assert.match(
+    testSection,
+    /const proxyConfig[\s\S]*disableConnectionReuse:\s*values\.disableConnectionReuse/,
+    'channel test payload should send disableConnectionReuse'
   );
   const presetPayload = submitSection.match(/saveProxyPreset\.mutate\(\{[\s\S]*?\}\);/)?.[0] ?? '';
   assert.doesNotMatch(presetPayload, /disableConnectionReuse/, 'proxy presets should remain address and credential only');
@@ -146,66 +176,60 @@ test('channel proxy connection reuse setting is submitted, echoed, and localized
     '适用于 Resin 等按连接切换节点的代理池。开启后每个请求都会重新建立代理连接，并增加 CONNECT 与 TLS 握手开销。'
   );
 });
+test('Command Code exposes OpenAI and Anthropic channel variants with shared base URL', () => {
+  const schema = read('features/channels/data/schema.ts');
+  const channelsConfig = read('features/channels/data/config_channels.ts');
+  const providersConfig = read('features/channels/data/config_providers.ts');
+  const systemQuotas = read('features/system/data/quotas.ts');
+  const dialog = read('features/channels/components/channels-action-dialog.tsx');
 
-test('Codex OAuth configures the same proxy used after the channel is saved', () => {
-  const actionDialog = read('features/channels/components/channels-action-dialog.tsx');
-  const oauthProxyDialog = read('features/channels/components/oauth-proxy-dialog.tsx');
-  const oauthHook = read('features/channels/hooks/use-oauth-flow.ts');
-  const codexData = read('features/channels/data/codex.ts');
+  assert.match(schema, /channelTypeSchema[\s\S]*'commandcode'[\s\S]*'commandcode_anthropic'/);
+  assert.match(
+    schema,
+    /commandCodeQuotaSettingsSchema[\s\S]*authCookie:[\s\S]*z\.string\(\)\.optional\(\)\.nullable\(\)/,
+    'schema should model the Command Code quota cookie'
+  );
+  assert.match(schema, /channelSettingsSchema[\s\S]*providerQuota:[\s\S]*channelProviderQuotaSettingsSchema/);
+  assert.match(
+    channelsConfig,
+    /commandcode:\s*{[\s\S]*?channelType:\s*'commandcode'[\s\S]*?baseURL:\s*'https:\/\/api\.commandcode\.ai\/provider\/v1'[\s\S]*?defaultModels:\s*\[\][\s\S]*?apiFormat:\s*OPENAI_CHAT_COMPLETIONS,/,
+    'commandcode should use the shared base URL with OpenAI chat completions and no static models'
+  );
+  assert.match(
+    channelsConfig,
+    /commandcode_anthropic:\s*{[\s\S]*?channelType:\s*'commandcode_anthropic'[\s\S]*?baseURL:\s*'https:\/\/api\.commandcode\.ai\/provider\/v1'[\s\S]*?defaultModels:\s*\[\][\s\S]*?apiFormat:\s*ANTHROPIC_MESSAGES,/,
+    'commandcode_anthropic should use the shared base URL with Anthropic messages and no static models'
+  );
+  assert.match(channelsConfig, /CHANNEL_TYPE_TO_PROVIDER[\s\S]*commandcode_anthropic:\s*'commandcode'/);
+  assert.match(
+    providersConfig,
+    /commandcode:\s*{[\s\S]*channelTypes:\s*\[\s*'commandcode',\s*'commandcode_anthropic'\s*\]/,
+    'PROVIDER_CONFIGS should group both Command Code channel types'
+  );
+  assert.match(
+    systemQuotas,
+    /type:\s*'commandcode'\s*\|\s*'commandcode_anthropic';[\s\S]*quotaData: ProviderCommandCodeQuotaData/,
+    'quota parsing should type Command Code channels with ProviderCommandCodeQuotaData'
+  );
+  assert.match(
+    dialog,
+    /settings\.providerQuota\.commandCode\.authCookie/,
+    'the channel dialog should bind the quota cookie input to settings.providerQuota.commandCode.authCookie'
+  );
+});
 
-  assert.match(actionDialog, /data-testid='codex-oauth-proxy-button'/, 'Codex OAuth should expose a pre-login proxy button');
-  assert.match(
-    actionDialog,
-    /!isEdit && !\(isCodexType && authMode === 'official'\)/,
-    'official Codex login should use the proxy button instead of rendering a second inline proxy editor'
-  );
-  assert.match(actionDialog, /<OAuthProxyDialog[\s\S]*value=\{proxyConfig\}[\s\S]*onApply=\{handleOAuthProxyApply\}/);
-  assert.equal(
-    (actionDialog.slice(actionDialog.indexOf('const onSubmit =')).match(/proxy:\s*proxyConfig/g) ?? []).length,
-    2,
-    'create and explicit OAuth proxy edits should persist the exact proxy config'
-  );
-  assert.match(actionDialog, /const \[proxyDirty, setProxyDirty\]/, 'the channel dialog should track explicit proxy application');
-  assert.match(
-    actionDialog,
-    /\.\.\.\(proxyDirty \? \{ proxy: proxyConfig \} : \{\}\)/,
-    'untouched edit submissions should preserve the existing proxy value'
-  );
-  assert.match(
-    actionDialog,
-    /\(!isEdit \|\| proxyDirty\)/,
-    'create, duplicate, and explicit edit flows should keep proxy presets synchronized'
-  );
-  assert.match(
-    actionDialog,
-    /if \(open\) return;[\s\S]*setProxyType[\s\S]*setProxyDisableConnectionReuse[\s\S]*setOAuthProxyDialogOpen\(false\)/,
-    'closing the channel dialog should reset draft OAuth proxy state'
-  );
-  assert.match(
-    oauthProxyDialog,
-    /<ProxyConfigFields form=\{form\} proxyPresets=\{proxyPresets\}/,
-    'OAuth should reuse the channel proxy fields'
-  );
-  assert.match(oauthProxyDialog, /codexOAuthTestProxy/, 'the OAuth proxy dialog should expose a dedicated connectivity test');
-  assert.match(oauthProxyDialog, /testGenerationRef/, 'stale connectivity results should be ignored after edits or close');
-  assert.match(oauthProxyDialog, /'X-Project-ID': selectedProjectId/, 'project-scoped write permission should reach the preflight endpoint');
-  assert.match(codexData, /\/admin\/codex\/oauth\/test-proxy/, 'the connectivity test should use the fixed Codex admin endpoint');
-  assert.match(
-    oauthHook,
-    /if \(proxyConfig\) \{\s*exchangeInput\.proxy = proxyConfig;/,
-    'OAuth exchange should send every explicit proxy mode'
-  );
-  assert.match(oauthHook, /proxyConfigSchema\.safeParse\(proxyConfig\)/, 'OAuth should reject malformed proxy config before starting or exchanging');
+test('Command Code has localized channel, provider, cookie field, and quota labels', () => {
+  for (const locale of ['en', 'zh-CN']) {
+    const channels = parseLocale(locale);
+    const system = JSON.parse(read(`locales/${locale}/system.json`));
 
-  const en = parseLocale('en');
-  assert.equal(en['channels.dialogs.oauth.proxy.button'], 'Set Proxy');
-  assert.match(en['channels.dialogs.oauth.proxy.description'], /token exchange/);
-  assert.match(en['channels.dialogs.oauth.proxy.current'], /Current server route/);
-  assert.match(en['channels.dialogs.oauth.errors.proxyInvalid'], /valid proxy/);
-
-  const zh = parseLocale('zh-CN');
-  assert.equal(zh['channels.dialogs.oauth.proxy.button'], '设置代理');
-  assert.match(zh['channels.dialogs.oauth.proxy.description'], /交换令牌/);
-  assert.match(zh['channels.dialogs.oauth.proxy.current'], /当前服务端线路/);
-  assert.match(zh['channels.dialogs.oauth.errors.proxyInvalid'], /有效代理/);
+    assert.equal(channels['channels.types.commandcode'], 'Command Code');
+    assert.equal(channels['channels.providers.commandcode'], 'Command Code');
+    assert.ok(channels['channels.types.commandcode_anthropic']);
+    assert.ok(channels['channels.dialogs.fields.commandCodeQuota.authCookie.placeholder'].includes('__Secure-commandcode_prod_.session_token'));
+    assert.ok(channels['channels.dialogs.fields.commandCodeQuota.authCookie.description']);
+    assert.ok(system['quota.label.commandcode.top_up']);
+    assert.ok(system['quota.label.commandcode.no_windows']);
+    assert.ok(system['system.quota.collection.providers.commandcode']);
+  }
 });

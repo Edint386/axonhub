@@ -26,6 +26,12 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 		if err != nil {
 			return fmt.Errorf("failed to get source channel: %w", err)
 		}
+		if input.Endpoints == nil {
+			input.Endpoints = source.Endpoints
+		}
+		if isZenmuxChannelType(source.Type) && isZenmuxChannelType(input.Type) && input.Credentials.ManagementAPIKey == "" {
+			input.Credentials.ManagementAPIKey = source.Credentials.ManagementAPIKey
+		}
 
 		existing, err := db.Channel.Query().
 			Where(channel.Name(input.Name)).

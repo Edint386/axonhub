@@ -91,21 +91,20 @@ func xaiBillingQuotaData(summary subscription.BillingSummary) QuotaData {
 	if summary.Weekly != nil {
 		weeklyResetAt = parseXAIReset(summary.Weekly.ResetAt)
 		usagePercent = summary.Weekly.UsagePercent
-		weekly := NewTokenLimitStatus(
+		limits = append(limits, NewTokenLimitStatus(
 			xaiBillingWindowStatus(summary.Weekly.UsagePercent),
 			summary.Weekly.UsagePercent/100,
 			weeklyResetAt,
-		).WithWindow(QuotaWindowWeekly, 7*24*time.Hour)
-		limits = append(limits, weekly)
+		).WithWindow(QuotaWindowWeekly, 7*24*time.Hour))
 	}
 	if summary.Monthly != nil {
 		monthlyResetAt = parseXAIReset(summary.Monthly.ResetAt)
 		monthlyStatus := xaiBillingWindowStatus(summary.Monthly.UsagePercent)
 		usagePercent = max(usagePercent, summary.Monthly.UsagePercent)
-		monthly := NewTokenLimitStatus(monthlyStatus, summary.Monthly.UsagePercent/100, monthlyResetAt)
-		monthly.Window = QuotaWindowMonthly
-		monthly.PeriodStart = PeriodStartFromMonthlyReset(monthlyResetAt)
-		limits = append(limits, monthly)
+		monthlyLimit := NewTokenLimitStatus(monthlyStatus, summary.Monthly.UsagePercent/100, monthlyResetAt)
+		monthlyLimit.Window = QuotaWindowMonthly
+		monthlyLimit.PeriodStart = PeriodStartFromMonthlyReset(monthlyResetAt)
+		limits = append(limits, monthlyLimit)
 	}
 	status := "unknown"
 	if usagePercent >= 0 {

@@ -16,6 +16,7 @@ type PersistenceState struct {
 
 	RequestService      *biz.RequestService
 	UsageLogService     *biz.UsageLogService
+	SystemService       *biz.SystemService
 	ChannelService      *biz.ChannelService
 	QuotaService        *biz.QuotaService
 	PromptProvider      PromptProvider

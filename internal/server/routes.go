@@ -168,14 +168,22 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 		openAPIGroup.POST("/webhook/echo", handlers.System.WebhookEcho)
 	}
 
-	apiGroup := server.Group("/",
-		middleware.WithTimeout(server.Config.LLMRequestTimeout),
+	apiMiddlewares := []gin.HandlerFunc{
 		middleware.WithIPBlocklist(services.SystemService),
 		middleware.WithAPIKeyConfig(services.AuthService, nil),
 		middleware.WithSource(request.SourceAPI),
 		middleware.WithThread(server.Config.Trace, services.ThreadService),
 		middleware.WithTrace(server.Config.Trace, services.TraceService),
-	)
+	}
+	apiGroup := server.Group("/", append([]gin.HandlerFunc{
+		middleware.WithTimeout(server.Config.LLMRequestTimeout),
+	}, apiMiddlewares...)...)
+
+	// WebSocket mode owns a long-lived connection and applies its processing
+	// timeout per response.create event, so it must not inherit the ordinary
+	// single-request timeout from apiGroup.
+	responsesWebSocketGroup := server.Group("/", apiMiddlewares...)
+	responsesWebSocketGroup.GET("/v1/responses", handlers.OpenAI.CreateResponseWebSocket(server.Config.LLMRequestTimeout))
 
 	{
 		openaiGroup := apiGroup.Group("/v1")
@@ -187,6 +195,7 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 		openaiGroup.GET("/models/*model", handlers.OpenAI.RetrieveModel)
 		openaiGroup.POST("/embeddings", handlers.OpenAI.CreateEmbedding)
 		openaiGroup.POST("/moderations", handlers.OpenAI.CreateModeration)
+		openaiGroup.POST("/alpha/search", handlers.OpenAI.CreateAlphaSearch)
 		openaiGroup.POST("/images/generations", handlers.OpenAI.CreateImage)
 		openaiGroup.POST("/images/edits", handlers.OpenAI.CreateImageEdit)
 		openaiGroup.POST("/videos", handlers.OpenAI.CreateVideo)

@@ -2,6 +2,7 @@ package provider_quota
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/looplj/axonhub/internal/ent"
@@ -15,6 +16,37 @@ type QuotaChecker interface {
 	SupportsChannel(channel *ent.Channel) bool
 }
 
+// ErrInvalidCredentials marks provider credentials that can no longer produce
+// a trustworthy quota response, so cached quota data must not be used.
+var ErrInvalidCredentials = errors.New("provider quota credentials are invalid")
+
+// ErrResetUnsupported is returned when a provider checker does not implement Resetter.
+var ErrResetUnsupported = errors.New("provider quota reset is not supported")
+
+// Reset is a provider-agnostic quota reset that can be consumed.
+type Reset struct {
+	ID        string     `json:"id"`
+	Status    string     `json:"status"`
+	Type      string     `json:"type,omitempty"`
+	GrantedAt *time.Time `json:"grantedAt,omitempty"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	Title     string     `json:"title,omitempty"`
+}
+
+// ResetList describes a provider's optional reset capability and current resets.
+type ResetList struct {
+	Supported bool    `json:"supported"`
+	Resets    []Reset `json:"resets"`
+	Error     string  `json:"error,omitempty"`
+}
+
+// Resetter is an optional capability implemented by quota providers that can
+// list and consume provider-managed quota resets.
+type Resetter interface {
+	ListResets(ctx context.Context, channel *ent.Channel) (ResetList, error)
+	Reset(ctx context.Context, channel *ent.Channel) error
+}
+
 type QuotaLimitType string
 
 const (
@@ -25,6 +57,9 @@ const (
 
 // ApertisDefaultBaseURL is the default base URL for the Apertis API.
 const ApertisDefaultBaseURL = "https://api.apertis.ai"
+
+// ZenmuxDefaultBaseURL is the default base URL for the ZenMux API.
+const ZenmuxDefaultBaseURL = "https://zenmux.ai"
 
 type QuotaLimitStatus struct {
 	Type        QuotaLimitType `json:"type"`
@@ -62,6 +97,7 @@ type QuotaData struct {
 	NextResetAt  *time.Time         `json:"next_reset_at"` // Next quota reset timestamp
 	Ready        bool               `json:"ready"`         // True if status is available or warning
 	Limits       []QuotaLimitStatus `json:"limits"`
+	Resets       *ResetList         `json:"resets,omitempty"`
 }
 
 // WarningThresholdRatio is the usage ratio at which a channel transitions to "warning" status.

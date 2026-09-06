@@ -144,6 +144,27 @@ func TestOpenAIResponsesEndpoint_InheritsWebSocketTransportFromBaseURL(t *testin
 	require.True(t, ok)
 }
 
+func TestOpenAIResponsesCompactEndpoint_RejectsInheritedWebSocketTransport(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:compact_websocket?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(context.Background())
+	entChannel := client.Channel.Create().
+		SetName("Responses Compact WebSocket Channel").
+		SetType(channel.TypeOpenaiResponses).
+		SetBaseURL("wss://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "test-key"}).
+		SetSupportedModels([]string{"gpt-5"}).
+		SetDefaultTestModel("gpt-5").
+		SetEndpoints([]objects.ChannelEndpoint{{
+			APIFormat: llm.APIFormatOpenAIResponseCompact.String(),
+		}}).
+		SaveX(ctx)
+
+	_, err := NewChannelServiceForTest(client).buildChannelWithOutbounds(entChannel)
+	require.ErrorContains(t, err, "websocket transport only supports api_format \"openai/responses\"")
+}
+
 func TestCodexOAuthWebSocketEndpointBuildsWithoutAPIKey(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
@@ -189,16 +210,16 @@ func TestCodexOAuthWebSocketEndpointBuildsWithoutAPIKey(t *testing.T) {
 	require.NotNil(t, custom.CustomizeExecutor(nil))
 }
 
-func TestCodexCompactEndpointBuildsCodexOutbound(t *testing.T) {
+func TestCodexAlphaSearchEndpointPreservesCustomPath(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
 
 	ctx := authz.WithTestBypass(context.Background())
 
 	entChannel := client.Channel.Create().
-		SetName("Codex Compact Channel").
+		SetName("Codex Custom Alpha Search Channel").
 		SetType(channel.TypeCodex).
-		SetBaseURL("https://chatgpt.com/backend-api/codex#").
+		SetBaseURL("https://relay.example/backend-api/codex#").
 		SetCredentials(objects.ChannelCredentials{
 			OAuth: &objects.OAuthCredentials{
 				AccessToken:  "access-token",
@@ -209,24 +230,26 @@ func TestCodexCompactEndpointBuildsCodexOutbound(t *testing.T) {
 		SetSupportedModels([]string{"gpt-5.5"}).
 		SetDefaultTestModel("gpt-5.5").
 		SetEndpoints([]objects.ChannelEndpoint{{
-			APIFormat: llm.APIFormatOpenAIResponseCompact.String(),
+			APIFormat: llm.APIFormatOpenAIAlphaSearch.String(),
+			Path:      "/custom/search",
 		}}).
 		SaveX(ctx)
 
 	channelSvc := NewChannelServiceForTest(client)
-
 	built, err := channelSvc.buildChannelWithOutbounds(entChannel)
 	require.NoError(t, err)
 
-	primary, ok := built.Outbound.(*codex.OutboundTransformer)
-	require.True(t, ok)
-	require.NotNil(t, primary.TokenProvider())
-
-	outbound, err := BuildOutboundByAPIFormat(built, llm.APIFormatOpenAIResponseCompact.String())
+	outbound, err := BuildOutboundByAPIFormat(built, llm.APIFormatOpenAIAlphaSearch.String())
 	require.NoError(t, err)
-	override, ok := outbound.(*codex.OutboundTransformer)
-	require.True(t, ok)
-	require.True(t, primary.TokenProvider() == override.TokenProvider())
+
+	request, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model:       "gpt-5.5",
+		RequestType: llm.RequestTypeAlphaSearch,
+		APIFormat:   llm.APIFormatOpenAIAlphaSearch,
+		AlphaSearch: &llm.AlphaSearchRequest{Body: []byte(`{"commands":{"search_query":[]}}`)},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://relay.example/backend-api/codex/custom/search", request.URL)
 }
 
 type testStoppableOutbound struct {

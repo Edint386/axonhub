@@ -2,9 +2,9 @@
 
 import { format } from 'date-fns';
 import { ColumnDef } from '@tanstack/react-table';
-import { IconArrowsJoin2, IconRoute } from '@tabler/icons-react';
-import { zhCN, enUS } from 'date-fns/locale';
+import { IconArrowsExchange, IconArrowsJoin2, IconRoute } from '@tabler/icons-react';
 import { Ban, FileText } from 'lucide-react';
+import { zhCN, enUS } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { extractNumberID, formatUserName } from '@/lib/utils';
@@ -17,31 +17,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useGeneralSettings, useSecuritySettings, useUpdateSecuritySettings } from '@/features/system/data/system';
 import { useRequestPermissions } from '../../../hooks/useRequestPermissions';
-import { Request, RequestExecution } from '../data/schema';
+import { Request } from '../data/schema';
 import { calculateTokensPerSecond, getTokensPerSecondValue } from '../utils/tokens-per-second';
 import { getStatusColor } from './help';
 
 interface UseRequestsColumnsOptions {
   onBodyClick?: (requestId: string, index: number) => void;
   onViewDetail?: (requestId: string) => void;
-}
-
-function getCacheHitRateColor(rate: number): string {
-  if (rate >= 98) return 'text-green-700 dark:text-green-300';
-  if (rate >= 90) return 'text-green-600 dark:text-green-400';
-  if (rate >= 75) return 'text-emerald-600 dark:text-emerald-400';
-  if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
-  if (rate >= 20) return 'text-orange-600 dark:text-orange-400';
-  return 'text-red-600 dark:text-red-400';
-}
-
-function getFailedExecutionDurationMs(execution: Partial<RequestExecution>): number | null {
-  if (execution.status !== 'failed') return null;
-  if (execution.metricsLatencyMs != null) return execution.metricsLatencyMs;
-  if (!execution.createdAt || !execution.updatedAt) return null;
-
-  const durationMs = new Date(execution.updatedAt).getTime() - new Date(execution.createdAt).getTime();
-  return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : null;
 }
 
 export const DEFAULT_HIDDEN_COLUMN_IDS = ['status', 'source', 'apiFormat', 'clientIP', 'tokensPerSecond', 'writeCache'];
@@ -163,7 +145,18 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
           (id) => id && id !== originalModelId
         );
         const reasoningEffort = executions[0]?.reasoningEffort ?? request.reasoningEffort;
+        const inboundFormat = request.format;
+        const outboundFormat = executions[0]?.format;
         const passThroughApplied = executions.some((execution) => execution.passThroughApplied);
+        // Orange is reserved for a confirmed mismatch: a missing format on either
+        // side is "unknown" and stays muted.
+        const formatsComparable = Boolean(inboundFormat && outboundFormat);
+        const outboundProtocolMatches = formatsComparable && outboundFormat === inboundFormat;
+        const outboundProtocolTooltip = !formatsComparable
+          ? t('requests.tooltips.outboundProtocolUnknown')
+          : outboundProtocolMatches
+            ? t('requests.tooltips.outboundProtocolMatching', { protocol: outboundFormat })
+            : t('requests.tooltips.outboundProtocolConverted', { protocol: outboundFormat });
 
         const modelLabel =
           executionModelIds.length > 0 ? (
@@ -203,6 +196,25 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                 <TooltipTrigger asChild>
                   <span
                     className={`inline-flex h-5 w-5 items-center justify-center ${
+                      !formatsComparable
+                        ? 'text-muted-foreground/45'
+                        : outboundProtocolMatches
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-orange-700 dark:text-orange-300'
+                    }`}
+                    tabIndex={0}
+                    role='img'
+                    aria-label={outboundProtocolTooltip}
+                  >
+                    <IconArrowsExchange className='h-3.5 w-3.5' />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{outboundProtocolTooltip}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={`inline-flex h-5 w-5 items-center justify-center ${
                       passThroughApplied ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground/45'
                     }`}
                     tabIndex={0}
@@ -212,9 +224,7 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                     <IconRoute className='h-3.5 w-3.5' />
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {t(passThroughApplied ? 'requests.tooltips.passThroughApplied' : 'requests.tooltips.passThroughNotApplied')}
-                </TooltipContent>
+                <TooltipContent>{t(passThroughApplied ? 'requests.tooltips.passThroughApplied' : 'requests.tooltips.passThroughNotApplied')}</TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -345,35 +355,26 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                           </div>
                         </div>
                         <div className='flex flex-col gap-1 p-2'>
-                          {sortedExecutions.map((exe, idx) => {
-                            const failedDurationMs = getFailedExecutionDurationMs(exe);
-
-                            return (
-                              <div
-                                key={exe.id || idx}
-                                className='hover:bg-muted/50 flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors'
-                              >
-                                <Badge className={`${getStatusColor(exe.status || '')} h-5 shrink-0 px-1.5 text-[10px] font-bold uppercase`}>
-                                  {exe.status ? t(`requests.status.${exe.status}`) : t('requests.columns.unknown')}
-                                </Badge>
-                                <div className='flex min-w-0 flex-col'>
-                                  <span className='text-foreground truncate text-xs font-semibold'>
-                                    {exe.channel?.name || t('requests.columns.unknown')}
-                                  </span>
-                                  {exe.createdAt && (
-                                    <span className='text-muted-foreground text-[10px]'>
-                                      {format(new Date(exe.createdAt), 'HH:mm:ss', { locale })}
-                                    </span>
-                                  )}
-                                </div>
-                                {failedDurationMs != null && (
-                                  <span className='text-muted-foreground ml-auto shrink-0 font-mono text-[10px]'>
-                                    {t('requests.duration.failedAttempt', { duration: formatDuration(failedDurationMs) })}
+                          {sortedExecutions.map((exe, idx) => (
+                            <div
+                              key={exe.id || idx}
+                              className='hover:bg-muted/50 flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors'
+                            >
+                              <Badge className={`${getStatusColor(exe.status || '')} h-5 shrink-0 px-1.5 text-[10px] font-bold uppercase`}>
+                                {exe.status ? t(`requests.status.${exe.status}`) : t('requests.columns.unknown')}
+                              </Badge>
+                              <div className='flex min-w-0 flex-col'>
+                                <span className='text-foreground truncate text-xs font-semibold'>
+                                  {exe.channel?.name || t('requests.columns.unknown')}
+                                </span>
+                                {exe.createdAt && (
+                                  <span className='text-muted-foreground text-[10px]'>
+                                    {format(new Date(exe.createdAt), 'HH:mm:ss', { locale })}
                                   </span>
                                 )}
                               </div>
-                            );
-                          })}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </TooltipContent>
@@ -460,12 +461,11 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
 
         const hitRate = promptTokens > 0 ? (cachedTokens / promptTokens) * 100 : 0;
         const isLowHitRate = hitRate < 80 && promptTokens >= 40000;
-        const hitRateClassName = isLowHitRate ? 'font-medium text-red-600 dark:text-red-400' : getCacheHitRateColor(hitRate);
 
         return (
           <div className='text-xs'>
             <div className='text-sm font-medium'>{cachedTokens.toLocaleString()}</div>
-            <div className={hitRateClassName}>
+            <div className={isLowHitRate ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}>
               {t('requests.columns.cacheHitRate', {
                 rate: hitRate.toFixed(1),
               })}
@@ -586,7 +586,7 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
           return <Badge variant='secondary'>{t(`requests.source.${request.source}`)}</Badge>;
         }
 
-        const callerName = formatUserName(request.apiKey?.caller?.firstName, request.apiKey?.caller?.lastName);
+        const callerName = formatUserName(request.apiKey?.user?.firstName, request.apiKey?.user?.lastName);
 
         return (
           <div className='flex min-w-[120px] flex-col gap-0.5'>

@@ -14,10 +14,10 @@ function read(relativePath) {
 // markers) so assertions about the usage bars cannot bleed into Claude Code
 // or Cline, which legitimately keep duration-aware severity.
 function isolateCodexBlock(source) {
-  const start = source.indexOf("{quota && channel.type === 'codex' &&");
-  const end = source.indexOf("{quota && channel.type === 'cline' &&", start);
+  const start = source.indexOf("{channel.type === 'codex' &&");
+  const end = source.indexOf("{channel.type === 'cline' &&", start);
 
-  assert.ok(start !== -1, 'Codex render branch should retain the custom quota guard');
+  assert.ok(start !== -1, 'Codex render branch should exist in quota-badges source');
   assert.ok(end !== -1 && end > start, 'Cline render branch should follow the Codex branch');
 
   return source.slice(start, end);
@@ -56,15 +56,27 @@ test('Codex usage bar color tracks used percentage, not reset-window elapsed tim
   );
 });
 
-test('quota enforcement badges keep provider exemption separate from local quota enforcement', () => {
-  const quotaBadges = read('components/quota-badges.tsx');
+test('Command Code monthly hover matches the other windows', () => {
+  const source = read('components/quota-badges.tsx');
+  const commandCodeBlock = source.slice(source.indexOf("{isCommandCodeType(channel.type) &&"), source.indexOf("{channel.type === 'moonshot_coding' &&"));
 
-  assert.match(quotaBadges, /localQuotaStatus === 'exhausted'[^\n]*blocked/);
-  assert.match(quotaBadges, /providerStatus === 'exhausted'/);
-  assert.match(quotaBadges, /isAllowed && \(providerStatus === 'exhausted' \|\| providerStatus === 'warning'\)/);
-  assert.doesNotMatch(
-    quotaBadges,
-    /const enforcementEffect =\s*\n\s*enforcementMode[^\n]*status === 'exhausted'/,
-    'combined display status must not drive provider enforcement badges'
+  assert.match(commandCodeBlock, /monthlyDurationPct[\s\S]*quota\.label\.time_elapsed/);
+  assert.doesNotMatch(commandCodeBlock, /quota\.label\.commandcode\.monthly_remaining/);
+  assert.doesNotMatch(commandCodeBlock, /subscription_status/);
+});
+
+test('Codex reset can be attempted after a transient reset-list failure', () => {
+  const quotaBadges = read('components/quota-badges.tsx');
+  const codexBlock = isolateCodexBlock(quotaBadges);
+
+  assert.match(
+    codexBlock,
+    /const canAttemptReset =\s*qd\._resets\?\.supported === true && \(Boolean\(qd\._resets\.error\) \|\| availableResetCount > 0\)/,
+    'a supported provider should allow a fresh reset attempt when reset-list metadata failed'
+  );
+  assert.match(
+    codexBlock,
+    /disabled=\{isResetting \|\| !canAttemptReset\}/,
+    'the reset button should use the retry-aware availability condition'
   );
 });
