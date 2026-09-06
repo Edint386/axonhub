@@ -347,6 +347,7 @@
   "quota.label.secondary_duration": "次要时长",
   "quota.label.error": "错误",
   "quota.label.plan": "套餐",
+  "quota.label.shared_account_channels": "{{count}} 个渠道共享该账号",
   "quota.label.shared_account_channels_one": "{{count}} 个渠道共享该账号",
   "quota.label.shared_account_channels_other": "{{count}} 个渠道共享该账号",
   "quota.label.commandcode.top_up": "充值额度",
