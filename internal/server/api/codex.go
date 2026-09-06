@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,12 +12,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 
+	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
+	"github.com/looplj/axonhub/internal/scopes"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/oauth"
 	"github.com/looplj/axonhub/llm/transformer/openai/codex"
 )
+
+const codexOAuthProxyTestTimeout = 10 * time.Second
+
+// codexOAuthProxyTestURL is a package variable so tests can replace the fixed
+// external endpoint with an httptest server. Production code must not accept a
+// caller-supplied target URL for this probe.
+var codexOAuthProxyTestURL = "https://auth.openai.com/.well-known/openid-configuration"
 
 type CodexHandlersParams struct {
 	fx.In
@@ -110,6 +120,15 @@ type ExchangeCodexOAuthResponse struct {
 	Credentials string `json:"credentials"`
 }
 
+type TestCodexOAuthProxyRequest struct {
+	Proxy *httpclient.ProxyConfig `json:"proxy,omitempty"`
+}
+
+type TestCodexOAuthProxyResponse struct {
+	Success   bool  `json:"success"`
+	LatencyMs int64 `json:"latencyMs"`
+}
+
 func (h *CodexHandlers) httpClientForOAuthExchange(proxy *httpclient.ProxyConfig) *httpclient.HttpClient {
 	if proxy == nil {
 		return h.httpClient
@@ -134,6 +153,62 @@ func validateCodexOAuthProxy(proxy *httpclient.ProxyConfig) error {
 	default:
 		return fmt.Errorf("unsupported proxy type %q", proxy.Type)
 	}
+}
+
+// TestOAuthProxy verifies transport reachability to the fixed OpenAI auth
+// origin using the exact client-selection rules used by OAuth token exchange.
+// Only a 2xx response counts as success. Redirects are intentionally not
+// followed so the server-side probe never leaves the fixed origin.
+// POST /admin/codex/oauth/test-proxy.
+func (h *CodexHandlers) TestOAuthProxy(c *gin.Context) {
+	if err := authz.RequireScope(c.Request.Context(), scopes.ScopeWriteChannels); err != nil {
+		JSONError(c, http.StatusForbidden, errors.New("forbidden"))
+		return
+	}
+
+	var req TestCodexOAuthProxyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		JSONError(c, http.StatusBadRequest, errors.New("invalid request format"))
+		return
+	}
+
+	if err := validateCodexOAuthProxy(req.Proxy); err != nil {
+		JSONError(c, http.StatusBadRequest, errors.New("invalid proxy configuration"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), codexOAuthProxyTestTimeout)
+	defer cancel()
+
+	probeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, codexOAuthProxyTestURL, nil)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, errors.New("failed to prepare proxy connectivity test"))
+		return
+	}
+
+	selectedClient := h.httpClientForOAuthExchange(req.Proxy)
+	probeClient := *selectedClient.GetNativeClient()
+	probeClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	startedAt := time.Now()
+	resp, err := probeClient.Do(probeReq)
+	latencyMs := time.Since(startedAt).Milliseconds()
+	if err != nil {
+		JSONError(c, http.StatusBadGateway, errors.New("proxy connectivity test failed"))
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		JSONError(c, http.StatusBadGateway, errors.New("proxy connectivity test failed"))
+		return
+	}
+
+	c.JSON(http.StatusOK, TestCodexOAuthProxyResponse{
+		Success:   true,
+		LatencyMs: latencyMs,
+	})
 }
 
 type DecodeCodexAuthJSONRequest struct {

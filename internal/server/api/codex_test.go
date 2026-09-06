@@ -8,13 +8,17 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/contexts"
+	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
+	"github.com/looplj/axonhub/internal/scopes"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/transformer/openai/codex"
 )
@@ -169,6 +173,331 @@ func TestValidateCodexOAuthProxy(t *testing.T) {
 			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
+}
+
+// setCodexOAuthProxyTestURL replaces the production probe URL for one test and
+// always restores it, including when the test fails. Tests using this helper
+// must not call t.Parallel because the URL is package-global by design.
+func setCodexOAuthProxyTestURL(t *testing.T, testURL string) {
+	t.Helper()
+
+	originalURL := codexOAuthProxyTestURL
+	codexOAuthProxyTestURL = testURL
+	t.Cleanup(func() {
+		codexOAuthProxyTestURL = originalURL
+	})
+}
+
+func withCodexOAuthTestScopes(scopeSlugs ...scopes.ScopeSlug) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userScopes := make([]string, len(scopeSlugs))
+		for i, scopeSlug := range scopeSlugs {
+			userScopes[i] = string(scopeSlug)
+		}
+
+		const userID = 123
+		ctx := authz.NewUserContext(c.Request.Context(), userID)
+		ctx = contexts.WithUser(ctx, &ent.User{ID: userID, Scopes: userScopes})
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	}
+}
+
+func TestCodexHandlers_TestOAuthProxy_UsesExplicitURLProxy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var targetCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetCalls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(target.Close)
+	setCodexOAuthProxyTestURL(t, target.URL+"/oauth-connectivity")
+
+	var proxyCalls atomic.Int32
+	var proxyMethod atomic.Value
+	var proxyRequestURL atomic.Value
+	proxyTransport := http.DefaultTransport.(*http.Transport).Clone()
+	proxyTransport.Proxy = nil
+	t.Cleanup(proxyTransport.CloseIdleConnections)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyCalls.Add(1)
+		proxyMethod.Store(r.Method)
+		proxyRequestURL.Store(r.URL.String())
+
+		forward, err := http.NewRequestWithContext(r.Context(), r.Method, r.URL.String(), r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		forward.Header = r.Header.Clone()
+		forward.Header.Del("Proxy-Authorization")
+
+		response, err := proxyTransport.RoundTrip(forward)
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		defer response.Body.Close()
+
+		w.WriteHeader(response.StatusCode)
+		_, _ = io.Copy(w, response.Body)
+	}))
+	t.Cleanup(proxy.Close)
+
+	h := NewCodexHandlers(CodexHandlersParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		HttpClient:  httpclient.NewHttpClient(),
+	})
+
+	router := gin.New()
+	router.Use(withCodexOAuthTestScopes(scopes.ScopeWriteChannels))
+	router.POST("/admin/codex/oauth/test-proxy", h.TestOAuthProxy)
+
+	body, err := json.Marshal(TestCodexOAuthProxyRequest{
+		Proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeURL, URL: proxy.URL},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/test-proxy", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp TestCodexOAuthProxyResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	require.GreaterOrEqual(t, resp.LatencyMs, int64(0))
+	require.Equal(t, int32(1), proxyCalls.Load())
+	require.Equal(t, http.MethodGet, proxyMethod.Load())
+	require.Equal(t, target.URL+"/oauth-connectivity", proxyRequestURL.Load())
+	require.Equal(t, int32(1), targetCalls.Load(), "explicit proxy must forward to the fixed target")
+}
+
+func TestCodexHandlers_TestOAuthProxy_RejectsNon2xxProxyResponses(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var targetCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetCalls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(target.Close)
+	setCodexOAuthProxyTestURL(t, target.URL)
+
+	for _, statusCode := range []int{
+		http.StatusTeapot,
+		http.StatusForbidden,
+		http.StatusProxyAuthRequired,
+		http.StatusServiceUnavailable,
+	} {
+		t.Run(http.StatusText(statusCode), func(t *testing.T) {
+			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(statusCode)
+			}))
+			t.Cleanup(proxy.Close)
+
+			h := NewCodexHandlers(CodexHandlersParams{
+				CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+				HttpClient:  httpclient.NewHttpClient(),
+			})
+
+			router := gin.New()
+			router.Use(withCodexOAuthTestScopes(scopes.ScopeWriteChannels))
+			router.POST("/admin/codex/oauth/test-proxy", h.TestOAuthProxy)
+
+			body, err := json.Marshal(TestCodexOAuthProxyRequest{
+				Proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeURL, URL: proxy.URL},
+			})
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/test-proxy", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusBadGateway, w.Code)
+			require.Contains(t, w.Body.String(), "proxy connectivity test failed")
+			require.NotContains(t, w.Body.String(), http.StatusText(statusCode))
+		})
+	}
+
+	require.Equal(t, int32(0), targetCalls.Load(), "proxy-generated errors must not reach the fixed target")
+}
+
+func TestCodexHandlers_TestOAuthProxy_DisabledUsesDirectConnection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var targetCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetCalls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(target.Close)
+	setCodexOAuthProxyTestURL(t, target.URL+"/oauth-connectivity")
+
+	var baseProxyCalls atomic.Int32
+	baseProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		baseProxyCalls.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(baseProxy.Close)
+
+	h := NewCodexHandlers(CodexHandlersParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		HttpClient: httpclient.NewHttpClientWithProxy(&httpclient.ProxyConfig{
+			Type: httpclient.ProxyTypeURL,
+			URL:  baseProxy.URL,
+		}),
+	})
+
+	router := gin.New()
+	router.Use(withCodexOAuthTestScopes(scopes.ScopeWriteChannels))
+	router.POST("/admin/codex/oauth/test-proxy", h.TestOAuthProxy)
+
+	body, err := json.Marshal(TestCodexOAuthProxyRequest{
+		Proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeDisabled},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/test-proxy", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp TestCodexOAuthProxyResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	require.Equal(t, int32(1), targetCalls.Load())
+	require.Equal(t, int32(0), baseProxyCalls.Load(), "disabled mode must bypass the base client's proxy")
+}
+
+func TestCodexHandlers_TestOAuthProxy_RejectsInvalidConfigBeforeRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var targetCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetCalls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(target.Close)
+	setCodexOAuthProxyTestURL(t, target.URL)
+
+	h := NewCodexHandlers(CodexHandlersParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		HttpClient:  httpclient.NewHttpClient(),
+	})
+
+	router := gin.New()
+	router.Use(withCodexOAuthTestScopes(scopes.ScopeWriteChannels))
+	router.POST("/admin/codex/oauth/test-proxy", h.TestOAuthProxy)
+
+	const secret = "secret-proxy-type"
+	body, err := json.Marshal(TestCodexOAuthProxyRequest{
+		Proxy: &httpclient.ProxyConfig{
+			Type:     httpclient.ProxyType(secret),
+			URL:      "http://proxy-user:proxy-password@proxy.invalid:8080",
+			Username: "proxy-user",
+			Password: "proxy-password",
+		},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/test-proxy", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "invalid proxy configuration")
+	for _, value := range []string{secret, "proxy-user", "proxy-password", "proxy.invalid"} {
+		require.NotContains(t, w.Body.String(), value)
+	}
+	require.Equal(t, int32(0), targetCalls.Load(), "invalid config must fail before any request")
+}
+
+func TestCodexHandlers_TestOAuthProxy_RedactsTransportFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(target.Close)
+	setCodexOAuthProxyTestURL(t, target.URL)
+
+	closedProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	closedProxyURL := closedProxy.URL
+	closedProxy.Close()
+
+	h := NewCodexHandlers(CodexHandlersParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		HttpClient:  httpclient.NewHttpClient(),
+	})
+
+	router := gin.New()
+	router.Use(withCodexOAuthTestScopes(scopes.ScopeWriteChannels))
+	router.POST("/admin/codex/oauth/test-proxy", h.TestOAuthProxy)
+
+	body, err := json.Marshal(TestCodexOAuthProxyRequest{
+		Proxy: &httpclient.ProxyConfig{
+			Type:     httpclient.ProxyTypeURL,
+			URL:      closedProxyURL,
+			Username: "proxy-user",
+			Password: "proxy-password",
+		},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/test-proxy", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadGateway, w.Code)
+	require.Contains(t, w.Body.String(), "proxy connectivity test failed")
+	for _, value := range []string{closedProxyURL, "proxy-user", "proxy-password"} {
+		require.NotContains(t, w.Body.String(), value)
+	}
+}
+
+func TestCodexHandlers_TestOAuthProxy_RequiresWriteChannels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var targetCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetCalls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(target.Close)
+	setCodexOAuthProxyTestURL(t, target.URL)
+
+	h := NewCodexHandlers(CodexHandlersParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		HttpClient:  httpclient.NewHttpClient(),
+	})
+
+	router := gin.New()
+	router.Use(withCodexOAuthTestScopes(scopes.ScopeReadChannels))
+	router.POST("/admin/codex/oauth/test-proxy", h.TestOAuthProxy)
+
+	body, err := json.Marshal(TestCodexOAuthProxyRequest{
+		Proxy: &httpclient.ProxyConfig{Type: httpclient.ProxyTypeDisabled},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/codex/oauth/test-proxy", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "forbidden")
+	require.NotContains(t, w.Body.String(), string(scopes.ScopeWriteChannels))
+	require.Equal(t, int32(0), targetCalls.Load(), "unauthorized request must not start a connectivity probe")
 }
 
 func TestCodexHandlers_Exchange_InvalidProxyDoesNotConsumeState(t *testing.T) {
