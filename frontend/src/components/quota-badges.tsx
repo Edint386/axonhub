@@ -241,6 +241,50 @@ function getApertisPercentage(qd: ProviderApertisQuotaData | undefined): number 
   return 0;
 }
 
+function formatCostCount(n: number): string {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function quotaUsagePercent(used: number, limit: number): number {
+  if (limit <= 0) return 100;
+  return (used / limit) * 100;
+}
+
+function getLocalQuotaPercentage(channel: ProviderQuotaChannel): number {
+  const quota = channel.localQuota;
+  const usage = channel.localQuotaUsage?.usage;
+  if (!quota || !usage) return 0;
+
+  const percentages: number[] = [];
+  if (quota.requests) percentages.push(quotaUsagePercent(usage.requestCount, quota.requests));
+  if (quota.totalTokens) percentages.push(quotaUsagePercent(usage.totalTokens, quota.totalTokens));
+  if (quota.cost != null) percentages.push(quotaUsagePercent(usage.totalCost, quota.cost));
+
+  return percentages.length > 0 ? Math.max(...percentages) : 0;
+}
+
+function getLocalQuotaStatus(channel: ProviderQuotaChannel): 'available' | 'warning' | 'exhausted' | null {
+  if (!channel.localQuota) return null;
+  const percentage = getLocalQuotaPercentage(channel);
+  if (percentage >= 100) return 'exhausted';
+  if (percentage >= 80) return 'warning';
+  return 'available';
+}
+
+function isLocalOnlyQuotaChannel(channel: ProviderQuotaChannel): boolean {
+  return channel.localQuota != null && channel.quotaStatus?.status === 'unknown';
+}
+
+function getWorstQuotaStatus(
+  providerStatus?: 'available' | 'warning' | 'exhausted' | 'unknown' | null,
+  localStatus?: 'available' | 'warning' | 'exhausted' | null
+): 'available' | 'warning' | 'exhausted' | 'unknown' {
+  if (providerStatus === 'exhausted' || localStatus === 'exhausted') return 'exhausted';
+  if (providerStatus === 'warning' || localStatus === 'warning') return 'warning';
+  if (providerStatus && providerStatus !== 'unknown') return providerStatus;
+  return localStatus ?? providerStatus ?? 'unknown';
+}
+
 function ProgressBar({
   percentage,
   type = 'usage',
@@ -390,20 +434,26 @@ function QuotaRow({ channel, enforcementMode, allowedChannelIDs }: { channel: Pr
   const [isResetting, setIsResetting] = useState(false);
   const quota = channel.quotaStatus;
 
-  const status = quota.status;
-  const clinePassUnavailable = channel.type === 'cline' && isClineUnavailablePassQuotaData(channel.quotaStatus.quotaData);
+  const providerStatus = quota?.status ?? null;
+  const localQuotaStatus = getLocalQuotaStatus(channel);
+  if (!quota && !channel.localQuota) return null;
+  const displayStatus = getWorstQuotaStatus(providerStatus, localQuotaStatus);
+  const status = displayStatus;
+  const clinePassUnavailable = channel.type === 'cline' && quota != null && isClineUnavailablePassQuotaData(quota.quotaData);
   const statusLabel = clinePassUnavailable ? t('quota.status.cline_pass_unavailable') : t(STATUS_LABELS[status]);
 
   const isAllowed = allowedChannelIDs?.includes(channel.id) ?? false;
 
-  const enforcementEffect =
-    enforcementMode && !isAllowed && (status === 'exhausted' || (status === 'warning' && enforcementMode === 'DE_PRIORITIZE'))
+  const localEnforcementEffect = localQuotaStatus === 'exhausted' ? ('blocked' as const) : null;
+  const providerEnforcementEffect =
+    enforcementMode && !isAllowed && (providerStatus === 'exhausted' || (providerStatus === 'warning' && enforcementMode === 'DE_PRIORITIZE'))
       ? enforcementMode === 'EXHAUSTED_ONLY'
         ? ('blocked' as const)
         : ('deprioritized' as const)
       : null;
+  const enforcementEffect = localEnforcementEffect ?? providerEnforcementEffect;
 
-  const percentage = getChannelPercentage(channel);
+  const percentage = Math.max(quota ? getChannelPercentage(channel) : 0, getLocalQuotaPercentage(channel));
   const batteryLevel = getBatteryLevel(percentage, status);
   const BatteryIcon = getBatteryIcon(batteryLevel);
 
@@ -576,7 +626,7 @@ function QuotaRow({ channel, enforcementMode, allowedChannelIDs }: { channel: Pr
               {t(`quota.status.${enforcementEffect}`)}
             </Badge>
           )}
-          {isAllowed && (status === 'exhausted' || status === 'warning') && (
+          {isAllowed && (providerStatus === 'exhausted' || providerStatus === 'warning') && (
             <Badge variant='outline' className={BADGE_COLOR_CLASSES.blue}>
               {t('quota.status.bypassed')}
             </Badge>
@@ -2035,6 +2085,60 @@ function QuotaRow({ channel, enforcementMode, allowedChannelIDs }: { channel: Pr
         </div>
       )}
 
+      {channel.localQuota && (
+        <div className={`${quota ? 'border-border/60 border-t border-dashed pt-3' : ''} mt-3 space-y-2.5`}>
+          <div className='flex items-center justify-between'>
+            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>{t('quota.label.local_quota')}</div>
+            {channel.localQuotaUsageLoading && !channel.localQuotaUsage && <Loader2 className='text-muted-foreground h-3 w-3 animate-spin' />}
+          </div>
+          {(() => {
+            const quotaConfig = channel.localQuota;
+            const usage = channel.localQuotaUsage?.usage;
+            const items: React.ReactNode[] = [];
+            if (quotaConfig.requests) {
+              const used = usage?.requestCount ?? 0;
+              const usedPct = quotaUsagePercent(used, quotaConfig.requests);
+              items.push(
+                <div key='local-requests' className='space-y-1'>
+                  <div className='flex items-center justify-between text-xs'>
+                    <span className='text-muted-foreground font-medium'>{t('quota.label.local_requests')} <span className='font-normal opacity-70'>({used.toLocaleString()}/{quotaConfig.requests.toLocaleString()})</span></span>
+                    <span className='text-foreground font-medium'>{t('quota.label.percent_used', { percent: Math.round(usedPct) })}</span>
+                  </div>
+                  <ProgressBar percentage={usedPct} />
+                </div>
+              );
+            }
+            if (quotaConfig.totalTokens) {
+              const used = usage?.totalTokens ?? 0;
+              const usedPct = quotaUsagePercent(used, quotaConfig.totalTokens);
+              items.push(
+                <div key='local-tokens' className='space-y-1'>
+                  <div className='flex items-center justify-between text-xs'>
+                    <span className='text-muted-foreground font-medium'>{t('quota.label.local_total_tokens')} <span className='font-normal opacity-70'>({formatTokenCount(used)}/{formatTokenCount(quotaConfig.totalTokens)})</span></span>
+                    <span className='text-foreground font-medium'>{t('quota.label.percent_used', { percent: Math.round(usedPct) })}</span>
+                  </div>
+                  <ProgressBar percentage={usedPct} />
+                </div>
+              );
+            }
+            if (quotaConfig.cost != null) {
+              const used = usage?.totalCost ?? 0;
+              const usedPct = quotaUsagePercent(used, quotaConfig.cost);
+              items.push(
+                <div key='local-cost' className='space-y-1'>
+                  <div className='flex items-center justify-between text-xs'>
+                    <span className='text-muted-foreground font-medium'>{t('quota.label.local_cost')} <span className='font-normal opacity-70'>({formatCostCount(used)}/{formatCostCount(quotaConfig.cost)})</span></span>
+                    <span className='text-foreground font-medium'>{t('quota.label.percent_used', { percent: Math.round(usedPct) })}</span>
+                  </div>
+                  <ProgressBar percentage={usedPct} />
+                </div>
+              );
+            }
+            return items;
+          })()}
+        </div>
+      )}
+
       <PeriodQuotaEstimate limits={quota.limits} />
     </div>
   );
@@ -2049,10 +2153,10 @@ function QuotaBadgeTrigger({ channels, isLoading, isError }: { channels: Provide
     return <BatteryWarning className='h-5 w-5 text-red-500 transition-colors' />;
   }
 
-  const highestUsed = Math.max(...channels.map(getChannelPercentage));
+  const highestUsed = Math.max(...channels.map((channel) => Math.max(getChannelPercentage(channel), getLocalQuotaPercentage(channel))));
 
-  const hasExhausted = channels.some((c) => c.quotaStatus.status === 'exhausted');
-  const hasWarning = channels.some((c) => c.quotaStatus.status === 'warning');
+  const hasExhausted = channels.some((channel) => getWorstQuotaStatus(channel.quotaStatus?.status, getLocalQuotaStatus(channel)) === 'exhausted');
+  const hasWarning = channels.some((channel) => getWorstQuotaStatus(channel.quotaStatus?.status, getLocalQuotaStatus(channel)) === 'warning');
 
   let level: BatteryLevel = 'full';
   if (hasExhausted) level = 'warning';
@@ -2076,13 +2180,17 @@ export function QuotaBadges({ isRefreshing, onRefresh }: { isRefreshing: boolean
   if (!isLoading && !isError && channels.length === 0) return null;
 
   const groupedChannels = channels.reduce((acc: ProviderQuotaChannel[], channel: ProviderQuotaChannel) => {
+    if (channel.localQuota) {
+      acc.push(channel);
+      return acc;
+    }
     if (channel.type === 'nanogpt_responses') {
-      const existing = acc.find((c) => c.type === 'nanogpt');
+      const existing = acc.find((c) => c.type === 'nanogpt' && !c.localQuota);
       if (!existing) {
         acc.push(channel);
       }
     } else if (isOpenaiType(channel.type) && channel.providerType) {
-      const existing = acc.find((c) => isOpenaiType(c.type) && c.providerType === channel.providerType);
+      const existing = acc.find((c) => !c.localQuota && isOpenaiType(c.type) && c.providerType === channel.providerType);
       if (!existing) {
         acc.push(channel);
       }
@@ -2102,6 +2210,13 @@ export function QuotaBadges({ isRefreshing, onRefresh }: { isRefreshing: boolean
     }
     return acc;
   }, [] as ProviderQuotaChannel[]);
+
+  const sortedChannels = [...groupedChannels].sort((left, right) => {
+    const leftLocalOnly = isLocalOnlyQuotaChannel(left);
+    const rightLocalOnly = isLocalOnlyQuotaChannel(right);
+    if (leftLocalOnly === rightLocalOnly) return 0;
+    return leftLocalOnly ? 1 : -1;
+  });
 
   const renderContent = () => {
     if (isLoading) {
@@ -2123,9 +2238,9 @@ export function QuotaBadges({ isRefreshing, onRefresh }: { isRefreshing: boolean
 
     return (
       <div
-        className={`max-h-[60vh] overflow-y-auto pr-1 pl-1 ${groupedChannels.length > 4 ? 'grid grid-cols-1 gap-x-4 sm:grid-cols-2' : ''}`}
+        className={`max-h-[60vh] overflow-y-auto pr-1 pl-1 ${sortedChannels.length > 4 ? 'grid grid-cols-1 gap-x-4 sm:grid-cols-2' : ''}`}
       >
-        {groupedChannels.map((channel: ProviderQuotaChannel) => (
+        {sortedChannels.map((channel: ProviderQuotaChannel) => (
           <QuotaRow key={channel.id} channel={channel} enforcementMode={enforcementMode} allowedChannelIDs={allowedChannelIDs} />
         ))}
       </div>
@@ -2136,12 +2251,12 @@ export function QuotaBadges({ isRefreshing, onRefresh }: { isRefreshing: boolean
     <Popover>
       <PopoverTrigger asChild>
         <button type='button' className='hover:bg-muted relative rounded-md p-2 transition-colors'>
-          <QuotaBadgeTrigger channels={groupedChannels} isLoading={isLoading} isError={isError} />
+          <QuotaBadgeTrigger channels={sortedChannels} isLoading={isLoading} isError={isError} />
         </button>
       </PopoverTrigger>
       <PopoverContent
         className={
-          !isLoading && !isError && groupedChannels.length > 4
+          !isLoading && !isError && sortedChannels.length > 4
             ? 'w-[640px] max-w-[calc(100vw-2rem)]'
             : 'w-80 max-w-[calc(100vw-2rem)]'
         }

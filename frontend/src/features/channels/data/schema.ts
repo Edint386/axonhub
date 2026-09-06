@@ -270,6 +270,52 @@ export const channelRateLimitSchema = z.object({
 });
 export type ChannelRateLimit = z.infer<typeof channelRateLimitSchema>;
 
+// Channel quota
+export const channelQuotaPeriodTypeSchema = z.enum(['all_time', 'past_duration', 'calendar_duration']);
+export type ChannelQuotaPeriodType = z.infer<typeof channelQuotaPeriodTypeSchema>;
+
+export const channelQuotaPastDurationUnitSchema = z.enum(['minute', 'hour', 'day']);
+export type ChannelQuotaPastDurationUnit = z.infer<typeof channelQuotaPastDurationUnitSchema>;
+
+export const channelQuotaCalendarDurationUnitSchema = z.enum(['day', 'month']);
+export type ChannelQuotaCalendarDurationUnit = z.infer<typeof channelQuotaCalendarDurationUnitSchema>;
+
+export const channelQuotaPeriodSchema = z.object({
+  type: channelQuotaPeriodTypeSchema,
+  pastDuration: z.object({ value: z.number().int().positive(), unit: channelQuotaPastDurationUnitSchema }).optional().nullable(),
+  calendarDuration: z.object({ unit: channelQuotaCalendarDurationUnitSchema }).optional().nullable(),
+});
+export type ChannelQuotaPeriod = z.infer<typeof channelQuotaPeriodSchema>;
+
+export const channelQuotaSchema = z.object({
+  requests: z.number().int().positive().optional().nullable(),
+  totalTokens: z.number().int().positive().optional().nullable(),
+  cost: z.coerce.number().nonnegative().optional().nullable(),
+  period: channelQuotaPeriodSchema,
+});
+export type ChannelQuota = z.infer<typeof channelQuotaSchema>;
+
+export const channelQuotaWindowSchema = z.object({
+  start: z.coerce.date().optional().nullable(),
+  end: z.coerce.date().optional().nullable(),
+});
+export type ChannelQuotaWindow = z.infer<typeof channelQuotaWindowSchema>;
+
+export const channelQuotaUsageValueSchema = z.object({
+  requestCount: z.number(),
+  totalTokens: z.number(),
+  totalCost: z.coerce.number(),
+});
+export type ChannelQuotaUsageValue = z.infer<typeof channelQuotaUsageValueSchema>;
+
+export const channelQuotaUsageSchema = z.object({
+  channelID: z.string(),
+  quota: channelQuotaSchema,
+  window: channelQuotaWindowSchema,
+  usage: channelQuotaUsageValueSchema,
+});
+export type ChannelQuotaUsage = z.infer<typeof channelQuotaUsageSchema>;
+
 // Live snapshot of the per-channel concurrency limiter.
 // Returned from the backend only when MaxConcurrent is configured.
 export const channelLimiterStatsSchema = z.object({
@@ -309,9 +355,15 @@ export const commandCodeQuotaSettingsSchema = z.object({
 export type CommandCodeQuotaSettings = z.infer<typeof commandCodeQuotaSettingsSchema>;
 
 export const channelProviderQuotaSettingsSchema = z.object({
+  opencodeGo: z.object({ workspaceId: z.string().optional().nullable(), authCookie: z.string().optional().nullable() }).optional().nullable(),
   commandCode: commandCodeQuotaSettingsSchema.optional().nullable(),
 });
 export type ChannelProviderQuotaSettings = z.infer<typeof channelProviderQuotaSettingsSchema>;
+
+export const channelHealthProbeSettingsSchema = z.object({
+  probeEnabled: z.boolean().optional().nullable(),
+});
+export type ChannelHealthProbeSettings = z.infer<typeof channelHealthProbeSettingsSchema>;
 
 // Channel Settings
 export const channelSettingsSchema = z.object({
@@ -328,6 +380,8 @@ export const channelSettingsSchema = z.object({
   passThroughUserAgent: z.boolean().optional().nullable(),
   passThroughBody: z.boolean().optional().nullable(),
   rateLimit: channelRateLimitSchema.optional().nullable(),
+  quota: channelQuotaSchema.optional().nullable(),
+  healthProbe: channelHealthProbeSettingsSchema.optional().nullable(),
   retryableStatusCodes: z.array(z.number().int().min(400).max(599)).optional().nullable(),
   retryableErrorPatterns: z.array(retryableErrorPatternSchema).optional().nullable(),
   modelProtocols: z.array(modelProtocolSchema).optional().nullable(),
@@ -419,6 +473,7 @@ export const channelSchema = z.object({
   defaultTestModel: z.string(),
   settings: channelSettingsSchema.optional().nullable(),
   orderingWeight: z.number().optional().default(0),
+  priority: z.number().optional().default(0),
   errorMessage: z.string().optional().nullable(),
   remark: z.string().optional().nullable(),
   allModelEntries: z.array(channelModelEntrySchema).optional(),
@@ -611,6 +666,7 @@ export const createChannelInputSchema = z
     defaultTestModel: z.string().min(1, 'Please select a default test model'),
     remark: z.string().optional(),
     orderingWeight: z.number().int().optional(),
+    priority: z.number().int().optional(),
     settings: channelSettingsSchema.optional(),
     endpoints: z.array(channelEndpointSchema).optional(),
     credentials: z.object({
@@ -721,9 +777,10 @@ export const updateChannelInputSchema = z
             jsonData: z.string().optional(),
           })
           .optional(),
-      })
+    })
       .optional(),
     orderingWeight: z.number().optional(),
+    priority: z.number().optional(),
   })
   .superRefine((data, ctx) => {
     const effectiveType = data.type;

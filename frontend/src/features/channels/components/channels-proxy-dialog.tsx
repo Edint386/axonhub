@@ -203,7 +203,10 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
 
   const onSubmit = async (values: ProxyConfig) => {
     try {
-      const proxyConfig = normalizeProxyConfig(values);
+      const proxyConfig = {
+        ...normalizeProxyConfig(values),
+        disableConnectionReuse: values.disableConnectionReuse,
+      };
 
       const nextSettings = mergeChannelSettingsForUpdate(currentRow.settings, {
         proxy: proxyConfig,
@@ -240,7 +243,10 @@ export function ChannelsProxyDialog({ open, onOpenChange, currentRow }: Props) {
       // Get current form values
       const values = form.getValues();
 
-      const proxyConfig = normalizeProxyConfig(values);
+      const proxyConfig = {
+        ...normalizeProxyConfig(values),
+        disableConnectionReuse: values.disableConnectionReuse,
+      };
 
       const result = await testChannel.mutateAsync({
         channelID: currentRow.id,

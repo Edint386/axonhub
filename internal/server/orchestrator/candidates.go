@@ -129,14 +129,14 @@ func (s *DefaultSelector) selectChannelCadidates(ctx context.Context, req *llm.R
 
 	candidates := make([]*ChannelModelsCandidate, 0, len(channels))
 	for _, ch := range channels {
-		entries := ch.GetModelEntries()
+		entries := ch.GetModelEntryGroups()
 
-		entry, ok := entries[req.Model]
-		if !ok {
+		models, ok := entries[req.Model]
+		if !ok || len(models) == 0 {
 			continue
 		}
 
-		endpoints := applyForcedAPIFormats(ctx, ch, []biz.ChannelModelEntry{entry}, req.Model, ch.ResolveEndpoints())
+		endpoints := applyForcedAPIFormats(ctx, ch, models, req.Model, ch.ResolveEndpoints())
 		apiFormat := SelectAPIFormat(endpoints, req)
 		if req.RequestType == llm.RequestTypeAlphaSearch && apiFormat == "" {
 			continue
@@ -145,7 +145,7 @@ func (s *DefaultSelector) selectChannelCadidates(ctx context.Context, req *llm.R
 		candidates = append(candidates, &ChannelModelsCandidate{
 			Channel:   ch,
 			Priority:  0,
-			Models:    []biz.ChannelModelEntry{entry},
+			Models:    append([]biz.ChannelModelEntry(nil), models...),
 			APIFormat: apiFormat,
 		})
 	}

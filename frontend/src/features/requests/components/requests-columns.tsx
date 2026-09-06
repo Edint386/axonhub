@@ -17,13 +17,31 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useGeneralSettings, useSecuritySettings, useUpdateSecuritySettings } from '@/features/system/data/system';
 import { useRequestPermissions } from '../../../hooks/useRequestPermissions';
-import { Request } from '../data/schema';
+import { Request, RequestExecution } from '../data/schema';
 import { calculateTokensPerSecond, getTokensPerSecondValue } from '../utils/tokens-per-second';
 import { getStatusColor } from './help';
 
 interface UseRequestsColumnsOptions {
   onBodyClick?: (requestId: string, index: number) => void;
   onViewDetail?: (requestId: string) => void;
+}
+
+function getCacheHitRateColor(rate: number): string {
+  if (rate >= 98) return 'text-green-700 dark:text-green-300';
+  if (rate >= 90) return 'text-green-600 dark:text-green-400';
+  if (rate >= 75) return 'text-emerald-600 dark:text-emerald-400';
+  if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
+  if (rate >= 20) return 'text-orange-600 dark:text-orange-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
+function getFailedExecutionDurationMs(execution: Partial<RequestExecution>): number | null {
+  if (execution.status !== 'failed') return null;
+  if (execution.metricsLatencyMs != null) return execution.metricsLatencyMs;
+  if (!execution.createdAt || !execution.updatedAt) return null;
+
+  const durationMs = new Date(execution.updatedAt).getTime() - new Date(execution.createdAt).getTime();
+  return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : null;
 }
 
 export const DEFAULT_HIDDEN_COLUMN_IDS = ['status', 'source', 'apiFormat', 'clientIP', 'tokensPerSecond', 'writeCache'];
@@ -355,11 +373,14 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                           </div>
                         </div>
                         <div className='flex flex-col gap-1 p-2'>
-                          {sortedExecutions.map((exe, idx) => (
-                            <div
-                              key={exe.id || idx}
-                              className='hover:bg-muted/50 flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors'
-                            >
+                          {sortedExecutions.map((exe, idx) => {
+                            const failedDurationMs = getFailedExecutionDurationMs(exe);
+
+                            return (
+                              <div
+                                key={exe.id || idx}
+                                className='hover:bg-muted/50 flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors'
+                              >
                               <Badge className={`${getStatusColor(exe.status || '')} h-5 shrink-0 px-1.5 text-[10px] font-bold uppercase`}>
                                 {exe.status ? t(`requests.status.${exe.status}`) : t('requests.columns.unknown')}
                               </Badge>
@@ -373,8 +394,14 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                                   </span>
                                 )}
                               </div>
-                            </div>
-                          ))}
+                                {failedDurationMs != null && (
+                                  <span className='text-muted-foreground ml-auto shrink-0 font-mono text-[10px]'>
+                                    {t('requests.duration.failedAttempt', { duration: formatDuration(failedDurationMs) })}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </TooltipContent>
@@ -461,11 +488,12 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
 
         const hitRate = promptTokens > 0 ? (cachedTokens / promptTokens) * 100 : 0;
         const isLowHitRate = hitRate < 80 && promptTokens >= 40000;
+        const hitRateClassName = isLowHitRate ? 'font-medium text-red-600 dark:text-red-400' : getCacheHitRateColor(hitRate);
 
         return (
           <div className='text-xs'>
             <div className='text-sm font-medium'>{cachedTokens.toLocaleString()}</div>
-            <div className={isLowHitRate ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}>
+            <div className={hitRateClassName}>
               {t('requests.columns.cacheHitRate', {
                 rate: hitRate.toFixed(1),
               })}

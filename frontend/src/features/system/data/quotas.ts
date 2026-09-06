@@ -1,5 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { graphqlRequest } from '@/gql/graphql';
+import { channelQuotaUsageSchema } from '@/features/channels/data/schema';
+import type { ChannelQuota, ChannelQuotaUsage } from '@/features/channels/data/schema';
 
 const CHECK_PROVIDER_QUOTAS_QUERY = `
   mutation CheckProviderQuotas {
@@ -29,8 +31,43 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
             providerType
             accountKey
           }
+          settings {
+            quota {
+              requests
+              totalTokens
+              cost
+              period {
+                type
+                pastDuration { value unit }
+                calendarDuration { unit }
+              }
+            }
+            providerQuota {
+              opencodeGo { workspaceId }
+            }
+          }
         }
       }
+    }
+  }
+`;
+
+const CHANNEL_QUOTA_USAGE_QUERY = `
+  query ProviderQuotaBadgeChannelQuotaUsage($channelID: ID!) {
+    channelQuotaUsage(channelID: $channelID) {
+      channelID
+      quota {
+        requests
+        totalTokens
+        cost
+        period {
+          type
+          pastDuration { value unit }
+          calendarDuration { unit }
+        }
+      }
+      window { start end }
+      usage { requestCount totalTokens totalCost }
     }
   }
 `;
@@ -582,6 +619,11 @@ export type ProviderQuotaChannel = {
   // Names of the channels sharing this account, only set on the representative
   // entry built by the quota popover grouping.
   sharedAccountNames?: string[];
+  providerType?: string;
+  workspaceId?: string | null;
+  localQuota?: ChannelQuota | null;
+  localQuotaUsage?: ChannelQuotaUsage | null;
+  localQuotaUsageLoading?: boolean;
   quotaStatus: {
     status: 'available' | 'warning' | 'exhausted' | 'unknown';
     nextResetAt: string | null;
@@ -725,6 +767,10 @@ type QueryChannelNode = {
   name: string;
   type: string;
   providerQuotaStatus: ProviderQuotaStatusNode | null;
+  settings?: {
+    quota?: ChannelQuota | null;
+    providerQuota?: { opencodeGo?: { workspaceId?: string | null } | null } | null;
+  } | null;
 };
 
 type QueryChannelsResponse = {
@@ -739,8 +785,8 @@ type QueryChannelNodeWithQuota = QueryChannelNode & {
   providerQuotaStatus: ProviderQuotaStatusNode;
 };
 
-function hasProviderQuotaStatus(node: QueryChannelNode | null | undefined): node is QueryChannelNodeWithQuota {
-  return node?.providerQuotaStatus != null;
+function hasQuotaStatusOrLocalQuota(node: QueryChannelNode | null | undefined): node is QueryChannelNode {
+  return node != null && (node.providerQuotaStatus != null || node.settings?.quota != null);
 }
 
 function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel {
@@ -901,7 +947,7 @@ function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel
     ...base,
     type: node.type as ProviderQuotaChannel['type'],
     quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderQuotaDataCommon },
-  };
+  } as ProviderQuotaChannel;
 }
 
 export function useProviderQuotaStatuses() {
@@ -919,17 +965,69 @@ export function useProviderQuotaStatuses() {
     refetchIntervalInBackground: true,
   });
 
-  const channels = (query.data?.queryChannels?.edges ?? [])
+  const quotaChannels = (query.data?.queryChannels?.edges ?? [])
     .map((edge) => edge?.node ?? null)
-    .filter(hasProviderQuotaStatus)
-    .filter((c) => {
+    .filter(hasQuotaStatusOrLocalQuota)
+    .filter((channel) => {
+      if (channel.settings?.quota != null) return true;
       // Skip channels that have no credentials configured, since they cannot be
       // checked and only add noise to the quota popover. Other failures remain
       // available with their generic status for administrators to inspect.
-      const quotaData = c.providerQuotaStatus.quotaData as { error?: string; error_code?: string } | undefined;
+      const quotaData = channel.providerQuotaStatus?.quotaData as { error?: string; error_code?: string } | undefined;
       return quotaData?.error_code !== 'missing_credentials' && quotaData?.error !== 'channel has no credentials';
-    })
-    .map(parseChannelNode);
+    });
+
+  const localQuotaChannels = quotaChannels.filter((channel) => channel.settings?.quota != null);
+  const localQuotaUsageQueries = useQueries({
+    queries: localQuotaChannels.map((channel) => ({
+      queryKey: ['channelQuotaUsage', channel.id],
+      queryFn: async () => {
+        const data = await graphqlRequest<{ channelQuotaUsage: ChannelQuotaUsage | null }>(CHANNEL_QUOTA_USAGE_QUERY, {
+          channelID: channel.id,
+        });
+        return channelQuotaUsageSchema.nullable().parse(data.channelQuotaUsage);
+      },
+      enabled: !!channel.id,
+      refetchInterval: 60000,
+      refetchIntervalInBackground: true,
+    })),
+  });
+
+  const localQuotaUsageByChannelID = new Map<string, { data: ChannelQuotaUsage | null | undefined; isLoading: boolean }>(
+    localQuotaChannels.map((channel, index) => [
+      channel.id,
+      {
+        data: localQuotaUsageQueries[index]?.data,
+        isLoading: localQuotaUsageQueries[index]?.isLoading || localQuotaUsageQueries[index]?.isFetching,
+      },
+    ] as [string, { data: ChannelQuotaUsage | null | undefined; isLoading: boolean }])
+  );
+
+  const channels = quotaChannels.map((channel): ProviderQuotaChannel => {
+    const providerQuotaStatus = channel.providerQuotaStatus;
+    const localQuotaUsage = localQuotaUsageByChannelID.get(channel.id);
+    const parsedProviderChannel = providerQuotaStatus ? parseChannelNode({ ...channel, providerQuotaStatus }) : undefined;
+    const baseChannel = parsedProviderChannel ?? ({
+      id: channel.id,
+      name: channel.name,
+      type: channel.type,
+      quotaStatus: {
+        status: 'unknown',
+        nextResetAt: null,
+        ready: false,
+        limits: [],
+        quotaData: {},
+      },
+    } as ProviderQuotaChannel);
+
+    return {
+      ...baseChannel,
+      workspaceId: channel.settings?.providerQuota?.opencodeGo?.workspaceId ?? null,
+      localQuota: channel.settings?.quota ?? null,
+      localQuotaUsage: localQuotaUsage?.data,
+      localQuotaUsageLoading: localQuotaUsage?.isLoading ?? false,
+    };
+  });
 
   return {
     channels,
