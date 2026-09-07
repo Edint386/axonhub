@@ -1171,7 +1171,7 @@ export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrit
         );
       },
       meta: {
-        className: 'text-center',
+        className: 'hidden min-w-28 xl:table-cell text-center',
       },
       enableSorting: false,
       enableHiding: true,

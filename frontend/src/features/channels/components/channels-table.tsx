@@ -278,12 +278,12 @@ export function ChannelsTable({
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className='group/row border-0'>
                 {headerGroup.headers.map((header) => {
-                  const isAction = header.column.id === 'action';
+                  const keepVisible = header.column.id === 'action' || header.column.id === 'priority';
                   return (
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
-                      className={`${header.column.columnDef.meta?.className ?? ''} ${isAction ? 'overflow-visible whitespace-nowrap' : 'overflow-hidden whitespace-normal'} text-muted-foreground border-0 text-xs font-semibold tracking-wider uppercase`}
+                      className={`${header.column.columnDef.meta?.className ?? ''} ${keepVisible ? 'overflow-visible whitespace-nowrap' : 'overflow-hidden whitespace-normal'} text-muted-foreground border-0 text-xs font-semibold tracking-wider uppercase`}
                     >
                       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                     </TableHead>
@@ -306,11 +306,11 @@ export function ChannelsTable({
                       className='group/row table-row-hover rounded-xl border-0 !bg-[var(--table-background)]'
                     >
                       {row.getVisibleCells().map((cell) => {
-                        const isAction = cell.column.id === 'action';
+                        const keepVisible = cell.column.id === 'action' || cell.column.id === 'priority';
                         return (
                           <TableCell
                             key={cell.id}
-                            className={`${cell.column.columnDef.meta?.className ?? ''} ${isAction ? 'overflow-visible whitespace-nowrap' : 'overflow-hidden whitespace-normal'} border-0 bg-inherit px-2 py-3 transition-colors duration-200`}
+                            className={`${cell.column.columnDef.meta?.className ?? ''} ${keepVisible ? 'overflow-visible whitespace-nowrap' : 'overflow-hidden whitespace-normal'} border-0 bg-inherit px-2 py-3 transition-colors duration-200`}
                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </TableCell>
