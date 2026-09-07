@@ -305,6 +305,21 @@ func (s CommandCodeQuotaSettings) String() string {
 	return "CommandCodeQuotaSettings{AuthCookie: <redacted>}"
 }
 
+// OllamaQuotaSettings holds the credentials used to query the Ollama Cloud
+// account quota. AuthCookie is the ollama.com Web session cookie (a
+// "__Secure-session=..." value) sent to the Plan & Billing settings page.
+type OllamaQuotaSettings struct {
+	AuthCookie string `json:"authCookie,omitempty"`
+}
+
+// String redacts the auth cookie so settings never leak it into logs.
+func (s OllamaQuotaSettings) String() string {
+	if s.AuthCookie == "" {
+		return "OllamaQuotaSettings{AuthCookie: \"\"}"
+	}
+	return "OllamaQuotaSettings{AuthCookie: <redacted>}"
+}
+
 type RetryableErrorPattern struct {
 	Pattern string `json:"pattern"`
 	Regex   bool   `json:"regex,omitempty"`
@@ -313,6 +328,7 @@ type RetryableErrorPattern struct {
 type ChannelProviderQuotaSettings struct {
 	OpencodeGo  *OpenCodeGoQuotaSettings  `json:"opencodeGo,omitempty"`
 	CommandCode *CommandCodeQuotaSettings `json:"commandCode,omitempty"`
+	Ollama      *OllamaQuotaSettings      `json:"ollama,omitempty"`
 }
 
 type OpenCodeGoQuotaSettings struct {

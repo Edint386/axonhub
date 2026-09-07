@@ -174,14 +174,24 @@ input CommandCodeQuotaSettingsInput {
   authCookie: String
 }
 
+type OllamaQuotaSettings {
+  authCookie: String
+}
+
+input OllamaQuotaSettingsInput {
+  authCookie: String
+}
+
 type ChannelProviderQuotaSettings {
   opencodeGo: OpenCodeGoQuotaSettings
   commandCode: CommandCodeQuotaSettings
+  ollama: OllamaQuotaSettings
 }
 
 input ChannelProviderQuotaSettingsInput {
   opencodeGo: OpenCodeGoQuotaSettingsInput
   commandCode: CommandCodeQuotaSettingsInput
+  ollama: OllamaQuotaSettingsInput
 }
 
 type ChannelHealthProbeSettings {
