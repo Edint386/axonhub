@@ -1908,6 +1908,7 @@ type ComplexityRoot struct {
 
 	SyncChannelModelsPayload struct {
 		ChannelID       func(childComplexity int) int
+		ManualModels    func(childComplexity int) int
 		SupportedModels func(childComplexity int) int
 	}
 
@@ -10939,6 +10940,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SyncChannelModelsPayload.ChannelID(childComplexity), true
+	case "SyncChannelModelsPayload.manualModels":
+		if e.complexity.SyncChannelModelsPayload.ManualModels == nil {
+			break
+		}
+
+		return e.complexity.SyncChannelModelsPayload.ManualModels(childComplexity), true
 	case "SyncChannelModelsPayload.supportedModels":
 		if e.complexity.SyncChannelModelsPayload.SupportedModels == nil {
 			break
@@ -39686,6 +39693,8 @@ func (ec *executionContext) fieldContext_Mutation_syncChannelModels(ctx context.
 				return ec.fieldContext_SyncChannelModelsPayload_channelID(ctx, field)
 			case "supportedModels":
 				return ec.fieldContext_SyncChannelModelsPayload_supportedModels(ctx, field)
+			case "manualModels":
+				return ec.fieldContext_SyncChannelModelsPayload_manualModels(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SyncChannelModelsPayload", field.Name)
 		},
@@ -58988,6 +58997,35 @@ func (ec *executionContext) _SyncChannelModelsPayload_supportedModels(ctx contex
 }
 
 func (ec *executionContext) fieldContext_SyncChannelModelsPayload_supportedModels(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SyncChannelModelsPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SyncChannelModelsPayload_manualModels(ctx context.Context, field graphql.CollectedField, obj *SyncChannelModelsPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SyncChannelModelsPayload_manualModels,
+		func(ctx context.Context) (any, error) {
+			return obj.ManualModels, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SyncChannelModelsPayload_manualModels(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SyncChannelModelsPayload",
 		Field:      field,
@@ -115023,6 +115061,11 @@ func (ec *executionContext) _SyncChannelModelsPayload(ctx context.Context, sel a
 			}
 		case "supportedModels":
 			out.Values[i] = ec._SyncChannelModelsPayload_supportedModels(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "manualModels":
+			out.Values[i] = ec._SyncChannelModelsPayload_manualModels(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

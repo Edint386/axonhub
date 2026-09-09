@@ -2040,6 +2040,7 @@ const SYNC_CHANNEL_MODELS_MUTATION = `
     syncChannelModels(channelID: $channelID, pattern: $pattern) {
       channelID
       supportedModels
+      manualModels
     }
   }
 `;
@@ -2047,6 +2048,7 @@ const SYNC_CHANNEL_MODELS_MUTATION = `
 const syncChannelModelsPayloadSchema = z.object({
   channelID: z.string(),
   supportedModels: z.array(z.string()),
+  manualModels: z.array(z.string()),
 });
 
 export function useSyncChannelModels() {
