@@ -184,6 +184,10 @@ func isCommandCodeChannelType(channelType channel.Type) bool {
 	return channelType == channel.TypeCommandcode || channelType == channel.TypeCommandcodeAnthropic
 }
 
+func isOllamaChannelType(channelType channel.Type) bool {
+	return channelType == channel.TypeOllama || channelType == channel.TypeOllamaAnthropic
+}
+
 // Command Code exposes model IDs without protocol metadata. Its Anthropic
 // models currently use the Claude family prefixes, so route those models to
 // the Anthropic channel and keep the remaining models on the OpenAI channel.

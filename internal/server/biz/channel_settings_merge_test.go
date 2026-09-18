@@ -70,4 +70,22 @@ func TestMergeChannelSettingsForUpdatePreservesProbeAndProviderQuota(t *testing.
 		require.False(t, *merged.HealthProbe.ProbeEnabled)
 		require.Equal(t, existing.ProviderQuota, merged.ProviderQuota)
 	})
+
+	t.Run("explicit empty Ollama cookie clears stored credential", func(t *testing.T) {
+		existingWithOllama := &objects.ChannelSettings{
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				Ollama: &objects.OllamaQuotaSettings{AuthCookie: "__Secure-session=live"},
+			},
+		}
+		input := &objects.ChannelSettings{
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				Ollama: &objects.OllamaQuotaSettings{AuthCookie: ""},
+			},
+		}
+
+		merged := mergeChannelSettingsForUpdate(existingWithOllama, input)
+		require.NotNil(t, merged.ProviderQuota)
+		require.NotNil(t, merged.ProviderQuota.Ollama)
+		require.Empty(t, merged.ProviderQuota.Ollama.AuthCookie)
+	})
 }

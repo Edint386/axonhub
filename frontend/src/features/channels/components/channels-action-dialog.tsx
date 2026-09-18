@@ -1342,8 +1342,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       // The Command Code / Ollama quota cookie is a browser-session credential
       // that only belongs on its own channel type. Never let a
       // duplicate/type-switch flow attach it to an unrelated channel type.
-      // Clearing it explicitly sends providerQuota: null so the backend
-      // removes the stored cookie.
+      // Clearing it sends an explicit empty provider block so the backend can
+      // distinguish “clear this cookie” from an unrelated partial settings
+      // update that omitted providerQuota.
       const isCommandCodeSubmit =
         valuesForSubmit.type === 'commandcode' || valuesForSubmit.type === 'commandcode_anthropic';
       const commandCodeAuthCookie = isCommandCodeSubmit
@@ -1359,7 +1360,13 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             ...values.settings,
             ...((isCommandCodeSubmit && commandCodeAuthCookie) || (isOllamaSubmit && ollamaAuthCookie)
               ? {}
-              : { providerQuota: null }),
+              : {
+                  providerQuota: isCommandCodeSubmit
+                    ? { ...values.settings.providerQuota, commandCode: { authCookie: '' } }
+                    : isOllamaSubmit
+                      ? { ...values.settings.providerQuota, ollama: { authCookie: '' } }
+                      : null,
+                }),
           }
         : undefined;
 

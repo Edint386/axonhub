@@ -926,17 +926,19 @@ func mergeProviderQuotaSettings(existing, input *objects.ChannelProviderQuotaSet
 	merged := *input
 	if merged.OpencodeGo == nil {
 		merged.OpencodeGo = existing.OpencodeGo
-		return &merged
+	} else if existing.OpencodeGo != nil {
+		opencodeGo := *merged.OpencodeGo
+		if strings.TrimSpace(opencodeGo.AuthCookie) == "" {
+			opencodeGo.AuthCookie = existing.OpencodeGo.AuthCookie
+		}
+		merged.OpencodeGo = &opencodeGo
 	}
-	if existing.OpencodeGo == nil {
-		return &merged
+	// A non-nil Ollama block with an empty cookie is an explicit clear signal.
+	// An omitted Ollama block remains inherited, matching the existing
+	// provider-quota merge contract for partial channel updates.
+	if merged.Ollama == nil {
+		merged.Ollama = existing.Ollama
 	}
-
-	opencodeGo := *merged.OpencodeGo
-	if strings.TrimSpace(opencodeGo.AuthCookie) == "" {
-		opencodeGo.AuthCookie = existing.OpencodeGo.AuthCookie
-	}
-	merged.OpencodeGo = &opencodeGo
 
 	return &merged
 }
@@ -965,7 +967,10 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	commandCodeQuotaSettings := input.Settings != nil &&
 		(isCommandCodeChannelType(effectiveType) ||
 			(input.Settings.ProviderQuota != nil && input.Settings.ProviderQuota.CommandCode != nil))
-	guardProviderIdentity := input.Type != nil || input.BaseURL != nil || input.Endpoints != nil || commandCodeQuotaSettings
+	ollamaQuotaSettings := input.Settings != nil &&
+		(isOllamaChannelType(effectiveType) ||
+			(input.Settings.ProviderQuota != nil && input.Settings.ProviderQuota.Ollama != nil))
+	guardProviderIdentity := input.Type != nil || input.BaseURL != nil || input.Endpoints != nil || commandCodeQuotaSettings || ollamaQuotaSettings
 
 	// A cleared Command Code quota cookie must invalidate the old persisted
 	// status, regardless of whether the client sent null or an empty object.
@@ -974,6 +979,9 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	if input.Settings != nil {
 		if isCommandCodeChannelType(effectiveType) && (input.Settings.ProviderQuota == nil || commandCodeQuotaCookieIsBlank(input.Settings)) {
 			input.Settings = clearCommandCodeQuotaSettings(input.Settings)
+			quotaCookieCleared = true
+		}
+		if isOllamaChannelType(effectiveType) && ollamaQuotaCookieIsBlank(input.Settings) {
 			quotaCookieCleared = true
 		}
 
@@ -1550,4 +1558,11 @@ func commandCodeQuotaCookieIsBlank(settings *objects.ChannelSettings) bool {
 		settings.ProviderQuota != nil &&
 		settings.ProviderQuota.CommandCode != nil &&
 		strings.TrimSpace(settings.ProviderQuota.CommandCode.AuthCookie) == ""
+}
+
+func ollamaQuotaCookieIsBlank(settings *objects.ChannelSettings) bool {
+	return settings != nil &&
+		settings.ProviderQuota != nil &&
+		settings.ProviderQuota.Ollama != nil &&
+		strings.TrimSpace(settings.ProviderQuota.Ollama.AuthCookie) == ""
 }
