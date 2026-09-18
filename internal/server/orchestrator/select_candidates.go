@@ -7,10 +7,8 @@ import (
 
 	"github.com/samber/lo"
 
-	"github.com/looplj/axonhub/internal/ent/providerquotastatus"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/server/biz"
-	"github.com/looplj/axonhub/internal/server/biz/provider_quota"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/pipeline"
 )
@@ -18,7 +16,7 @@ import (
 // selectCandidates creates a middleware that selects available channel model candidates for the model.
 // This is the second step in the inbound pipeline, moved from outbound transformer.
 // If no valid candidates are found, it returns ErrInvalidModel to fail fast.
-func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider ProviderQuotaStatusProvider, systemService QuotaEnforcementSettingsProvider) pipeline.Middleware {
+func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider ProviderQuotaStatusProvider, systemService biz.QuotaRoutingSettingsProvider) pipeline.Middleware {
 	return pipeline.OnLlmRequest("select-candidates", func(ctx context.Context, llmRequest *llm.Request) (*llm.Request, error) {
 		// Only select candidates once
 		if len(inbound.state.ChannelModelsCandidates) > 0 {
@@ -26,6 +24,7 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 		}
 
 		selector := inbound.state.CandidateSelector
+
 		if inbound.state.APIKey != nil {
 			selector = WithCallerACLSelector(selector, inbound.state.APIKey.ID)
 		}
@@ -68,22 +67,13 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 
 		selector = WithStreamPolicySelector(selector)
 
-		// Profile latency ceilings are opt-in and best-effort. Apply them after
-		// request capability filters so unknown telemetry cannot hide otherwise
-		// valid candidates, and before quota/load-balancer ordering.
 		if profile := inbound.state.APIKey.GetActiveProfile(); profile != nil && profile.MaxFirstTokenLatencyMs != nil {
-			selector = WithFirstTokenLatencySelector(
-				selector,
-				inbound.state.ChannelService,
-				*profile.MaxFirstTokenLatencyMs,
-				profile.CountRealTrafficLatency,
-			)
+			selector = WithFirstTokenLatencySelector(selector, inbound.state.ChannelService, *profile.MaxFirstTokenLatencyMs, profile.CountRealTrafficLatency)
 		}
-
-		quotaSelector := WithProviderQuotaSelector(selector, quotaProvider, systemService)
-		selector = quotaSelector
 		channelQuotaSelector := WithChannelQuotaSelector(selector, inbound.state.QuotaService)
 		selector = channelQuotaSelector
+
+		gate := NewQuotaRoutingGate(quotaProvider, systemService.QuotaRoutingSettingsOrDefault(ctx))
 
 		if len(inbound.state.LoadBalancers) > 0 {
 			selector = WithRoutingPolicyLoadBalancedSelector(
@@ -93,7 +83,10 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 				inbound.state.RequestService,
 				inbound.state.APIKey,
 				&inbound.state.RoutingPolicy,
+				gate,
 			)
+		} else {
+			selector = WithQuotaRoutingSelector(selector, gate)
 		}
 
 		candidates, err := selector.Select(ctx, llmRequest)
@@ -126,22 +119,11 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 			)
 		}
 
-		settings := systemService.QuotaEnforcementSettingsOrDefault(ctx)
-
 		if len(candidates) == 0 {
-			if channelQuotaSelector.FilteredCount > 0 || (settings.Enabled && quotaSelector.FilteredCount > 0) {
+			if channelQuotaSelector.FilteredCount > 0 || gate.DroppedCount() > 0 {
 				return nil, NewQuotaExhaustedError(llmRequest.Model)
 			}
 			return nil, fmt.Errorf("%w: %s", biz.ErrInvalidModel, llmRequest.Model)
-		}
-
-		if settings.Enabled && settings.Mode == biz.QuotaEnforcementModeDePrioritize {
-			// In DePrioritize mode the quota selector doesn't filter candidates,
-			// so we must check quota status again here to determine if all
-			// remaining channels are exhausted.
-			if areAllChannelsExhausted(ctx, candidates, quotaProvider, llmRequest, settings) {
-				return nil, NewQuotaExhaustedError(llmRequest.Model)
-			}
 		}
 
 		// Store candidates directly (no need to extract channels)
@@ -226,38 +208,4 @@ func randomizeDuplicateRequestModelGroupsWithRand(models []biz.ChannelModelEntry
 	}
 
 	return randomized
-}
-
-func areAllChannelsExhausted(
-	ctx context.Context,
-	candidates []*ChannelModelsCandidate,
-	quotaProvider ProviderQuotaStatusProvider,
-	llmRequest *llm.Request,
-	settings *biz.QuotaEnforcementSettings,
-) bool {
-	if len(candidates) == 0 || quotaProvider == nil {
-		return false
-	}
-
-	limitType := provider_quota.RequestModality(llmRequest.Image != nil)
-
-	for _, c := range candidates {
-		if c == nil || c.Channel == nil {
-			return false
-		}
-		if settings != nil && containsInt(settings.AllowedChannelIDs, c.Channel.ID) {
-			return false
-		}
-		quotaStatus := quotaProvider.GetQuotaStatus(ctx, c.Channel.ID)
-		if quotaStatus == nil {
-			return false
-		}
-
-		effectiveStatus, _ := quotaStatus.EffectiveStatus(limitType)
-		if effectiveStatus != providerquotastatus.StatusExhausted {
-			return false
-		}
-	}
-
-	return true
 }

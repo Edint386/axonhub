@@ -1500,7 +1500,7 @@ func TestConvertOutputToMessage(t *testing.T) {
 			},
 			validate: func(t *testing.T, msg llm.Message) {
 				require.Len(t, msg.ToolCalls, 1)
-				require.Equal(t, "js", msg.ToolCalls[0].Function.Name)
+				require.Equal(t, "mcp__node_repl__js", msg.ToolCalls[0].Function.Name)
 				require.Equal(t, "mcp__node_repl", msg.ToolCalls[0].TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey])
 			},
 		},

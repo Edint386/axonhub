@@ -2,6 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { graphqlRequest } from '@/gql/graphql';
 import { channelQuotaUsageSchema } from '@/features/channels/data/schema';
 import type { ChannelQuota, ChannelQuotaUsage } from '@/features/channels/data/schema';
+import type { ChannelQuotaRoutingMode } from '@/features/channels/data/schema';
 
 const CHECK_PROVIDER_QUOTAS_QUERY = `
   mutation CheckProviderQuotas {
@@ -23,6 +24,9 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
           id
           name
           type
+          settings {
+            quotaRoutingMode
+          }
           providerQuotaStatus {
             status
             nextResetAt
@@ -531,6 +535,56 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+const NORMALIZED_QUOTA_STATUSES = ['available', 'warning', 'exhausted', 'unknown'] as const;
+type NormalizedQuotaStatus = (typeof NORMALIZED_QUOTA_STATUSES)[number];
+
+function isNormalizedQuotaStatus(value: unknown): value is NormalizedQuotaStatus {
+  return NORMALIZED_QUOTA_STATUSES.some((status) => status === value);
+}
+
+function requiredString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+function parseQuotaLimit(entry: unknown): ProviderQuotaLimit | undefined {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return undefined;
+
+  const limit = entry as Record<string, unknown>;
+  const type = requiredString(limit.type);
+  const window = requiredString(limit.window);
+  if (!type || !window || !isNormalizedQuotaStatus(limit.status)) return undefined;
+
+  const usageRatio = optionalNumber(limit.usageRatio);
+  if (usageRatio === undefined || usageRatio < 0 || usageRatio > 1) return undefined;
+
+  if (limit.ready !== undefined && typeof limit.ready !== 'boolean') return undefined;
+
+  const nextResetAt = optionalString(limit.nextResetAt);
+  if (limit.nextResetAt !== undefined && nextResetAt === undefined) return undefined;
+  if (nextResetAt !== undefined && Number.isNaN(Date.parse(nextResetAt))) return undefined;
+
+  const periodStart = optionalString(limit.periodStart);
+  if (limit.periodStart !== undefined && periodStart === undefined) return undefined;
+
+  const periodCost = optionalNumber(limit.periodCost);
+  if (limit.periodCost !== undefined && periodCost === undefined) return undefined;
+
+  const periodQuota = optionalNumber(limit.periodQuota);
+  if (limit.periodQuota !== undefined && periodQuota === undefined) return undefined;
+
+  return {
+    type,
+    status: limit.status,
+    usageRatio,
+    ready: limit.ready === true,
+    window,
+    nextResetAt,
+    periodStart,
+    periodCost,
+    periodQuota,
+  };
+}
+
 export function parseQuotaLimits(quotaData: unknown): ProviderQuotaLimit[] {
   if (typeof quotaData !== 'object' || quotaData === null) return [];
 
@@ -538,22 +592,8 @@ export function parseQuotaLimits(quotaData: unknown): ProviderQuotaLimit[] {
   if (!Array.isArray(raw)) return [];
 
   return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) return [];
-    const limit = entry as Record<string, unknown>;
-
-    return [
-      {
-        type: typeof limit.type === 'string' ? limit.type : '',
-        status: typeof limit.status === 'string' ? limit.status : 'unknown',
-        usageRatio: optionalNumber(limit.usageRatio) ?? 0,
-        ready: limit.ready === true,
-        window: optionalString(limit.window),
-        nextResetAt: optionalString(limit.nextResetAt),
-        periodStart: optionalString(limit.periodStart),
-        periodCost: optionalNumber(limit.periodCost),
-        periodQuota: optionalNumber(limit.periodQuota),
-      },
-    ];
+    const parsed = parseQuotaLimit(entry);
+    return parsed ? [parsed] : [];
   });
 }
 
@@ -638,6 +678,8 @@ export type ProviderQuotaChannel = {
   localQuota?: ChannelQuota | null;
   localQuotaUsage?: ChannelQuotaUsage | null;
   localQuotaUsageLoading?: boolean;
+  // Quota routing mode declared on the channel settings; INHERIT defers to the global default.
+  quotaRoutingMode: ChannelQuotaRoutingMode;
   quotaStatus: {
     status: 'available' | 'warning' | 'exhausted' | 'unknown';
     nextResetAt: string | null;
@@ -712,7 +754,13 @@ export type ProviderQuotaChannel = {
       };
     }
   | {
-      type: 'zenmux' | 'zenmux_responses' | 'zenmux_anthropic' | 'zenmux_gemini';
+      type: 'zai' | 'zai_anthropic';
+      quotaStatus: {
+        quotaData: ProviderZhipuQuotaData;
+      };
+    }
+  | {
+      type: 'zenmux' | 'zenmux_responses' | 'zenmux_anthropic' | 'zenmux_gemini' | 'zenmux_video';
       quotaStatus: {
         quotaData: ProviderZenmuxQuotaData;
       };
@@ -786,11 +834,12 @@ type QueryChannelNode = {
   id: string;
   name: string;
   type: string;
-  providerQuotaStatus: ProviderQuotaStatusNode | null;
-  settings?: {
+  settings: {
+    quotaRoutingMode: ChannelQuotaRoutingMode;
     quota?: ChannelQuota | null;
     providerQuota?: { opencodeGo?: { workspaceId?: string | null } | null } | null;
   } | null;
+  providerQuotaStatus: ProviderQuotaStatusNode | null;
 };
 
 type QueryChannelsResponse = {
@@ -816,6 +865,7 @@ function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel
   const base = {
     id: node.id,
     name: node.name,
+    quotaRoutingMode: node.settings?.quotaRoutingMode ?? 'INHERIT',
     accountKey: optionalString(quotaStatus.accountKey),
     quotaStatus: {
       status: quotaStatus.status,
@@ -825,10 +875,16 @@ function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel
     },
   };
 
-  if (node.type === 'zenmux' || node.type === 'zenmux_responses' || node.type === 'zenmux_anthropic' || node.type === 'zenmux_gemini') {
+  if (
+    node.type === 'zenmux' ||
+    node.type === 'zenmux_responses' ||
+    node.type === 'zenmux_anthropic' ||
+    node.type === 'zenmux_gemini' ||
+    node.type === 'zenmux_video'
+  ) {
     return {
       ...base,
-      type: node.type as 'zenmux' | 'zenmux_responses' | 'zenmux_anthropic' | 'zenmux_gemini',
+      type: node.type as 'zenmux' | 'zenmux_responses' | 'zenmux_anthropic' | 'zenmux_gemini' | 'zenmux_video',
       quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderZenmuxQuotaData },
     };
   }
@@ -903,6 +959,13 @@ function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel
     return {
       ...base,
       type: node.type as 'zhipu' | 'zhipu_anthropic',
+      quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderZhipuQuotaData },
+    };
+  }
+  if (node.type === 'zai' || node.type === 'zai_anthropic') {
+    return {
+      ...base,
+      type: node.type as 'zai' | 'zai_anthropic',
       quotaStatus: { ...base.quotaStatus, quotaData: node.providerQuotaStatus.quotaData as ProviderZhipuQuotaData },
     };
   }
@@ -1038,6 +1101,7 @@ export function useProviderQuotaStatuses() {
       id: channel.id,
       name: channel.name,
       type: channel.type,
+      quotaRoutingMode: 'INHERIT',
       quotaStatus: {
         status: 'unknown',
         nextResetAt: null,

@@ -63,6 +63,8 @@ const (
 	FieldErrorMessage = "error_message"
 	// FieldAutoDisabledAt holds the string denoting the auto_disabled_at field in the database.
 	FieldAutoDisabledAt = "auto_disabled_at"
+	// FieldAutoDisableExpiresAt holds the string denoting the auto_disable_expires_at field in the database.
+	FieldAutoDisableExpiresAt = "auto_disable_expires_at"
 	// FieldRemark holds the string denoting the remark field in the database.
 	FieldRemark = "remark"
 	// FieldEndpoints holds the string denoting the endpoints field in the database.
@@ -170,6 +172,7 @@ var Columns = []string{
 	FieldPriority,
 	FieldErrorMessage,
 	FieldAutoDisabledAt,
+	FieldAutoDisableExpiresAt,
 	FieldRemark,
 	FieldEndpoints,
 	FieldCallerAccessMode,
@@ -302,6 +305,7 @@ const (
 	TypeZenmuxResponses      Type = "zenmux_responses"
 	TypeZenmuxAnthropic      Type = "zenmux_anthropic"
 	TypeZenmuxGemini         Type = "zenmux_gemini"
+	TypeZenmuxVideo          Type = "zenmux_video"
 	TypeCommandcode          Type = "commandcode"
 	TypeCommandcodeAnthropic Type = "commandcode_anthropic"
 )
@@ -313,7 +317,7 @@ func (_type Type) String() string {
 // TypeValidator is a validator for the "type" field enum values. It is called by the builders before save.
 func TypeValidator(_type Type) error {
 	switch _type {
-	case TypeOpenai, TypeOpenaiResponses, TypeAtlascloud, TypeCline, TypeCodex, TypeVercel, TypeAnthropic, TypeAnthropicAWS, TypeAnthropicGcp, TypeGeminiOpenai, TypeGemini, TypeGeminiVertex, TypeDeepseek, TypeDeepseekAnthropic, TypeDeepinfra, TypeQiniu, TypeFireworks, TypeDoubao, TypeDoubaoAnthropic, TypeMoonshot, TypeMoonshotAnthropic, TypeZhipu, TypeZai, TypeZhipuAnthropic, TypeZaiAnthropic, TypeAnthropicFake, TypeOpenaiFake, TypeOpenrouter, TypeXiaomi, TypeXiaomiAnthropic, TypeXai, TypeXaiResponses, TypeXaiSubscription, TypePpio, TypeSiliconflow, TypeVolcengine, TypeVolcengineAnthropic, TypeLongcat, TypeLongcatAnthropic, TypeMinimax, TypeMinimaxAnthropic, TypeAihubmix, TypeAihubmixAnthropic, TypeBurncloud, TypeModelscope, TypeBailian, TypeBailianAnthropic, TypeMoonshotCoding, TypeJina, TypeGithub, TypeGithubCopilot, TypeClaudecode, TypeCerebras, TypeAntigravity, TypeNanogpt, TypeNanogptResponses, TypeOpencodeGo, TypeOpencodeGoAnthropic, TypeOllama, TypeOllamaAnthropic, TypeEvolink, TypeEvolinkAnthropic, TypeGroq, TypeQiniuAnthropic, TypeFenno, TypeZenmux, TypeZenmuxResponses, TypeZenmuxAnthropic, TypeZenmuxGemini, TypeCommandcode, TypeCommandcodeAnthropic:
+	case TypeOpenai, TypeOpenaiResponses, TypeAtlascloud, TypeCline, TypeCodex, TypeVercel, TypeAnthropic, TypeAnthropicAWS, TypeAnthropicGcp, TypeGeminiOpenai, TypeGemini, TypeGeminiVertex, TypeDeepseek, TypeDeepseekAnthropic, TypeDeepinfra, TypeQiniu, TypeFireworks, TypeDoubao, TypeDoubaoAnthropic, TypeMoonshot, TypeMoonshotAnthropic, TypeZhipu, TypeZai, TypeZhipuAnthropic, TypeZaiAnthropic, TypeAnthropicFake, TypeOpenaiFake, TypeOpenrouter, TypeXiaomi, TypeXiaomiAnthropic, TypeXai, TypeXaiResponses, TypeXaiSubscription, TypePpio, TypeSiliconflow, TypeVolcengine, TypeVolcengineAnthropic, TypeLongcat, TypeLongcatAnthropic, TypeMinimax, TypeMinimaxAnthropic, TypeAihubmix, TypeAihubmixAnthropic, TypeBurncloud, TypeModelscope, TypeBailian, TypeBailianAnthropic, TypeMoonshotCoding, TypeJina, TypeGithub, TypeGithubCopilot, TypeClaudecode, TypeCerebras, TypeAntigravity, TypeNanogpt, TypeNanogptResponses, TypeOpencodeGo, TypeOpencodeGoAnthropic, TypeOllama, TypeOllamaAnthropic, TypeEvolink, TypeEvolinkAnthropic, TypeGroq, TypeQiniuAnthropic, TypeFenno, TypeZenmux, TypeZenmuxResponses, TypeZenmuxAnthropic, TypeZenmuxGemini, TypeZenmuxVideo, TypeCommandcode, TypeCommandcodeAnthropic:
 		return nil
 	default:
 		return fmt.Errorf("channel: invalid enum value for type field: %q", _type)
@@ -455,6 +459,11 @@ func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 // ByAutoDisabledAt orders the results by the auto_disabled_at field.
 func ByAutoDisabledAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAutoDisabledAt, opts...).ToFunc()
+}
+
+// ByAutoDisableExpiresAt orders the results by the auto_disable_expires_at field.
+func ByAutoDisableExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAutoDisableExpiresAt, opts...).ToFunc()
 }
 
 // ByRemark orders the results by the remark field.

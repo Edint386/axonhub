@@ -933,6 +933,11 @@ func (_q *ChannelQuery) collectField(ctx context.Context, oneNode bool, opCtx *g
 				selectedFields = append(selectedFields, channel.FieldAutoDisabledAt)
 				fieldSeen[channel.FieldAutoDisabledAt] = struct{}{}
 			}
+		case "autoDisableExpiresAt":
+			if _, ok := fieldSeen[channel.FieldAutoDisableExpiresAt]; !ok {
+				selectedFields = append(selectedFields, channel.FieldAutoDisableExpiresAt)
+				fieldSeen[channel.FieldAutoDisableExpiresAt] = struct{}{}
+			}
 		case "remark":
 			if _, ok := fieldSeen[channel.FieldRemark]; !ok {
 				selectedFields = append(selectedFields, channel.FieldRemark)
@@ -4309,6 +4314,11 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 			if _, ok := fieldSeen[requestexecution.FieldReasoningEffort]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldReasoningEffort)
 				fieldSeen[requestexecution.FieldReasoningEffort] = struct{}{}
+			}
+		case "channelAPIKeySuffix":
+			if _, ok := fieldSeen[requestexecution.FieldChannelAPIKeySuffix]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldChannelAPIKeySuffix)
+				fieldSeen[requestexecution.FieldChannelAPIKeySuffix] = struct{}{}
 			}
 		case "requestBody":
 			if _, ok := fieldSeen[requestexecution.FieldRequestBody]; !ok {

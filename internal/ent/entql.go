@@ -119,6 +119,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			channel.FieldPriority:                {Type: field.TypeInt, Column: channel.FieldPriority},
 			channel.FieldErrorMessage:            {Type: field.TypeString, Column: channel.FieldErrorMessage},
 			channel.FieldAutoDisabledAt:          {Type: field.TypeTime, Column: channel.FieldAutoDisabledAt},
+			channel.FieldAutoDisableExpiresAt:    {Type: field.TypeTime, Column: channel.FieldAutoDisableExpiresAt},
 			channel.FieldRemark:                  {Type: field.TypeString, Column: channel.FieldRemark},
 			channel.FieldEndpoints:               {Type: field.TypeJSON, Column: channel.FieldEndpoints},
 			channel.FieldCallerAccessMode:        {Type: field.TypeEnum, Column: channel.FieldCallerAccessMode},
@@ -494,6 +495,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			requestexecution.FieldModelID:                    {Type: field.TypeString, Column: requestexecution.FieldModelID},
 			requestexecution.FieldFormat:                     {Type: field.TypeString, Column: requestexecution.FieldFormat},
 			requestexecution.FieldReasoningEffort:            {Type: field.TypeString, Column: requestexecution.FieldReasoningEffort},
+			requestexecution.FieldChannelAPIKeySuffix:        {Type: field.TypeString, Column: requestexecution.FieldChannelAPIKeySuffix},
 			requestexecution.FieldRequestBody:                {Type: field.TypeJSON, Column: requestexecution.FieldRequestBody},
 			requestexecution.FieldResponseBody:               {Type: field.TypeJSON, Column: requestexecution.FieldResponseBody},
 			requestexecution.FieldResponseChunks:             {Type: field.TypeJSON, Column: requestexecution.FieldResponseChunks},
@@ -1924,6 +1926,11 @@ func (f *ChannelFilter) WhereErrorMessage(p entql.StringP) {
 // WhereAutoDisabledAt applies the entql time.Time predicate on the auto_disabled_at field.
 func (f *ChannelFilter) WhereAutoDisabledAt(p entql.TimeP) {
 	f.Where(p.Field(channel.FieldAutoDisabledAt))
+}
+
+// WhereAutoDisableExpiresAt applies the entql time.Time predicate on the auto_disable_expires_at field.
+func (f *ChannelFilter) WhereAutoDisableExpiresAt(p entql.TimeP) {
+	f.Where(p.Field(channel.FieldAutoDisableExpiresAt))
 }
 
 // WhereRemark applies the entql string predicate on the remark field.
@@ -3959,6 +3966,11 @@ func (f *RequestExecutionFilter) WhereFormat(p entql.StringP) {
 // WhereReasoningEffort applies the entql string predicate on the reasoning_effort field.
 func (f *RequestExecutionFilter) WhereReasoningEffort(p entql.StringP) {
 	f.Where(p.Field(requestexecution.FieldReasoningEffort))
+}
+
+// WhereChannelAPIKeySuffix applies the entql string predicate on the channel_api_key_suffix field.
+func (f *RequestExecutionFilter) WhereChannelAPIKeySuffix(p entql.StringP) {
+	f.Where(p.Field(requestexecution.FieldChannelAPIKeySuffix))
 }
 
 // WhereRequestBody applies the entql json.RawMessage predicate on the request_body field.

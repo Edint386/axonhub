@@ -268,20 +268,7 @@ func (t *ToolChoice) MarshalJSON() ([]byte, error) {
 		return json.Marshal(*t.Mode)
 	}
 
-	// For other cases, marshal as object
-	type Alias ToolChoice
-
-	return json.Marshal(&struct {
-		Mode  *string      `json:"mode,omitempty"`
-		Type  *string      `json:"type,omitempty"`
-		Name  *string      `json:"name,omitempty"`
-		Tools []ToolOption `json:"tools,omitempty"`
-	}{
-		Mode:  t.Mode,
-		Type:  t.Type,
-		Name:  t.Name,
-		Tools: t.Tools,
-	})
+	return json.Marshal((*ToolChoiceAlias)(t))
 }
 
 // ResponseToolChoice represents tool_choice in responses, which can be a string or object.
@@ -471,6 +458,13 @@ const responsesWebSearchCallsTransformerMetadataKey = "openai_responses_web_sear
 const responsesNamespaceToolsTransformerMetadataKey = "openai_responses_namespace_tools"
 const responsesToolCallNamespaceTransformerMetadataKey = "openai_responses_tool_call_namespace"
 const responsesReasoningItemTransformerMetadataKey = "openai_responses_reasoning_item"
+const responsesTerminalDetailsTransformerMetadataKey = "openai_responses_terminal_details"
+
+// Preserve details that cannot be represented by a Chat Completions finish_reason.
+type responsesTerminalDetails struct {
+	Error             *Error                     `json:"error,omitempty"`
+	IncompleteDetails *ResponseIncompleteDetails `json:"incomplete_details,omitempty"`
+}
 
 type responsesReasoningItemMetadata struct {
 	ID   string `json:"id,omitempty"`

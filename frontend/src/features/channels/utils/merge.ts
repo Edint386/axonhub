@@ -130,6 +130,7 @@ export function mergeChannelSettingsForUpdate(
     modelProtocols: pick('modelProtocols', existing?.modelProtocols ?? []),
     providerQuota: pick('providerQuota', existing?.providerQuota ?? null),
     healthProbe: pick('healthProbe', existing?.healthProbe ?? null),
+    quotaRoutingMode: pick('quotaRoutingMode', existing?.quotaRoutingMode ?? undefined),
   };
 }
 
