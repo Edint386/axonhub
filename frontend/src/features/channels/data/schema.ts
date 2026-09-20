@@ -394,6 +394,36 @@ export const codexTurnStateSettingsSchema = z.object({
 });
 export type CodexTurnStateSettings = z.infer<typeof codexTurnStateSettingsSchema>;
 
+export const codexTurnStateModelStatusSchema = z.object({
+  model: z.string(),
+  phase: z.string(),
+  lastError: z.string().optional().nullable(),
+  attempts: z.number().int(),
+  cooldownUntil: z.string().optional().nullable(),
+  ticketExpiresAt: z.string().optional().nullable(),
+  stateBytes: z.number().int(),
+});
+export type CodexTurnStateModelStatus = z.infer<typeof codexTurnStateModelStatusSchema>;
+
+export const codexTurnStateEventSchema = z.object({
+  at: z.string(),
+  model: z.string(),
+  kind: z.string(),
+  reason: z.string().optional().nullable(),
+  statusCode: z.number().int(),
+  durationMs: z.number().int(),
+  stateBytes: z.number().int(),
+});
+export type CodexTurnStateEvent = z.infer<typeof codexTurnStateEventSchema>;
+
+export const codexTurnStateRuntimeSchema = z.object({
+  enabled: z.boolean(),
+  phase: z.string(),
+  models: z.array(codexTurnStateModelStatusSchema),
+  recentEvents: z.array(codexTurnStateEventSchema),
+});
+export type CodexTurnStateRuntime = z.infer<typeof codexTurnStateRuntimeSchema>;
+
 // Channel Settings
 export const channelSettingsSchema = z.object({
   extraModelPrefix: z.string().optional(),

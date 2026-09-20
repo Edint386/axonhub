@@ -147,6 +147,17 @@ func (r *channelResolver) LiveLimiterStats(ctx context.Context, obj *ent.Channel
 	}, nil
 }
 
+// CodexTurnStateRuntime is the resolver for the codexTurnStateRuntime field.
+func (r *channelResolver) CodexTurnStateRuntime(ctx context.Context, obj *ent.Channel) (*biz.CodexTurnStateRuntime, error) {
+	if obj == nil || r.channelService == nil {
+		return nil, nil
+	}
+	if obj.Type != channel.TypeCodex && obj.Type != channel.TypeFenno {
+		return nil, nil
+	}
+	return r.channelService.CodexTurnStateRuntime(obj), nil
+}
+
 // OpencodeGo is the resolver for the opencodeGo field.
 func (r *channelProviderQuotaSettingsResolver) OpencodeGo(ctx context.Context, obj *objects.ChannelProviderQuotaSettings) (*OpenCodeGoQuotaSettings, error) {
 	panic(fmt.Errorf("not implemented: OpencodeGo - opencodeGo"))

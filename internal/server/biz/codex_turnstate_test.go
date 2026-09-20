@@ -89,9 +89,23 @@ func TestCodexTurnStateAcquireAndInvalidate(t *testing.T) {
 	require.NotNil(t, ticket)
 	require.Equal(t, fakeTurnState(turnstate.ProLength), ticket.State)
 
+	rt := mgr.Runtime(live.Channel)
+	require.NotNil(t, rt)
+	require.True(t, rt.Enabled)
+	require.Equal(t, "ready", rt.Phase)
+	require.Len(t, rt.Models, 1)
+	require.Equal(t, "ready", rt.Models[0].Phase)
+
 	headers := http.Header{}
 	headers.Set(turnstate.Header, fakeTurnState(turnstate.Signal312))
 	mgr.Observe(ticket, headers, "")
+	rt = mgr.Runtime(live.Channel)
+	require.NotNil(t, rt)
+	require.Equal(t, "failed", rt.Phase)
+	require.NotEmpty(t, rt.RecentEvents)
+	require.Equal(t, "invalidated", rt.RecentEvents[0].Kind)
+	require.Equal(t, "state_312", rt.RecentEvents[0].Reason)
+
 	_, err = mgr.Acquire(context.Background(), turnstate.Request{ChannelID: 7, Model: "gpt-6-astra"})
 	require.ErrorIs(t, err, turnstate.ErrUnavailable)
 }

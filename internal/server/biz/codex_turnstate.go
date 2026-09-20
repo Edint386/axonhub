@@ -57,6 +57,7 @@ type CodexTurnStateManager struct {
 	records map[string]*turnJobRecord
 	jobs    map[string]struct{}
 	revoked map[string]uint64
+	events  map[int][]CodexTurnStateEvent
 	version uint64
 	sem     chan struct{}
 	cancel  context.CancelFunc
@@ -71,6 +72,7 @@ func NewCodexTurnStateManager(channels *ChannelService) *CodexTurnStateManager {
 		records:  map[string]*turnJobRecord{},
 		jobs:     map[string]struct{}{},
 		revoked:  map[string]uint64{},
+		events:   map[int][]CodexTurnStateEvent{},
 		sem:      make(chan struct{}, 4),
 	}
 }
@@ -164,6 +166,13 @@ func (m *CodexTurnStateManager) Observe(used *turnstate.Ticket, headers http.Hea
 		m.records[key] = rec
 	}
 	rec.LastError = reason
+	m.appendEventLocked(used.ChannelID, CodexTurnStateEvent{
+		At:         time.Now(),
+		Model:      used.Model,
+		Kind:       "invalidated",
+		Reason:     reason,
+		StateBytes: len(used.State),
+	})
 	log.Warn(context.Background(), "codex turn-state ticket invalidated",
 		log.Int("channel_id", used.ChannelID),
 		log.String("model", used.Model),
@@ -301,11 +310,15 @@ func (m *CodexTurnStateManager) collect(ctx context.Context, ch *Channel, cfg ob
 		harvestURL, err := rotateHarvestProxy(cfg.HarvestProxyURL)
 		if err != nil {
 			reason = "invalid_harvest_proxy"
+			m.recordEvent(ch.ID, CodexTurnStateEvent{At: time.Now(), Model: model, Kind: "harvest", Reason: reason})
 			return
 		}
+		started := time.Now()
 		candidate, status, err := m.probe(ctx, ch, model, harvestURL, "")
+		harvestMs := int(time.Since(started).Milliseconds())
 		if err != nil {
 			reason = probeReason(status, err)
+			m.recordEvent(ch.ID, CodexTurnStateEvent{At: time.Now(), Model: model, Kind: "harvest", Reason: reason, StatusCode: status, DurationMs: harvestMs})
 			if isStopStatus(status) {
 				return
 			}
@@ -313,16 +326,22 @@ func (m *CodexTurnStateManager) collect(ctx context.Context, ch *Channel, cfg ob
 		}
 		if !turnstate.Valid(candidate, turnstate.TargetLength(cfg.Plan)) {
 			reason = "unexpected_state_length"
+			m.recordEvent(ch.ID, CodexTurnStateEvent{At: time.Now(), Model: model, Kind: "harvest", Reason: reason, StatusCode: status, DurationMs: harvestMs, StateBytes: len(candidate)})
 			continue
 		}
+		m.recordEvent(ch.ID, CodexTurnStateEvent{At: time.Now(), Model: model, Kind: "harvest", Reason: "ok", StatusCode: status, DurationMs: harvestMs, StateBytes: len(candidate)})
+		started = time.Now()
 		returned, status, err := m.probe(ctx, ch, model, "", candidate)
+		validateMs := int(time.Since(started).Milliseconds())
 		if err != nil || turnstate.Is312(returned) {
 			reason = "fixed_proxy_validation_failed"
+			m.recordEvent(ch.ID, CodexTurnStateEvent{At: time.Now(), Model: model, Kind: "validate", Reason: reason, StatusCode: status, DurationMs: validateMs, StateBytes: len(returned)})
 			if isStopStatus(status) {
 				return
 			}
 			continue
 		}
+		m.recordEvent(ch.ID, CodexTurnStateEvent{At: time.Now(), Model: model, Kind: "validate", Reason: "ok", StatusCode: status, DurationMs: validateMs, StateBytes: len(returned)})
 		now := time.Now()
 		m.mu.Lock()
 		m.version++
@@ -341,6 +360,13 @@ func (m *CodexTurnStateManager) collect(ctx context.Context, ch *Channel, cfg ob
 		}
 		m.tickets[key] = stored
 		delete(m.revoked, key)
+		m.appendEventLocked(ch.ID, CodexTurnStateEvent{
+			At:         now,
+			Model:      model,
+			Kind:       "ready",
+			Reason:     "ok",
+			StateBytes: len(candidate),
+		})
 		m.mu.Unlock()
 		success = true
 		log.Info(context.Background(), "codex turn-state ticket ready",

@@ -195,6 +195,15 @@ models:
   CodexTurnStateSettingsInput:
     model:
       - github.com/looplj/axonhub/internal/objects.CodexTurnStateSettings
+  CodexTurnStateRuntime:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.CodexTurnStateRuntime
+  CodexTurnStateModelStatus:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.CodexTurnStateModelStatus
+  CodexTurnStateEvent:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.CodexTurnStateEvent
   ChannelCredentials:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelCredentials

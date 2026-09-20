@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { format } from 'date-fns';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,9 +14,10 @@ import { Form, FormField, FormItem, FormLabel, FormMessage, FormControl, FormDes
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useUpdateChannel } from '../data/channels';
+import { useCodexTurnStateRuntime, useUpdateChannel } from '../data/channels';
 import { Channel } from '../data/schema';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
+import { CodexTurnStateIndicator } from './codex-turn-state-indicator';
 
 interface Props {
   open: boolean;
@@ -73,9 +75,44 @@ function valuesFromChannel(currentRow: Channel): FormValues {
   };
 }
 
+function formatStamp(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : format(date, 'yyyy-MM-dd HH:mm:ss');
+}
+
+const EVENT_KIND_KEYS: Record<string, string> = {
+  harvest: 'channels.dialogs.codexTurnState.events.kind.harvest',
+  validate: 'channels.dialogs.codexTurnState.events.kind.validate',
+  ready: 'channels.dialogs.codexTurnState.events.kind.ready',
+  invalidated: 'channels.dialogs.codexTurnState.events.kind.invalidated',
+};
+
+const REASON_KEYS: Record<string, string> = {
+  ok: 'channels.dialogs.codexTurnState.reason.ok',
+  invalid_harvest_proxy: 'channels.dialogs.codexTurnState.reason.invalid_harvest_proxy',
+  unexpected_state_length: 'channels.dialogs.codexTurnState.reason.unexpected_state_length',
+  fixed_proxy_validation_failed: 'channels.dialogs.codexTurnState.reason.fixed_proxy_validation_failed',
+  state_312: 'channels.dialogs.codexTurnState.reason.state_312',
+  model_mismatch: 'channels.dialogs.codexTurnState.reason.model_mismatch',
+  attempts_exhausted: 'channels.dialogs.codexTurnState.reason.attempts_exhausted',
+  harvest_failed: 'channels.dialogs.codexTurnState.reason.harvest_failed',
+  upstream_unauthorized: 'channels.dialogs.codexTurnState.reason.upstream_unauthorized',
+  upstream_forbidden: 'channels.dialogs.codexTurnState.reason.upstream_forbidden',
+  upstream_rate_limited: 'channels.dialogs.codexTurnState.reason.upstream_rate_limited',
+  cancelled: 'channels.dialogs.codexTurnState.reason.cancelled',
+};
+
+function translateReason(t: (key: string) => string, reason?: string | null) {
+  if (!reason) return '';
+  return REASON_KEYS[reason] ? t(REASON_KEYS[reason]) : reason;
+}
+
 export function ChannelsCodexTurnStateDialog({ open, onOpenChange, currentRow }: Props) {
   const { t } = useTranslation();
   const updateChannel = useUpdateChannel();
+  const runtimeQuery = useCodexTurnStateRuntime(currentRow.id, open);
+  const runtime = runtimeQuery.data;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -133,6 +170,64 @@ export function ChannelsCodexTurnStateDialog({ open, onOpenChange, currentRow }:
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-4'>
+            <Card>
+              <CardHeader>
+                <CardTitle className='flex items-center gap-2 text-lg'>
+                  {t('channels.dialogs.codexTurnState.status.title')}
+                  <CodexTurnStateIndicator phase={runtime?.phase ?? (currentRow.settings?.codexTurnState?.enabled ? 'pending' : 'disabled')} />
+                </CardTitle>
+                <CardDescription>{t('channels.dialogs.codexTurnState.status.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className='space-y-3'>
+                {runtime?.models?.length ? (
+                  <div className='space-y-2'>
+                    {runtime.models.map((item) => (
+                      <div key={item.model} className='flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm'>
+                        <div className='min-w-0'>
+                          <div className='truncate font-medium'>{item.model}</div>
+                          <div className='text-muted-foreground text-xs'>
+                            {item.ticketExpiresAt
+                              ? t('channels.dialogs.codexTurnState.status.expires', { time: formatStamp(item.ticketExpiresAt) })
+                              : item.lastError
+                                ? translateReason(t, item.lastError)
+                                : t('channels.dialogs.codexTurnState.status.noTicket')}
+                          </div>
+                        </div>
+                        <CodexTurnStateIndicator phase={item.phase} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className='text-muted-foreground text-sm'>{t('channels.dialogs.codexTurnState.status.empty')}</p>
+                )}
+                <div>
+                  <div className='mb-2 text-sm font-medium'>{t('channels.dialogs.codexTurnState.events.title')}</div>
+                  {runtime?.recentEvents?.length ? (
+                    <div className='max-h-48 space-y-2 overflow-y-auto'>
+                      {runtime.recentEvents.map((event, index) => (
+                        <div key={`${event.at}-${event.kind}-${index}`} className='rounded-md border px-3 py-2 text-xs'>
+                          <div className='flex items-center justify-between gap-2'>
+                            <span className='font-medium'>
+                              {EVENT_KIND_KEYS[event.kind] ? t(EVENT_KIND_KEYS[event.kind]) : event.kind}
+                            </span>
+                            <span className='text-muted-foreground'>{formatStamp(event.at)}</span>
+                          </div>
+                          <div className='text-muted-foreground mt-1'>
+                            {event.model}
+                            {event.reason && event.reason !== 'ok' ? ` · ${translateReason(t, event.reason)}` : ''}
+                            {event.statusCode ? ` · HTTP ${event.statusCode}` : ''}
+                            {event.durationMs ? ` · ${event.durationMs}ms` : ''}
+                            {event.stateBytes ? ` · ${event.stateBytes}B` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className='text-muted-foreground text-sm'>{t('channels.dialogs.codexTurnState.events.empty')}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle className='text-lg'>{t('channels.dialogs.codexTurnState.config.title')}</CardTitle>
