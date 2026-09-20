@@ -275,6 +275,19 @@ export const retryableErrorPatternSchema = z.object({
 });
 export type RetryableErrorPattern = z.infer<typeof retryableErrorPatternSchema>;
 
+export const codexTurnStateSettingsSchema = z.object({
+  enabled: z.boolean(),
+  plan: z.enum(['pro', 'team']).optional().nullable(),
+  models: z.array(z.string()).optional().nullable(),
+  harvestProxyURL: z.string().optional().nullable(),
+  ttlMinutes: z.number().int().optional().nullable(),
+  refreshBeforeMinutes: z.number().int().optional().nullable(),
+  maxAttempts: z.number().int().optional().nullable(),
+  cooldownSeconds: z.number().int().optional().nullable(),
+  strict: z.boolean().optional().nullable(),
+});
+export type CodexTurnStateSettings = z.infer<typeof codexTurnStateSettingsSchema>;
+
 // Channel Settings
 export const channelSettingsSchema = z.object({
   extraModelPrefix: z.string().optional(),
@@ -292,6 +305,7 @@ export const channelSettingsSchema = z.object({
   rateLimit: channelRateLimitSchema.optional().nullable(),
   retryableStatusCodes: z.array(z.number().int().min(400).max(599)).optional().nullable(),
   retryableErrorPatterns: z.array(retryableErrorPatternSchema).optional().nullable(),
+  codexTurnState: codexTurnStateSettingsSchema.optional().nullable(),
 });
 
 export type ChannelSettings = z.infer<typeof channelSettingsSchema>;

@@ -115,6 +115,17 @@ const CREATE_CHANNEL_MUTATION = `
           pattern
           regex
         }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
+        }
       }
       orderingWeight
       remark
@@ -183,6 +194,17 @@ const DUPLICATE_CHANNEL_MUTATION = `
         retryableErrorPatterns {
           pattern
           regex
+        }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
         }
       }
       orderingWeight
@@ -253,6 +275,17 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           pattern
           regex
         }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
+        }
       }
       orderingWeight
       remark
@@ -321,6 +354,17 @@ const UPDATE_CHANNEL_MUTATION = `
         retryableErrorPatterns {
           pattern
           regex
+        }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
         }
       }
       orderingWeight
@@ -505,6 +549,17 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           retryableErrorPatterns {
             pattern
             regex
+          }
+          codexTurnState {
+            enabled
+            plan
+            models
+            harvestProxyURL
+            ttlMinutes
+            refreshBeforeMinutes
+            maxAttempts
+            cooldownSeconds
+            strict
           }
         }
       }
@@ -731,6 +786,17 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             pattern
             regex
           }
+          codexTurnState {
+            enabled
+            plan
+            models
+            harvestProxyURL
+            ttlMinutes
+            refreshBeforeMinutes
+            maxAttempts
+            cooldownSeconds
+            strict
+          }
         }
       }
     }
@@ -883,6 +949,17 @@ const QUERY_CHANNELS_QUERY = `
             retryableErrorPatterns {
               pattern
               regex
+            }
+            codexTurnState {
+              enabled
+              plan
+              models
+              harvestProxyURL
+              ttlMinutes
+              refreshBeforeMinutes
+              maxAttempts
+              cooldownSeconds
+              strict
             }
           }
           orderingWeight

@@ -144,11 +144,17 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 	// Start performance metrics background flush
 	go svc.startPerformanceProcess()
 
+	svc.turnState = NewCodexTurnStateManager(svc)
+	svc.turnState.Start()
+
 	return svc
 }
 
 func (svc *ChannelService) Stop() {
 	svc.enabledChannelsCache.Stop()
+	if svc.turnState != nil {
+		svc.turnState.Stop()
+	}
 }
 
 type ChannelService struct {
@@ -202,6 +208,8 @@ type ChannelService struct {
 
 	// perfCh is the channel for performance records for async processing.
 	perfCh chan *PerformanceRecord
+
+	turnState *CodexTurnStateManager
 }
 
 func (svc *ChannelService) RegisterScheduledTasks(ctx context.Context, s *scheduler.Scheduler) error {

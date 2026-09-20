@@ -294,6 +294,8 @@ func (svc *ChannelService) buildCodexOutbound(
 						TokenProvider: tokens,
 						BaseURL:       baseURL,
 						Transport:     transport,
+						ChannelID:     c.ID,
+						TicketSource:  svc.turnState,
 					})
 				}
 			}
@@ -337,6 +339,8 @@ func (svc *ChannelService) buildCodexOutbound(
 			TokenProvider: p,
 			BaseURL:       baseURL,
 			Transport:     transport,
+			ChannelID:     c.ID,
+			TicketSource:  svc.turnState,
 		})
 	}
 
@@ -347,6 +351,8 @@ func (svc *ChannelService) buildCodexOutbound(
 		TokenProvider: tokens,
 		BaseURL:       baseURL,
 		Transport:     transport,
+		ChannelID:     c.ID,
+		TicketSource:  svc.turnState,
 	})
 }
 

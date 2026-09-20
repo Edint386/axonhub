@@ -148,6 +148,7 @@ type ChannelSettings {
   rateLimit: ChannelRateLimit
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
+  codexTurnState: CodexTurnStateSettings
 }
 
 enum CapabilityPolicy {
@@ -214,6 +215,31 @@ input ChannelSettingsInput {
   rateLimit: ChannelRateLimitInput
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
+  codexTurnState: CodexTurnStateSettingsInput
+}
+
+type CodexTurnStateSettings {
+  enabled: Boolean!
+  plan: String
+  models: [String!]
+  harvestProxyURL: String
+  ttlMinutes: Int
+  refreshBeforeMinutes: Int
+  maxAttempts: Int
+  cooldownSeconds: Int
+  strict: Boolean
+}
+
+input CodexTurnStateSettingsInput {
+  enabled: Boolean!
+  plan: String
+  models: [String!]
+  harvestProxyURL: String
+  ttlMinutes: Int
+  refreshBeforeMinutes: Int
+  maxAttempts: Int
+  cooldownSeconds: Int
+  strict: Boolean
 }
 
 input ChannelRateLimitInput {

@@ -160,6 +160,12 @@ models:
   ChannelRateLimitInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelRateLimit
+  CodexTurnStateSettings:
+    model:
+      - github.com/looplj/axonhub/internal/objects.CodexTurnStateSettings
+  CodexTurnStateSettingsInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.CodexTurnStateSettings
   ChannelCredentials:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelCredentials

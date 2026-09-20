@@ -22,6 +22,7 @@ import {
   IconKey,
   IconKeyOff,
   IconGauge,
+  IconShieldLock,
   IconHistory,
   IconPlugConnected,
   IconClockPlay,
@@ -211,6 +212,17 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
             <IconGauge size={16} className='mr-2' />
             {t('channels.dialogs.rateLimit.action')}
           </DropdownMenuItem>
+          {(channel.type === 'codex' || channel.type === 'fenno') && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(channel);
+                setOpen('codexTurnState');
+              }}
+            >
+              <IconShieldLock size={16} className='mr-2' />
+              {t('channels.dialogs.codexTurnState.action')}
+            </DropdownMenuItem>
+          )}
           {channel.type !== 'xai_subscription' && (
             <DropdownMenuItem
               onClick={() => {

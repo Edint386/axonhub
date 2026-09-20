@@ -208,6 +208,74 @@ type ChannelSettings struct {
 	// trigger retry for this channel. When Regex is false, Pattern is matched as a
 	// case-sensitive substring of the error text.
 	RetryableErrorPatterns []RetryableErrorPattern `json:"retryableErrorPatterns,omitempty"`
+
+	// CodexTurnState is an opt-in Codex OAuth feature that harvests and injects
+	// x-codex-turn-state tickets. Disabled by default.
+	CodexTurnState *CodexTurnStateSettings `json:"codexTurnState,omitempty"`
+}
+
+type CodexTurnStateSettings struct {
+	Enabled              bool     `json:"enabled"`
+	Plan                 string   `json:"plan,omitempty"`
+	Models               []string `json:"models,omitempty"`
+	HarvestProxyURL      string   `json:"harvestProxyURL,omitempty"`
+	TTLMinutes           int      `json:"ttlMinutes,omitempty"`
+	RefreshBeforeMinutes int      `json:"refreshBeforeMinutes,omitempty"`
+	MaxAttempts          int      `json:"maxAttempts,omitempty"`
+	CooldownSeconds      int      `json:"cooldownSeconds,omitempty"`
+	// Strict defaults to true when nil: opted-in models without a ticket return 503.
+	Strict *bool `json:"strict,omitempty"`
+}
+
+func (s *CodexTurnStateSettings) Normalized() CodexTurnStateSettings {
+	out := CodexTurnStateSettings{}
+	if s != nil {
+		out = *s
+	}
+	if out.Plan == "" {
+		out.Plan = "pro"
+	}
+	if len(out.Models) == 0 {
+		out.Models = []string{"gpt-6-astra"}
+	}
+	if out.TTLMinutes <= 0 || out.TTLMinutes > 60 {
+		out.TTLMinutes = 60
+	}
+	if out.RefreshBeforeMinutes < 0 || out.RefreshBeforeMinutes >= out.TTLMinutes {
+		out.RefreshBeforeMinutes = 10
+	}
+	if out.MaxAttempts <= 0 || out.MaxAttempts > 32 {
+		out.MaxAttempts = 8
+	}
+	if out.CooldownSeconds < 30 || out.CooldownSeconds > 3600 {
+		out.CooldownSeconds = 300
+	}
+	if out.Strict == nil {
+		out.Strict = new(bool)
+		*out.Strict = true
+	}
+	return out
+}
+
+func (s *CodexTurnStateSettings) IsEnabled() bool {
+	return s != nil && s.Enabled
+}
+
+func (s CodexTurnStateSettings) IsStrict() bool {
+	return s.Strict == nil || *s.Strict
+}
+
+func (s CodexTurnStateSettings) CoversModel(model string) bool {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false
+	}
+	for _, item := range s.Models {
+		if strings.TrimSpace(item) == model {
+			return true
+		}
+	}
+	return false
 }
 
 type RetryableErrorPattern struct {

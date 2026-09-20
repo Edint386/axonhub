@@ -23,6 +23,7 @@ import { ChannelsTestDialog } from './channels-test-dialog';
 import { ChannelsTestHistoryDrawer } from './channels-test-history-drawer';
 import { ChannelsAPIKeyManagementDialog } from './channels-api-key-management-dialog';
 import { ChannelsRateLimitDialog } from './channels-rate-limit-dialog';
+import { ChannelsCodexTurnStateDialog } from './channels-codex-turn-state-dialog';
 import { ChannelsTransformOptionsDialog } from './channels-transform-options-dialog';
 import { ChannelsEndpointsDialog } from './channels-endpoints-dialog';
 import { ChannelsSystemSettingsDialog } from './channels-system-settings-dialog';
@@ -284,6 +285,22 @@ export function ChannelsDialogs() {
             }}
             currentRow={currentRow}
           />
+
+          {(currentRow.type === 'codex' || currentRow.type === 'fenno') && (
+            <ChannelsCodexTurnStateDialog
+              key={`channel-codex-turn-state-${currentRow.id}`}
+              open={open === 'codexTurnState'}
+              onOpenChange={(isOpen) => {
+                if (!isOpen) {
+                  setOpen(null);
+                  setTimeout(() => {
+                    setCurrentRow(null);
+                  }, 500);
+                }
+              }}
+              currentRow={currentRow}
+            />
+          )}
 
           <ChannelsEndpointsDialog
             key={`channel-endpoints-${currentRow.id}`}
