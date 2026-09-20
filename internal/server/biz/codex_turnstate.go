@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	codexTurnStateProbeURL = "https://chatgpt.com/backend-api/codex/responses"
+	codexTurnStateProbeURL  = "https://chatgpt.com/backend-api/codex/responses"
 	codexTurnStateUserAgent = "codex_cli_rs/0.153.4"
 	codexTurnStateVersion   = "0.153.4"
 )
@@ -52,14 +52,14 @@ type CodexTurnStateManager struct {
 	probeURL string
 	tick     time.Duration
 
-	mu       sync.Mutex
-	tickets  map[string]*storedTurnTicket
-	records  map[string]*turnJobRecord
-	jobs     map[string]struct{}
-	revoked  map[string]uint64
-	version  uint64
-	sem      chan struct{}
-	cancel   context.CancelFunc
+	mu      sync.Mutex
+	tickets map[string]*storedTurnTicket
+	records map[string]*turnJobRecord
+	jobs    map[string]struct{}
+	revoked map[string]uint64
+	version uint64
+	sem     chan struct{}
+	cancel  context.CancelFunc
 }
 
 func NewCodexTurnStateManager(channels *ChannelService) *CodexTurnStateManager {
@@ -375,11 +375,11 @@ func (m *CodexTurnStateManager) probe(ctx context.Context, ch *Channel, model, h
 	headers.Set("Accept", "text/event-stream")
 	headers.Set("Accept-Encoding", "identity")
 	headers.Set("Content-Type", "application/json")
-	headers.Set("OpenAI-Beta", "responses=experimental")
+	headers.Set("Openai-Beta", "responses=experimental")
 	headers.Set("User-Agent", codexTurnStateUserAgent)
 	headers.Set("Originator", "codex_cli_rs")
 	headers.Set("Version", codexTurnStateVersion)
-	headers.Set("session_id", uuid.NewString())
+	headers.Set(codex.SessionHeader, uuid.NewString())
 	if accountID := codex.ExtractChatGPTAccountIDFromJWT(creds.AccessToken); accountID != "" {
 		headers.Set("Chatgpt-Account-Id", accountID)
 	}
@@ -409,8 +409,7 @@ func (m *CodexTurnStateManager) probe(ctx context.Context, ch *Channel, model, h
 		Auth:    &httpclient.AuthConfig{Type: httpclient.AuthTypeBearer, APIKey: creds.AccessToken},
 	})
 	if err != nil {
-		var httpErr *httpclient.Error
-		if errors.As(err, &httpErr) {
+		if httpErr, ok := errors.AsType[*httpclient.Error](err); ok {
 			return "", httpErr.StatusCode, err
 		}
 		return "", 0, err
