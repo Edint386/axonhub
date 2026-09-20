@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -64,18 +63,24 @@ func NewHttpClientWithProxy(proxyConfig *ProxyConfig, opts ...ClientOption) *Htt
 		proxyConfig.Type == ProxyTypeURL &&
 		proxyConfig.DisableConnectionReuse
 
+	directDial := (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
+
 	transport := &http.Transport{
-		Proxy:             getProxyFunc(proxyConfig),
-		DisableKeepAlives: disableConnectionReuse,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		Proxy:                 getProxyFunc(proxyConfig),
+		DisableKeepAlives:     disableConnectionReuse,
+		DialContext:           directDial,
 		ForceAttemptHTTP2:     !disableConnectionReuse,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+	}
+	if socksDial, ok := socksDialFromConfig(proxyConfig); ok {
+		transport.Proxy = nil
+		transport.DialContext = socksDial
 	}
 
 	if options.insecureSkipVerify {
@@ -173,22 +178,17 @@ func getProxyFunc(config *ProxyConfig) func(*http.Request) (*url.URL, error) {
 		return http.ProxyFromEnvironment
 
 	case ProxyTypeURL:
-		// Use configured URL with optional authentication
-		if config.URL == "" {
-			return func(*http.Request) (*url.URL, error) {
-				return nil, errors.New("proxy URL is required when type is 'url'")
-			}
-		}
-
-		proxyURL, err := url.Parse(config.URL)
+		proxyURL, err := config.parsedURL()
 		if err != nil {
 			return func(_ *http.Request) (*url.URL, error) {
-				return nil, fmt.Errorf("invalid proxy URL: %w", err)
+				return nil, err
 			}
 		}
-
-		if config.Username != "" && config.Password != "" {
-			proxyURL.User = url.UserPassword(config.Username, config.Password)
+		if isSOCKSScheme(proxyURL.Scheme) {
+			// SOCKS is applied via DialContext, not HTTP CONNECT.
+			return func(*http.Request) (*url.URL, error) {
+				return nil, nil
+			}
 		}
 
 		slog.DebugContext(context.Background(), "use custom proxy", slog.String("proxy_url", urlForLog(proxyURL)))
@@ -421,7 +421,49 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 
 	stream := decoderFactory(ctx, rawResp.Body)
 
-	return stream, nil
+	return &headerStream{Stream: stream, headers: rawResp.Header.Clone()}, nil
+}
+
+func socksDialFromConfig(config *ProxyConfig) (func(ctx context.Context, network, addr string) (net.Conn, error), bool) {
+	if config == nil || config.Type != ProxyTypeURL {
+		return nil, false
+	}
+	parsed, err := config.parsedURL()
+	if err != nil || !isSOCKSScheme(parsed.Scheme) {
+		return nil, false
+	}
+	dial, err := socksDialContext(parsed)
+	if err != nil {
+		return func(_ context.Context, _, _ string) (net.Conn, error) {
+			return nil, err
+		}, true
+	}
+	return dial, true
+}
+
+// HeaderedStream exposes upstream HTTP headers for a streaming response.
+type HeaderedStream interface {
+	streams.Stream[*StreamEvent]
+	ResponseHeaders() http.Header
+}
+
+type headerStream struct {
+	streams.Stream[*StreamEvent]
+	headers http.Header
+}
+
+func (s *headerStream) ResponseHeaders() http.Header {
+	if s == nil {
+		return nil
+	}
+	return s.headers
+}
+
+func StreamResponseHeaders(stream streams.Stream[*StreamEvent]) http.Header {
+	if headered, ok := stream.(HeaderedStream); ok {
+		return headered.ResponseHeaders()
+	}
+	return nil
 }
 
 func urlForLog(value *url.URL) string {

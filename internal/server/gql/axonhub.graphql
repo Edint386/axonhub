@@ -224,8 +224,8 @@ type ChannelSettings {
   modelProtocols: [ModelProtocol!]
   providerQuota: ChannelProviderQuotaSettings @goField(forceResolver: true)
   healthProbe: ChannelHealthProbeSettings
-
   quotaRoutingMode: ChannelQuotaRoutingMode
+  codexTurnState: CodexTurnStateSettings
 }
 
 enum ChannelQuotaRoutingMode {
@@ -311,8 +311,32 @@ input ChannelSettingsInput {
   modelProtocols: [ModelProtocolInput!]
   providerQuota: ChannelProviderQuotaSettingsInput
   healthProbe: ChannelHealthProbeSettingsInput
-
   quotaRoutingMode: ChannelQuotaRoutingMode
+  codexTurnState: CodexTurnStateSettingsInput
+}
+
+type CodexTurnStateSettings {
+  enabled: Boolean!
+  plan: String
+  models: [String!]
+  harvestProxyURL: String
+  ttlMinutes: Int
+  refreshBeforeMinutes: Int
+  maxAttempts: Int
+  cooldownSeconds: Int
+  strict: Boolean
+}
+
+input CodexTurnStateSettingsInput {
+  enabled: Boolean!
+  plan: String
+  models: [String!]
+  harvestProxyURL: String
+  ttlMinutes: Int
+  refreshBeforeMinutes: Int
+  maxAttempts: Int
+  cooldownSeconds: Int
+  strict: Boolean
 }
 
 input ChannelRateLimitInput {

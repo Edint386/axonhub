@@ -178,11 +178,17 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 	// Start performance metrics background flush
 	go svc.startPerformanceProcess()
 
+	svc.turnState = NewCodexTurnStateManager(svc)
+	svc.turnState.Start()
+
 	return svc
 }
 
 func (svc *ChannelService) Stop() {
 	svc.enabledChannelsCache.Stop()
+	if svc.turnState != nil {
+		svc.turnState.Stop()
+	}
 }
 
 type ChannelService struct {
@@ -236,6 +242,8 @@ type ChannelService struct {
 	// snapshot, recomputed from the requests table on a schedule. Stored as an
 	// immutable value so the request path reads it without locking.
 	channelLatencyStats atomic.Pointer[channelLatencyStatsSnapshot]
+
+	turnState *CodexTurnStateManager
 }
 
 func (svc *ChannelService) RegisterScheduledTasks(ctx context.Context, s *scheduler.Scheduler) error {

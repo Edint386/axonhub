@@ -196,6 +196,17 @@ const CREATE_CHANNEL_MUTATION = `
             authCookie
           }
         }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
+        }
       }
       orderingWeight
       priority
@@ -292,6 +303,17 @@ const DUPLICATE_CHANNEL_MUTATION = `
           ollama {
             authCookie
           }
+        }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
         }
       }
       orderingWeight
@@ -390,6 +412,17 @@ const BULK_CREATE_CHANNELS_MUTATION = `
             authCookie
           }
         }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
+        }
       }
       orderingWeight
       priority
@@ -486,6 +519,17 @@ const UPDATE_CHANNEL_MUTATION = `
           ollama {
             authCookie
           }
+        }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
         }
       }
       orderingWeight
@@ -707,6 +751,17 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             ollama {
               authCookie
             }
+          }
+          codexTurnState {
+            enabled
+            plan
+            models
+            harvestProxyURL
+            ttlMinutes
+            refreshBeforeMinutes
+            maxAttempts
+            cooldownSeconds
+            strict
           }
         }
       }
@@ -952,6 +1007,17 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             ollama {
               authCookie
             }
+          }
+          codexTurnState {
+            enabled
+            plan
+            models
+            harvestProxyURL
+            ttlMinutes
+            refreshBeforeMinutes
+            maxAttempts
+            cooldownSeconds
+            strict
           }
         }
       }
@@ -1211,6 +1277,17 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
               ollama {
                 authCookie
               }
+            }
+            codexTurnState {
+              enabled
+              plan
+              models
+              harvestProxyURL
+              ttlMinutes
+              refreshBeforeMinutes
+              maxAttempts
+              cooldownSeconds
+              strict
             }
           }
           orderingWeight

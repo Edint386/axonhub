@@ -80,6 +80,12 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 - 请求 `gpt-4` → 映射到 `deepseek-reasoner` 以获取更准确的回复。
 - 请求 `gpt-3.5-turbo` → 映射到 `deepseek-chat` 以降低成本。
 
+### Codex turn-state（可选，实验性）
+
+官方 ChatGPT OAuth 的 Codex 渠道可以采集并注入不透明头 `x-codex-turn-state`。默认关闭。
+
+在渠道行菜单打开 **Codex turn-state**。只对官方 `chatgpt.com` OAuth 渠道启用。采集会发短 Responses 探测（消耗额度），再用渠道现有业务代理复验。已选模型在无票时返回 HTTP 503，除非关闭「无票则拒绝」。WebSocket 不注入。292 / 332 / 312 是头字节长度，不是 HTTP 状态码。这不是官方协议，上游变更后可能失效。
+
 ### 常见问题
 - **Codex 认证失败**：确保在启动 Codex 的同一 shell 会话中设置了 `AXONHUB_API_KEY`。
 - **模型结果异常**：检查 AxonHub 控制台中当前启用的配置文件映射，必要时禁用或调整规则。

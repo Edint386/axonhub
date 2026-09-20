@@ -381,6 +381,19 @@ export const channelHealthProbeSettingsSchema = z.object({
 });
 export type ChannelHealthProbeSettings = z.infer<typeof channelHealthProbeSettingsSchema>;
 
+export const codexTurnStateSettingsSchema = z.object({
+  enabled: z.boolean(),
+  plan: z.enum(['pro', 'team']).optional().nullable(),
+  models: z.array(z.string()).optional().nullable(),
+  harvestProxyURL: z.string().optional().nullable(),
+  ttlMinutes: z.number().int().optional().nullable(),
+  refreshBeforeMinutes: z.number().int().optional().nullable(),
+  maxAttempts: z.number().int().optional().nullable(),
+  cooldownSeconds: z.number().int().optional().nullable(),
+  strict: z.boolean().optional().nullable(),
+});
+export type CodexTurnStateSettings = z.infer<typeof codexTurnStateSettingsSchema>;
+
 // Channel Settings
 export const channelSettingsSchema = z.object({
   extraModelPrefix: z.string().optional(),
@@ -403,6 +416,7 @@ export const channelSettingsSchema = z.object({
   modelProtocols: z.array(modelProtocolSchema).optional().nullable(),
   providerQuota: channelProviderQuotaSettingsSchema.optional().nullable(),
   quotaRoutingMode: z.enum(['INHERIT', 'IGNORE_QUOTA', 'REMOVE_ON_EXHAUSTED', 'BACKPRESSURE']).optional(),
+  codexTurnState: codexTurnStateSettingsSchema.optional().nullable(),
 });
 
 export type ChannelSettings = z.infer<typeof channelSettingsSchema>;

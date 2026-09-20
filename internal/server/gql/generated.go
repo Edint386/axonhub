@@ -711,6 +711,7 @@ type ComplexityRoot struct {
 	ChannelSettings struct {
 		AutoTrimedModelPrefixes  func(childComplexity int) int
 		BodyOverrideOperations   func(childComplexity int) int
+		CodexTurnState           func(childComplexity int) int
 		ExtraModelPrefix         func(childComplexity int) int
 		HeaderOverrideOperations func(childComplexity int) int
 		HealthProbe              func(childComplexity int) int
@@ -773,6 +774,18 @@ type ComplexityRoot struct {
 		Channels func(childComplexity int) int
 		Success  func(childComplexity int) int
 		Updated  func(childComplexity int) int
+	}
+
+	CodexTurnStateSettings struct {
+		CooldownSeconds      func(childComplexity int) int
+		Enabled              func(childComplexity int) int
+		HarvestProxyURL      func(childComplexity int) int
+		MaxAttempts          func(childComplexity int) int
+		Models               func(childComplexity int) int
+		Plan                 func(childComplexity int) int
+		RefreshBeforeMinutes func(childComplexity int) int
+		Strict               func(childComplexity int) int
+		TTLMinutes           func(childComplexity int) int
 	}
 
 	CommandCodeQuotaSettings struct {
@@ -5158,6 +5171,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.BodyOverrideOperations(childComplexity), true
+	case "ChannelSettings.codexTurnState":
+		if e.complexity.ChannelSettings.CodexTurnState == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.CodexTurnState(childComplexity), true
 	case "ChannelSettings.extraModelPrefix":
 		if e.complexity.ChannelSettings.ExtraModelPrefix == nil {
 			break
@@ -5411,6 +5430,61 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ClearChannelOverrideTemplatesPayload.Updated(childComplexity), true
+
+	case "CodexTurnStateSettings.cooldownSeconds":
+		if e.complexity.CodexTurnStateSettings.CooldownSeconds == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.CooldownSeconds(childComplexity), true
+	case "CodexTurnStateSettings.enabled":
+		if e.complexity.CodexTurnStateSettings.Enabled == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Enabled(childComplexity), true
+	case "CodexTurnStateSettings.harvestProxyURL":
+		if e.complexity.CodexTurnStateSettings.HarvestProxyURL == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.HarvestProxyURL(childComplexity), true
+	case "CodexTurnStateSettings.maxAttempts":
+		if e.complexity.CodexTurnStateSettings.MaxAttempts == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.MaxAttempts(childComplexity), true
+	case "CodexTurnStateSettings.models":
+		if e.complexity.CodexTurnStateSettings.Models == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Models(childComplexity), true
+	case "CodexTurnStateSettings.plan":
+		if e.complexity.CodexTurnStateSettings.Plan == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Plan(childComplexity), true
+	case "CodexTurnStateSettings.refreshBeforeMinutes":
+		if e.complexity.CodexTurnStateSettings.RefreshBeforeMinutes == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.RefreshBeforeMinutes(childComplexity), true
+	case "CodexTurnStateSettings.strict":
+		if e.complexity.CodexTurnStateSettings.Strict == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Strict(childComplexity), true
+	case "CodexTurnStateSettings.ttlMinutes":
+		if e.complexity.CodexTurnStateSettings.TTLMinutes == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.TTLMinutes(childComplexity), true
 
 	case "CommandCodeQuotaSettings.authCookie":
 		if e.complexity.CommandCodeQuotaSettings.AuthCookie == nil {
@@ -12772,6 +12846,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCleanupOptionInput,
 		ec.unmarshalInputClearCacheInput,
 		ec.unmarshalInputClearChannelOverrideTemplatesInput,
+		ec.unmarshalInputCodexTurnStateSettingsInput,
 		ec.unmarshalInputCommandCodeQuotaSettingsInput,
 		ec.unmarshalInputCompleteAutoDisableChannelOnboardingInput,
 		ec.unmarshalInputCompleteOnboardingInput,
@@ -22819,6 +22894,8 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_healthProbe(ctx, field)
 			case "quotaRoutingMode":
 				return ec.fieldContext_ChannelSettings_quotaRoutingMode(ctx, field)
+			case "codexTurnState":
+				return ec.fieldContext_ChannelSettings_codexTurnState(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelSettings", field.Name)
 		},
@@ -30196,6 +30273,55 @@ func (ec *executionContext) fieldContext_ChannelSettings_quotaRoutingMode(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelSettings_codexTurnState(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_codexTurnState,
+		func(ctx context.Context) (any, error) {
+			return obj.CodexTurnState, nil
+		},
+		nil,
+		ec.marshalOCodexTurnStateSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_codexTurnState(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_CodexTurnStateSettings_enabled(ctx, field)
+			case "plan":
+				return ec.fieldContext_CodexTurnStateSettings_plan(ctx, field)
+			case "models":
+				return ec.fieldContext_CodexTurnStateSettings_models(ctx, field)
+			case "harvestProxyURL":
+				return ec.fieldContext_CodexTurnStateSettings_harvestProxyURL(ctx, field)
+			case "ttlMinutes":
+				return ec.fieldContext_CodexTurnStateSettings_ttlMinutes(ctx, field)
+			case "refreshBeforeMinutes":
+				return ec.fieldContext_CodexTurnStateSettings_refreshBeforeMinutes(ctx, field)
+			case "maxAttempts":
+				return ec.fieldContext_CodexTurnStateSettings_maxAttempts(ctx, field)
+			case "cooldownSeconds":
+				return ec.fieldContext_CodexTurnStateSettings_cooldownSeconds(ctx, field)
+			case "strict":
+				return ec.fieldContext_CodexTurnStateSettings_strict(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexTurnStateSettings", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelSuccessRate_channelId(ctx context.Context, field graphql.CollectedField, obj *ChannelSuccessRate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30930,6 +31056,267 @@ func (ec *executionContext) fieldContext_ClearChannelOverrideTemplatesPayload_ch
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_enabled(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_plan(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_plan,
+		func(ctx context.Context) (any, error) {
+			return obj.Plan, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_plan(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_models(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_models,
+		func(ctx context.Context) (any, error) {
+			return obj.Models, nil
+		},
+		nil,
+		ec.marshalOString2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_models(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_harvestProxyURL(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_harvestProxyURL,
+		func(ctx context.Context) (any, error) {
+			return obj.HarvestProxyURL, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_harvestProxyURL(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_ttlMinutes(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_ttlMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.TTLMinutes, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_ttlMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_refreshBeforeMinutes(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_refreshBeforeMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshBeforeMinutes, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_refreshBeforeMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_maxAttempts(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_maxAttempts,
+		func(ctx context.Context) (any, error) {
+			return obj.MaxAttempts, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_maxAttempts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_cooldownSeconds(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_cooldownSeconds,
+		func(ctx context.Context) (any, error) {
+			return obj.CooldownSeconds, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_cooldownSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_strict(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_strict,
+		func(ctx context.Context) (any, error) {
+			return obj.Strict, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_strict(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -75907,7 +76294,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "providerQuota", "healthProbe", "quotaRoutingMode"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "providerQuota", "healthProbe", "quotaRoutingMode", "codexTurnState"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -76054,6 +76441,13 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.QuotaRoutingMode = data
+		case "codexTurnState":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexTurnState"))
+			data, err := ec.unmarshalOCodexTurnStateSettingsInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CodexTurnState = data
 		}
 	}
 
@@ -77536,6 +77930,89 @@ func (ec *executionContext) unmarshalInputClearChannelOverrideTemplatesInput(ctx
 				return it, err
 			}
 			it.ChannelIDs = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCodexTurnStateSettingsInput(ctx context.Context, obj any) (objects.CodexTurnStateSettings, error) {
+	var it objects.CodexTurnStateSettings
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"enabled", "plan", "models", "harvestProxyURL", "ttlMinutes", "refreshBeforeMinutes", "maxAttempts", "cooldownSeconds", "strict"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "plan":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("plan"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Plan = data
+		case "models":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("models"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Models = data
+		case "harvestProxyURL":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("harvestProxyURL"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HarvestProxyURL = data
+		case "ttlMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttlMinutes"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TTLMinutes = data
+		case "refreshBeforeMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("refreshBeforeMinutes"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RefreshBeforeMinutes = data
+		case "maxAttempts":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxAttempts"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaxAttempts = data
+		case "cooldownSeconds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cooldownSeconds"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CooldownSeconds = data
+		case "strict":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("strict"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Strict = data
 		}
 	}
 
@@ -104019,6 +104496,8 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_healthProbe(ctx, field, obj)
 		case "quotaRoutingMode":
 			out.Values[i] = ec._ChannelSettings_quotaRoutingMode(ctx, field, obj)
+		case "codexTurnState":
+			out.Values[i] = ec._ChannelSettings_codexTurnState(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -104372,6 +104851,61 @@ func (ec *executionContext) _ClearChannelOverrideTemplatesPayload(ctx context.Co
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var codexTurnStateSettingsImplementors = []string{"CodexTurnStateSettings"}
+
+func (ec *executionContext) _CodexTurnStateSettings(ctx context.Context, sel ast.SelectionSet, obj *objects.CodexTurnStateSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexTurnStateSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexTurnStateSettings")
+		case "enabled":
+			out.Values[i] = ec._CodexTurnStateSettings_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "plan":
+			out.Values[i] = ec._CodexTurnStateSettings_plan(ctx, field, obj)
+		case "models":
+			out.Values[i] = ec._CodexTurnStateSettings_models(ctx, field, obj)
+		case "harvestProxyURL":
+			out.Values[i] = ec._CodexTurnStateSettings_harvestProxyURL(ctx, field, obj)
+		case "ttlMinutes":
+			out.Values[i] = ec._CodexTurnStateSettings_ttlMinutes(ctx, field, obj)
+		case "refreshBeforeMinutes":
+			out.Values[i] = ec._CodexTurnStateSettings_refreshBeforeMinutes(ctx, field, obj)
+		case "maxAttempts":
+			out.Values[i] = ec._CodexTurnStateSettings_maxAttempts(ctx, field, obj)
+		case "cooldownSeconds":
+			out.Values[i] = ec._CodexTurnStateSettings_cooldownSeconds(ctx, field, obj)
+		case "strict":
+			out.Values[i] = ec._CodexTurnStateSettings_strict(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -129306,6 +129840,21 @@ func (ec *executionContext) unmarshalOCleanupOptionInput2ᚕgithubᚗcomᚋloopl
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) marshalOCodexTurnStateSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings(ctx context.Context, sel ast.SelectionSet, v *objects.CodexTurnStateSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._CodexTurnStateSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOCodexTurnStateSettingsInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings(ctx context.Context, v any) (*objects.CodexTurnStateSettings, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputCodexTurnStateSettingsInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalOCommandCodeQuotaSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCommandCodeQuotaSettings(ctx context.Context, sel ast.SelectionSet, v *objects.CommandCodeQuotaSettings) graphql.Marshaler {
