@@ -172,6 +172,10 @@ func (m *CodexTurnStateManager) Observe(used *turnstate.Ticket, headers http.Hea
 }
 
 func (m *CodexTurnStateManager) notify(ch *Channel, cfg objects.CodexTurnStateSettings, model string) {
+	m.startCollect(ch, cfg, model)
+}
+
+func (m *CodexTurnStateManager) startCollect(ch *Channel, cfg objects.CodexTurnStateSettings, model string) {
 	if ch == nil {
 		return
 	}
@@ -180,15 +184,20 @@ func (m *CodexTurnStateManager) notify(ch *Channel, cfg objects.CodexTurnStateSe
 	_, running := m.jobs[key]
 	rec := m.records[key]
 	cooling := rec != nil && rec.CooldownUntil.After(time.Now())
-	m.mu.Unlock()
 	if running || cooling {
+		m.mu.Unlock()
 		return
 	}
+	m.jobs[key] = struct{}{}
+	m.mu.Unlock()
 	go func() {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				log.Error(context.Background(), "codex turn-state collect panic", log.Any("panic", recovered))
 			}
+			m.mu.Lock()
+			delete(m.jobs, key)
+			m.mu.Unlock()
 		}()
 		m.collect(context.Background(), ch, cfg, model)
 	}()
@@ -233,15 +242,7 @@ func (m *CodexTurnStateManager) schedule() {
 			}
 			m.mu.Unlock()
 			if need {
-				ch, cfg, model := ch, cfg, model
-				go func() {
-					defer func() {
-						if recovered := recover(); recovered != nil {
-							log.Error(context.Background(), "codex turn-state collect panic", log.Any("panic", recovered))
-						}
-					}()
-					m.collect(context.Background(), ch, cfg, model)
-				}()
+				m.startCollect(ch, cfg, model)
 			}
 		}
 	}
@@ -249,18 +250,6 @@ func (m *CodexTurnStateManager) schedule() {
 
 func (m *CodexTurnStateManager) collect(ctx context.Context, ch *Channel, cfg objects.CodexTurnStateSettings, model string) {
 	key := turnStateKey(ch.ID, model)
-	m.mu.Lock()
-	if _, running := m.jobs[key]; running {
-		m.mu.Unlock()
-		return
-	}
-	m.jobs[key] = struct{}{}
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		delete(m.jobs, key)
-		m.mu.Unlock()
-	}()
 
 	select {
 	case m.sem <- struct{}{}:

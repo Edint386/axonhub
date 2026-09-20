@@ -25,7 +25,6 @@ import {
   IconHistory,
   IconPlugConnected,
   IconClockPlay,
-  IconShieldLock,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
