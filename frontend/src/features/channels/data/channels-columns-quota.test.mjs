@@ -260,6 +260,20 @@ test('hidden quota selection keeps routing status fields for the channel name', 
   assert.match(hiddenQuery, /liveLimiterStats/);
 });
 
+test('channel list query always selects priority so column slimming cannot default it to 0', () => {
+  const slimQuery = buildQueryChannelsQuery({
+    quota: false,
+    tags: false,
+    orderingWeight: false,
+    priority: false,
+    health: false,
+  });
+  const fullQuery = buildQueryChannelsQuery(undefined, { full: true });
+
+  assert.match(slimQuery, /\n\s*priority\s*\n/);
+  assert.match(fullQuery, /\n\s*priority\s*\n/);
+});
+
 test('more than five normalized limits expose the remaining rows for expansion', () => {
   const limits = parseQuotaLimits({
     _limits: [
