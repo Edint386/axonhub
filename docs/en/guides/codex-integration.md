@@ -80,6 +80,12 @@ AxonHub model profiles remap incoming model names to provider-specific equivalen
 - Request `gpt-4` → mapped to `deepseek-reasoner` for getting more accurate responses.
 - Request `gpt-3.5-turbo` → mapped to `deepseek-chat` for reducing costs.
 
+### Codex turn-state (optional, experimental)
+
+Official ChatGPT OAuth Codex channels can harvest and inject the opaque `x-codex-turn-state` header. This is off by default.
+
+Open the channel row menu → **Codex turn-state**. Enable it only for official `chatgpt.com` OAuth channels. Harvest uses a short Responses probe (quota is consumed), then re-validates through the channel's existing business proxy. Opted-in models without a ticket return HTTP 503 unless you turn off "Require a ticket". WebSocket transport is not injected. 292 / 332 / 312 are header byte lengths, not HTTP status codes. The mechanism is unofficial and can stop working if upstream changes.
+
 ### Troubleshooting
 - **Codex reports authentication errors**: ensure `AXONHUB_API_KEY` is exported in the same shell session that launches Codex.
 - **Unexpected model responses**: review active profile mappings in the AxonHub console; disable or adjust rules if necessary.

@@ -395,6 +395,7 @@ type ComplexityRoot struct {
 		BaseURL                 func(childComplexity int) int
 		ChannelModelPrices      func(childComplexity int) int
 		ChannelProbes           func(childComplexity int) int
+		CodexTurnStateRuntime   func(childComplexity int) int
 		CreatedAt               func(childComplexity int) int
 		Credentials             func(childComplexity int) int
 		DefaultEndpoints        func(childComplexity int) int
@@ -711,6 +712,7 @@ type ComplexityRoot struct {
 	ChannelSettings struct {
 		AutoTrimedModelPrefixes  func(childComplexity int) int
 		BodyOverrideOperations   func(childComplexity int) int
+		CodexTurnState           func(childComplexity int) int
 		ExtraModelPrefix         func(childComplexity int) int
 		HeaderOverrideOperations func(childComplexity int) int
 		HealthProbe              func(childComplexity int) int
@@ -773,6 +775,45 @@ type ComplexityRoot struct {
 		Channels func(childComplexity int) int
 		Success  func(childComplexity int) int
 		Updated  func(childComplexity int) int
+	}
+
+	CodexTurnStateEvent struct {
+		At         func(childComplexity int) int
+		DurationMs func(childComplexity int) int
+		Kind       func(childComplexity int) int
+		Model      func(childComplexity int) int
+		Reason     func(childComplexity int) int
+		StateBytes func(childComplexity int) int
+		StatusCode func(childComplexity int) int
+	}
+
+	CodexTurnStateModelStatus struct {
+		Attempts        func(childComplexity int) int
+		CooldownUntil   func(childComplexity int) int
+		LastError       func(childComplexity int) int
+		Model           func(childComplexity int) int
+		Phase           func(childComplexity int) int
+		StateBytes      func(childComplexity int) int
+		TicketExpiresAt func(childComplexity int) int
+	}
+
+	CodexTurnStateRuntime struct {
+		Enabled      func(childComplexity int) int
+		Models       func(childComplexity int) int
+		Phase        func(childComplexity int) int
+		RecentEvents func(childComplexity int) int
+	}
+
+	CodexTurnStateSettings struct {
+		CooldownSeconds      func(childComplexity int) int
+		Enabled              func(childComplexity int) int
+		HarvestProxyURL      func(childComplexity int) int
+		MaxAttempts          func(childComplexity int) int
+		Models               func(childComplexity int) int
+		Plan                 func(childComplexity int) int
+		RefreshBeforeMinutes func(childComplexity int) int
+		Strict               func(childComplexity int) int
+		TTLMinutes           func(childComplexity int) int
 	}
 
 	CommandCodeQuotaSettings struct {
@@ -2363,6 +2404,7 @@ type ChannelResolver interface {
 	Credentials(ctx context.Context, obj *ent.Channel) (*objects.ChannelCredentials, error)
 	DisabledAPIKeys(ctx context.Context, obj *ent.Channel) ([]*objects.DisabledAPIKey, error)
 	LiveLimiterStats(ctx context.Context, obj *ent.Channel) (*ChannelLimiterStats, error)
+	CodexTurnStateRuntime(ctx context.Context, obj *ent.Channel) (*biz.CodexTurnStateRuntime, error)
 }
 type ChannelHealthProbeHistoryPageResolver interface {
 	Items(ctx context.Context, obj *biz.ChannelHealthProbeHistoryPage) ([]*ActiveChannelHealthProbeRun, error)
@@ -3888,6 +3930,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Channel.ChannelProbes(childComplexity), true
+	case "Channel.codexTurnStateRuntime":
+		if e.complexity.Channel.CodexTurnStateRuntime == nil {
+			break
+		}
+
+		return e.complexity.Channel.CodexTurnStateRuntime(childComplexity), true
 	case "Channel.createdAt":
 		if e.complexity.Channel.CreatedAt == nil {
 			break
@@ -5158,6 +5206,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.BodyOverrideOperations(childComplexity), true
+	case "ChannelSettings.codexTurnState":
+		if e.complexity.ChannelSettings.CodexTurnState == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.CodexTurnState(childComplexity), true
 	case "ChannelSettings.extraModelPrefix":
 		if e.complexity.ChannelSettings.ExtraModelPrefix == nil {
 			break
@@ -5411,6 +5465,172 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ClearChannelOverrideTemplatesPayload.Updated(childComplexity), true
+
+	case "CodexTurnStateEvent.at":
+		if e.complexity.CodexTurnStateEvent.At == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateEvent.At(childComplexity), true
+	case "CodexTurnStateEvent.durationMs":
+		if e.complexity.CodexTurnStateEvent.DurationMs == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateEvent.DurationMs(childComplexity), true
+	case "CodexTurnStateEvent.kind":
+		if e.complexity.CodexTurnStateEvent.Kind == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateEvent.Kind(childComplexity), true
+	case "CodexTurnStateEvent.model":
+		if e.complexity.CodexTurnStateEvent.Model == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateEvent.Model(childComplexity), true
+	case "CodexTurnStateEvent.reason":
+		if e.complexity.CodexTurnStateEvent.Reason == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateEvent.Reason(childComplexity), true
+	case "CodexTurnStateEvent.stateBytes":
+		if e.complexity.CodexTurnStateEvent.StateBytes == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateEvent.StateBytes(childComplexity), true
+	case "CodexTurnStateEvent.statusCode":
+		if e.complexity.CodexTurnStateEvent.StatusCode == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateEvent.StatusCode(childComplexity), true
+
+	case "CodexTurnStateModelStatus.attempts":
+		if e.complexity.CodexTurnStateModelStatus.Attempts == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateModelStatus.Attempts(childComplexity), true
+	case "CodexTurnStateModelStatus.cooldownUntil":
+		if e.complexity.CodexTurnStateModelStatus.CooldownUntil == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateModelStatus.CooldownUntil(childComplexity), true
+	case "CodexTurnStateModelStatus.lastError":
+		if e.complexity.CodexTurnStateModelStatus.LastError == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateModelStatus.LastError(childComplexity), true
+	case "CodexTurnStateModelStatus.model":
+		if e.complexity.CodexTurnStateModelStatus.Model == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateModelStatus.Model(childComplexity), true
+	case "CodexTurnStateModelStatus.phase":
+		if e.complexity.CodexTurnStateModelStatus.Phase == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateModelStatus.Phase(childComplexity), true
+	case "CodexTurnStateModelStatus.stateBytes":
+		if e.complexity.CodexTurnStateModelStatus.StateBytes == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateModelStatus.StateBytes(childComplexity), true
+	case "CodexTurnStateModelStatus.ticketExpiresAt":
+		if e.complexity.CodexTurnStateModelStatus.TicketExpiresAt == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateModelStatus.TicketExpiresAt(childComplexity), true
+
+	case "CodexTurnStateRuntime.enabled":
+		if e.complexity.CodexTurnStateRuntime.Enabled == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateRuntime.Enabled(childComplexity), true
+	case "CodexTurnStateRuntime.models":
+		if e.complexity.CodexTurnStateRuntime.Models == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateRuntime.Models(childComplexity), true
+	case "CodexTurnStateRuntime.phase":
+		if e.complexity.CodexTurnStateRuntime.Phase == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateRuntime.Phase(childComplexity), true
+	case "CodexTurnStateRuntime.recentEvents":
+		if e.complexity.CodexTurnStateRuntime.RecentEvents == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateRuntime.RecentEvents(childComplexity), true
+
+	case "CodexTurnStateSettings.cooldownSeconds":
+		if e.complexity.CodexTurnStateSettings.CooldownSeconds == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.CooldownSeconds(childComplexity), true
+	case "CodexTurnStateSettings.enabled":
+		if e.complexity.CodexTurnStateSettings.Enabled == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Enabled(childComplexity), true
+	case "CodexTurnStateSettings.harvestProxyURL":
+		if e.complexity.CodexTurnStateSettings.HarvestProxyURL == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.HarvestProxyURL(childComplexity), true
+	case "CodexTurnStateSettings.maxAttempts":
+		if e.complexity.CodexTurnStateSettings.MaxAttempts == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.MaxAttempts(childComplexity), true
+	case "CodexTurnStateSettings.models":
+		if e.complexity.CodexTurnStateSettings.Models == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Models(childComplexity), true
+	case "CodexTurnStateSettings.plan":
+		if e.complexity.CodexTurnStateSettings.Plan == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Plan(childComplexity), true
+	case "CodexTurnStateSettings.refreshBeforeMinutes":
+		if e.complexity.CodexTurnStateSettings.RefreshBeforeMinutes == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.RefreshBeforeMinutes(childComplexity), true
+	case "CodexTurnStateSettings.strict":
+		if e.complexity.CodexTurnStateSettings.Strict == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.Strict(childComplexity), true
+	case "CodexTurnStateSettings.ttlMinutes":
+		if e.complexity.CodexTurnStateSettings.TTLMinutes == nil {
+			break
+		}
+
+		return e.complexity.CodexTurnStateSettings.TTLMinutes(childComplexity), true
 
 	case "CommandCodeQuotaSettings.authCookie":
 		if e.complexity.CommandCodeQuotaSettings.AuthCookie == nil {
@@ -12772,6 +12992,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCleanupOptionInput,
 		ec.unmarshalInputClearCacheInput,
 		ec.unmarshalInputClearChannelOverrideTemplatesInput,
+		ec.unmarshalInputCodexTurnStateSettingsInput,
 		ec.unmarshalInputCommandCodeQuotaSettingsInput,
 		ec.unmarshalInputCompleteAutoDisableChannelOnboardingInput,
 		ec.unmarshalInputCompleteOnboardingInput,
@@ -17571,6 +17792,8 @@ func (ec *executionContext) fieldContext_APIKeyChannelCallerAccess_channel(_ con
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -20907,6 +21130,8 @@ func (ec *executionContext) fieldContext_ApplyChannelOverrideTemplatePayload_cha
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -21929,6 +22154,8 @@ func (ec *executionContext) fieldContext_BulkImportChannelsResult_channels(_ con
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -22088,6 +22315,8 @@ func (ec *executionContext) fieldContext_BulkUpdateChannelAutoDisablePayload_cha
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -22247,6 +22476,8 @@ func (ec *executionContext) fieldContext_BulkUpdateChannelOrderingResult_channel
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -22819,6 +23050,8 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_healthProbe(ctx, field)
 			case "quotaRoutingMode":
 				return ec.fieldContext_ChannelSettings_quotaRoutingMode(ctx, field)
+			case "codexTurnState":
+				return ec.fieldContext_ChannelSettings_codexTurnState(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelSettings", field.Name)
 		},
@@ -23581,6 +23814,45 @@ func (ec *executionContext) fieldContext_Channel_liveLimiterStats(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Channel_codexTurnStateRuntime(ctx context.Context, field graphql.CollectedField, obj *ent.Channel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Channel_codexTurnStateRuntime,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Channel().CodexTurnStateRuntime(ctx, obj)
+		},
+		nil,
+		ec.marshalOCodexTurnStateRuntime2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateRuntime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Channel_codexTurnStateRuntime(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Channel",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_CodexTurnStateRuntime_enabled(ctx, field)
+			case "phase":
+				return ec.fieldContext_CodexTurnStateRuntime_phase(ctx, field)
+			case "models":
+				return ec.fieldContext_CodexTurnStateRuntime_models(ctx, field)
+			case "recentEvents":
+				return ec.fieldContext_CodexTurnStateRuntime_recentEvents(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexTurnStateRuntime", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelCallerAPIKeySummary_id(ctx context.Context, field graphql.CollectedField, obj *biz.ChannelCallerAPIKeySummary) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23849,6 +24121,8 @@ func (ec *executionContext) fieldContext_ChannelCallerAccessPolicy_channel(_ con
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -24263,6 +24537,8 @@ func (ec *executionContext) fieldContext_ChannelEdge_node(_ context.Context, fie
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -25984,6 +26260,8 @@ func (ec *executionContext) fieldContext_ChannelHealthProbeRun_channel(_ context
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -26808,6 +27086,8 @@ func (ec *executionContext) fieldContext_ChannelModelPrice_channel(_ context.Con
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -28774,6 +29054,8 @@ func (ec *executionContext) fieldContext_ChannelProbe_channel(_ context.Context,
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -30196,6 +30478,55 @@ func (ec *executionContext) fieldContext_ChannelSettings_quotaRoutingMode(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelSettings_codexTurnState(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_codexTurnState,
+		func(ctx context.Context) (any, error) {
+			return obj.CodexTurnState, nil
+		},
+		nil,
+		ec.marshalOCodexTurnStateSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_codexTurnState(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_CodexTurnStateSettings_enabled(ctx, field)
+			case "plan":
+				return ec.fieldContext_CodexTurnStateSettings_plan(ctx, field)
+			case "models":
+				return ec.fieldContext_CodexTurnStateSettings_models(ctx, field)
+			case "harvestProxyURL":
+				return ec.fieldContext_CodexTurnStateSettings_harvestProxyURL(ctx, field)
+			case "ttlMinutes":
+				return ec.fieldContext_CodexTurnStateSettings_ttlMinutes(ctx, field)
+			case "refreshBeforeMinutes":
+				return ec.fieldContext_CodexTurnStateSettings_refreshBeforeMinutes(ctx, field)
+			case "maxAttempts":
+				return ec.fieldContext_CodexTurnStateSettings_maxAttempts(ctx, field)
+			case "cooldownSeconds":
+				return ec.fieldContext_CodexTurnStateSettings_cooldownSeconds(ctx, field)
+			case "strict":
+				return ec.fieldContext_CodexTurnStateSettings_strict(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexTurnStateSettings", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelSuccessRate_channelId(ctx context.Context, field graphql.CollectedField, obj *ChannelSuccessRate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30928,8 +31259,825 @@ func (ec *executionContext) fieldContext_ClearChannelOverrideTemplatesPayload_ch
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateEvent_at(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateEvent_at,
+		func(ctx context.Context) (any, error) {
+			return obj.At, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateEvent_at(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateEvent_model(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateEvent_model,
+		func(ctx context.Context) (any, error) {
+			return obj.Model, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateEvent_model(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateEvent_kind(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateEvent_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateEvent_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateEvent_reason(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateEvent_reason,
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateEvent_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateEvent_statusCode(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateEvent_statusCode,
+		func(ctx context.Context) (any, error) {
+			return obj.StatusCode, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateEvent_statusCode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateEvent_durationMs(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateEvent_durationMs,
+		func(ctx context.Context) (any, error) {
+			return obj.DurationMs, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateEvent_durationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateEvent_stateBytes(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateEvent_stateBytes,
+		func(ctx context.Context) (any, error) {
+			return obj.StateBytes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateEvent_stateBytes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateModelStatus_model(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateModelStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateModelStatus_model,
+		func(ctx context.Context) (any, error) {
+			return obj.Model, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateModelStatus_model(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateModelStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateModelStatus_phase(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateModelStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateModelStatus_phase,
+		func(ctx context.Context) (any, error) {
+			return obj.Phase, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateModelStatus_phase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateModelStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateModelStatus_lastError(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateModelStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateModelStatus_lastError,
+		func(ctx context.Context) (any, error) {
+			return obj.LastError, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateModelStatus_lastError(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateModelStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateModelStatus_attempts(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateModelStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateModelStatus_attempts,
+		func(ctx context.Context) (any, error) {
+			return obj.Attempts, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateModelStatus_attempts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateModelStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateModelStatus_cooldownUntil(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateModelStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateModelStatus_cooldownUntil,
+		func(ctx context.Context) (any, error) {
+			return obj.CooldownUntil, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateModelStatus_cooldownUntil(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateModelStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateModelStatus_ticketExpiresAt(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateModelStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateModelStatus_ticketExpiresAt,
+		func(ctx context.Context) (any, error) {
+			return obj.TicketExpiresAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateModelStatus_ticketExpiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateModelStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateModelStatus_stateBytes(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateModelStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateModelStatus_stateBytes,
+		func(ctx context.Context) (any, error) {
+			return obj.StateBytes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateModelStatus_stateBytes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateModelStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateRuntime_enabled(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateRuntime) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateRuntime_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateRuntime_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateRuntime",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateRuntime_phase(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateRuntime) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateRuntime_phase,
+		func(ctx context.Context) (any, error) {
+			return obj.Phase, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateRuntime_phase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateRuntime",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateRuntime_models(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateRuntime) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateRuntime_models,
+		func(ctx context.Context) (any, error) {
+			return obj.Models, nil
+		},
+		nil,
+		ec.marshalNCodexTurnStateModelStatus2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateModelStatusᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateRuntime_models(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateRuntime",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "model":
+				return ec.fieldContext_CodexTurnStateModelStatus_model(ctx, field)
+			case "phase":
+				return ec.fieldContext_CodexTurnStateModelStatus_phase(ctx, field)
+			case "lastError":
+				return ec.fieldContext_CodexTurnStateModelStatus_lastError(ctx, field)
+			case "attempts":
+				return ec.fieldContext_CodexTurnStateModelStatus_attempts(ctx, field)
+			case "cooldownUntil":
+				return ec.fieldContext_CodexTurnStateModelStatus_cooldownUntil(ctx, field)
+			case "ticketExpiresAt":
+				return ec.fieldContext_CodexTurnStateModelStatus_ticketExpiresAt(ctx, field)
+			case "stateBytes":
+				return ec.fieldContext_CodexTurnStateModelStatus_stateBytes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexTurnStateModelStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateRuntime_recentEvents(ctx context.Context, field graphql.CollectedField, obj *biz.CodexTurnStateRuntime) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateRuntime_recentEvents,
+		func(ctx context.Context) (any, error) {
+			return obj.RecentEvents, nil
+		},
+		nil,
+		ec.marshalNCodexTurnStateEvent2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateEventᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateRuntime_recentEvents(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateRuntime",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "at":
+				return ec.fieldContext_CodexTurnStateEvent_at(ctx, field)
+			case "model":
+				return ec.fieldContext_CodexTurnStateEvent_model(ctx, field)
+			case "kind":
+				return ec.fieldContext_CodexTurnStateEvent_kind(ctx, field)
+			case "reason":
+				return ec.fieldContext_CodexTurnStateEvent_reason(ctx, field)
+			case "statusCode":
+				return ec.fieldContext_CodexTurnStateEvent_statusCode(ctx, field)
+			case "durationMs":
+				return ec.fieldContext_CodexTurnStateEvent_durationMs(ctx, field)
+			case "stateBytes":
+				return ec.fieldContext_CodexTurnStateEvent_stateBytes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexTurnStateEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_enabled(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_plan(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_plan,
+		func(ctx context.Context) (any, error) {
+			return obj.Plan, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_plan(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_models(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_models,
+		func(ctx context.Context) (any, error) {
+			return obj.Models, nil
+		},
+		nil,
+		ec.marshalOString2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_models(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_harvestProxyURL(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_harvestProxyURL,
+		func(ctx context.Context) (any, error) {
+			return obj.HarvestProxyURL, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_harvestProxyURL(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_ttlMinutes(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_ttlMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.TTLMinutes, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_ttlMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_refreshBeforeMinutes(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_refreshBeforeMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshBeforeMinutes, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_refreshBeforeMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_maxAttempts(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_maxAttempts,
+		func(ctx context.Context) (any, error) {
+			return obj.MaxAttempts, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_maxAttempts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_cooldownSeconds(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_cooldownSeconds,
+		func(ctx context.Context) (any, error) {
+			return obj.CooldownSeconds, nil
+		},
+		nil,
+		ec.marshalOInt2int,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_cooldownSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexTurnStateSettings_strict(ctx context.Context, field graphql.CollectedField, obj *objects.CodexTurnStateSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexTurnStateSettings_strict,
+		func(ctx context.Context) (any, error) {
+			return obj.Strict, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexTurnStateSettings_strict(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexTurnStateSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -35564,6 +36712,8 @@ func (ec *executionContext) fieldContext_ModelChannelConnection_channel(_ contex
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -36824,6 +37974,8 @@ func (ec *executionContext) fieldContext_Mutation_createChannel(ctx context.Cont
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -36937,6 +38089,8 @@ func (ec *executionContext) fieldContext_Mutation_duplicateChannel(ctx context.C
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -37050,6 +38204,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateChannels(ctx context
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -37163,6 +38319,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannel(ctx context.Cont
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -37276,6 +38434,8 @@ func (ec *executionContext) fieldContext_Mutation_saveChannelEndpoints(ctx conte
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -37389,6 +38549,8 @@ func (ec *executionContext) fieldContext_Mutation_updateChannelStatus(ctx contex
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -48773,6 +49935,8 @@ func (ec *executionContext) fieldContext_ProviderQuotaStatus_channel(_ context.C
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -50167,6 +51331,8 @@ func (ec *executionContext) fieldContext_Query_allChannelSummarys(ctx context.Co
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -54773,6 +55939,8 @@ func (ec *executionContext) fieldContext_Request_channel(_ context.Context, fiel
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -56065,6 +57233,8 @@ func (ec *executionContext) fieldContext_RequestExecution_channel(_ context.Cont
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -64003,6 +65173,8 @@ func (ec *executionContext) fieldContext_UnassociatedChannel_channel(_ context.C
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -65119,6 +66291,8 @@ func (ec *executionContext) fieldContext_UsageLog_channel(_ context.Context, fie
 				return ec.fieldContext_Channel_disabledAPIKeys(ctx, field)
 			case "liveLimiterStats":
 				return ec.fieldContext_Channel_liveLimiterStats(ctx, field)
+			case "codexTurnStateRuntime":
+				return ec.fieldContext_Channel_codexTurnStateRuntime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Channel", field.Name)
 		},
@@ -75907,7 +77081,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "providerQuota", "healthProbe", "quotaRoutingMode"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "providerQuota", "healthProbe", "quotaRoutingMode", "codexTurnState"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -76054,6 +77228,13 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.QuotaRoutingMode = data
+		case "codexTurnState":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexTurnState"))
+			data, err := ec.unmarshalOCodexTurnStateSettingsInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CodexTurnState = data
 		}
 	}
 
@@ -77536,6 +78717,89 @@ func (ec *executionContext) unmarshalInputClearChannelOverrideTemplatesInput(ctx
 				return it, err
 			}
 			it.ChannelIDs = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCodexTurnStateSettingsInput(ctx context.Context, obj any) (objects.CodexTurnStateSettings, error) {
+	var it objects.CodexTurnStateSettings
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"enabled", "plan", "models", "harvestProxyURL", "ttlMinutes", "refreshBeforeMinutes", "maxAttempts", "cooldownSeconds", "strict"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "plan":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("plan"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Plan = data
+		case "models":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("models"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Models = data
+		case "harvestProxyURL":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("harvestProxyURL"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HarvestProxyURL = data
+		case "ttlMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ttlMinutes"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TTLMinutes = data
+		case "refreshBeforeMinutes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("refreshBeforeMinutes"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RefreshBeforeMinutes = data
+		case "maxAttempts":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxAttempts"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaxAttempts = data
+		case "cooldownSeconds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cooldownSeconds"))
+			data, err := ec.unmarshalOInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CooldownSeconds = data
+		case "strict":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("strict"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Strict = data
 		}
 	}
 
@@ -101203,6 +102467,39 @@ func (ec *executionContext) _Channel(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "codexTurnStateRuntime":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Channel_codexTurnStateRuntime(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -104019,6 +105316,8 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_healthProbe(ctx, field, obj)
 		case "quotaRoutingMode":
 			out.Values[i] = ec._ChannelSettings_quotaRoutingMode(ctx, field, obj)
+		case "codexTurnState":
+			out.Values[i] = ec._ChannelSettings_codexTurnState(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -104372,6 +105671,241 @@ func (ec *executionContext) _ClearChannelOverrideTemplatesPayload(ctx context.Co
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var codexTurnStateEventImplementors = []string{"CodexTurnStateEvent"}
+
+func (ec *executionContext) _CodexTurnStateEvent(ctx context.Context, sel ast.SelectionSet, obj *biz.CodexTurnStateEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexTurnStateEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexTurnStateEvent")
+		case "at":
+			out.Values[i] = ec._CodexTurnStateEvent_at(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "model":
+			out.Values[i] = ec._CodexTurnStateEvent_model(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._CodexTurnStateEvent_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._CodexTurnStateEvent_reason(ctx, field, obj)
+		case "statusCode":
+			out.Values[i] = ec._CodexTurnStateEvent_statusCode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "durationMs":
+			out.Values[i] = ec._CodexTurnStateEvent_durationMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stateBytes":
+			out.Values[i] = ec._CodexTurnStateEvent_stateBytes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var codexTurnStateModelStatusImplementors = []string{"CodexTurnStateModelStatus"}
+
+func (ec *executionContext) _CodexTurnStateModelStatus(ctx context.Context, sel ast.SelectionSet, obj *biz.CodexTurnStateModelStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexTurnStateModelStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexTurnStateModelStatus")
+		case "model":
+			out.Values[i] = ec._CodexTurnStateModelStatus_model(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "phase":
+			out.Values[i] = ec._CodexTurnStateModelStatus_phase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastError":
+			out.Values[i] = ec._CodexTurnStateModelStatus_lastError(ctx, field, obj)
+		case "attempts":
+			out.Values[i] = ec._CodexTurnStateModelStatus_attempts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cooldownUntil":
+			out.Values[i] = ec._CodexTurnStateModelStatus_cooldownUntil(ctx, field, obj)
+		case "ticketExpiresAt":
+			out.Values[i] = ec._CodexTurnStateModelStatus_ticketExpiresAt(ctx, field, obj)
+		case "stateBytes":
+			out.Values[i] = ec._CodexTurnStateModelStatus_stateBytes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var codexTurnStateRuntimeImplementors = []string{"CodexTurnStateRuntime"}
+
+func (ec *executionContext) _CodexTurnStateRuntime(ctx context.Context, sel ast.SelectionSet, obj *biz.CodexTurnStateRuntime) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexTurnStateRuntimeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexTurnStateRuntime")
+		case "enabled":
+			out.Values[i] = ec._CodexTurnStateRuntime_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "phase":
+			out.Values[i] = ec._CodexTurnStateRuntime_phase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "models":
+			out.Values[i] = ec._CodexTurnStateRuntime_models(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "recentEvents":
+			out.Values[i] = ec._CodexTurnStateRuntime_recentEvents(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var codexTurnStateSettingsImplementors = []string{"CodexTurnStateSettings"}
+
+func (ec *executionContext) _CodexTurnStateSettings(ctx context.Context, sel ast.SelectionSet, obj *objects.CodexTurnStateSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexTurnStateSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexTurnStateSettings")
+		case "enabled":
+			out.Values[i] = ec._CodexTurnStateSettings_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "plan":
+			out.Values[i] = ec._CodexTurnStateSettings_plan(ctx, field, obj)
+		case "models":
+			out.Values[i] = ec._CodexTurnStateSettings_models(ctx, field, obj)
+		case "harvestProxyURL":
+			out.Values[i] = ec._CodexTurnStateSettings_harvestProxyURL(ctx, field, obj)
+		case "ttlMinutes":
+			out.Values[i] = ec._CodexTurnStateSettings_ttlMinutes(ctx, field, obj)
+		case "refreshBeforeMinutes":
+			out.Values[i] = ec._CodexTurnStateSettings_refreshBeforeMinutes(ctx, field, obj)
+		case "maxAttempts":
+			out.Values[i] = ec._CodexTurnStateSettings_maxAttempts(ctx, field, obj)
+		case "cooldownSeconds":
+			out.Values[i] = ec._CodexTurnStateSettings_cooldownSeconds(ctx, field, obj)
+		case "strict":
+			out.Values[i] = ec._CodexTurnStateSettings_strict(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -122422,6 +123956,114 @@ func (ec *executionContext) marshalNClearChannelOverrideTemplatesPayload2ᚖgith
 	return ec._ClearChannelOverrideTemplatesPayload(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNCodexTurnStateEvent2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*biz.CodexTurnStateEvent) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNCodexTurnStateEvent2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateEvent(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCodexTurnStateEvent2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateEvent(ctx context.Context, sel ast.SelectionSet, v *biz.CodexTurnStateEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CodexTurnStateEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNCodexTurnStateModelStatus2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateModelStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []*biz.CodexTurnStateModelStatus) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNCodexTurnStateModelStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateModelStatus(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCodexTurnStateModelStatus2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateModelStatus(ctx context.Context, sel ast.SelectionSet, v *biz.CodexTurnStateModelStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CodexTurnStateModelStatus(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNCompleteAutoDisableChannelOnboardingInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐCompleteAutoDisableChannelOnboardingInput(ctx context.Context, v any) (CompleteAutoDisableChannelOnboardingInput, error) {
 	res, err := ec.unmarshalInputCompleteAutoDisableChannelOnboardingInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -129306,6 +130948,28 @@ func (ec *executionContext) unmarshalOCleanupOptionInput2ᚕgithubᚗcomᚋloopl
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) marshalOCodexTurnStateRuntime2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐCodexTurnStateRuntime(ctx context.Context, sel ast.SelectionSet, v *biz.CodexTurnStateRuntime) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._CodexTurnStateRuntime(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOCodexTurnStateSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings(ctx context.Context, sel ast.SelectionSet, v *objects.CodexTurnStateSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._CodexTurnStateSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOCodexTurnStateSettingsInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCodexTurnStateSettings(ctx context.Context, v any) (*objects.CodexTurnStateSettings, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputCodexTurnStateSettingsInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalOCommandCodeQuotaSettings2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐCommandCodeQuotaSettings(ctx context.Context, sel ast.SelectionSet, v *objects.CommandCodeQuotaSettings) graphql.Marshaler {

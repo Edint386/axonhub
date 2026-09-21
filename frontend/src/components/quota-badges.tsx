@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Zap, Battery, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getChannelQuotaRoutingIndicator } from '@/features/channels/utils/quota-routing-status';
+import { CodexTurnStateIndicator } from '@/features/channels/components/codex-turn-state-indicator';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -655,6 +656,9 @@ function QuotaRow({ channel, effectiveMode }: { channel: ProviderQuotaChannel; e
             className={`h-4 w-4 ${status === 'exhausted' ? 'text-red-500' : status === 'warning' ? 'text-yellow-500' : 'text-muted-foreground'}`}
           />
           <span className='text-foreground font-medium'>{channel.name}</span>
+          {channel.type === 'codex' && channel.codexTurnStateRuntime?.phase ? (
+            <CodexTurnStateIndicator phase={channel.codexTurnStateRuntime.phase} compact />
+          ) : null}
         </div>
         <div className='flex items-center gap-1.5'>
           <Badge

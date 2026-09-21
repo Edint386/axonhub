@@ -131,6 +131,7 @@ export function mergeChannelSettingsForUpdate(
     providerQuota: pick('providerQuota', existing?.providerQuota ?? null),
     healthProbe: pick('healthProbe', existing?.healthProbe ?? null),
     quotaRoutingMode: pick('quotaRoutingMode', existing?.quotaRoutingMode ?? undefined),
+    codexTurnState: pick('codexTurnState', existing?.codexTurnState ?? null),
   };
 }
 

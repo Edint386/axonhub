@@ -42,6 +42,8 @@ import {
   channelQuotaUsageSchema,
   TestAPIKeyResult,
   testAPIKeyResultSchema,
+  CodexTurnStateRuntime,
+  codexTurnStateRuntimeSchema,
 } from './schema';
 
 const QUERY_CHANNEL_NAMES_QUERY = `
@@ -196,6 +198,17 @@ const CREATE_CHANNEL_MUTATION = `
             authCookie
           }
         }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
+        }
       }
       orderingWeight
       priority
@@ -292,6 +305,17 @@ const DUPLICATE_CHANNEL_MUTATION = `
           ollama {
             authCookie
           }
+        }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
         }
       }
       orderingWeight
@@ -390,6 +414,17 @@ const BULK_CREATE_CHANNELS_MUTATION = `
             authCookie
           }
         }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
+        }
       }
       orderingWeight
       priority
@@ -486,6 +521,17 @@ const UPDATE_CHANNEL_MUTATION = `
           ollama {
             authCookie
           }
+        }
+        codexTurnState {
+          enabled
+          plan
+          models
+          harvestProxyURL
+          ttlMinutes
+          refreshBeforeMinutes
+          maxAttempts
+          cooldownSeconds
+          strict
         }
       }
       orderingWeight
@@ -707,6 +753,17 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             ollama {
               authCookie
             }
+          }
+          codexTurnState {
+            enabled
+            plan
+            models
+            harvestProxyURL
+            ttlMinutes
+            refreshBeforeMinutes
+            maxAttempts
+            cooldownSeconds
+            strict
           }
         }
       }
@@ -952,6 +1009,17 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             ollama {
               authCookie
             }
+          }
+          codexTurnState {
+            enabled
+            plan
+            models
+            harvestProxyURL
+            ttlMinutes
+            refreshBeforeMinutes
+            maxAttempts
+            cooldownSeconds
+            strict
           }
         }
       }
@@ -1212,6 +1280,17 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
                 authCookie
               }
             }
+            codexTurnState {
+              enabled
+              plan
+              models
+              harvestProxyURL
+              ttlMinutes
+              refreshBeforeMinutes
+              maxAttempts
+              cooldownSeconds
+              strict
+            }
           }
           orderingWeight
           priority
@@ -1369,6 +1448,55 @@ ${nodeSelection}
 
 // Retain a full-field document for callers that do not have column state yet.
 const QUERY_CHANNELS_QUERY = buildQueryChannelsQuery(undefined, { full: true });
+
+const CHANNEL_CODEX_TURN_STATE_RUNTIME_QUERY = `
+  query ChannelCodexTurnStateRuntime($id: ID!) {
+    node(id: $id) {
+      ... on Channel {
+        id
+        codexTurnStateRuntime {
+          enabled
+          phase
+          models {
+            model
+            phase
+            lastError
+            attempts
+            cooldownUntil
+            ticketExpiresAt
+            stateBytes
+          }
+          recentEvents {
+            at
+            model
+            kind
+            reason
+            statusCode
+            durationMs
+            stateBytes
+          }
+        }
+      }
+    }
+  }
+`;
+
+export function useCodexTurnStateRuntime(channelID: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['codexTurnStateRuntime', channelID],
+    queryFn: async () => {
+      const data = await graphqlRequest<{ node: { codexTurnStateRuntime?: CodexTurnStateRuntime | null } | null }>(
+        CHANNEL_CODEX_TURN_STATE_RUNTIME_QUERY,
+        { id: channelID }
+      );
+      const runtime = data.node?.codexTurnStateRuntime ?? null;
+      return runtime ? codexTurnStateRuntimeSchema.parse(runtime) : null;
+    },
+    enabled: enabled && !!channelID,
+    refetchInterval: enabled ? 4000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
 
 const CHANNEL_QUOTA_USAGE_QUERY = `
   query ChannelQuotaUsage($channelID: ID!) {
