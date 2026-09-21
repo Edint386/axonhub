@@ -1341,6 +1341,7 @@ const CHANNEL_QUERY_LIST_NODE_BASE_SELECTION = `
           status
           defaultTestModel
           errorMessage
+          priority
           disabledAPIKeys {
             key
             disabledAt
@@ -1895,10 +1896,16 @@ export function useUpdateChannelSettings() {
     mutationFn: ({ id, patch, input }: UpdateChannelSettingsMutationInput) =>
       enqueueChannelSettingsUpdate(id, async () => {
         const latest = await fetchLatestChannel(id);
-        return updateChannelRequest(id, {
+        const nextInput = {
           ...input,
           settings: mergeChannelSettingsForUpdate(latest.settings, patch),
-        });
+        };
+        // A list-row form that never selected `priority` used to send 0 and
+        // wipe the stored value. Omit the field unless the caller set it.
+        if (input?.priority === undefined) {
+          delete nextInput.priority;
+        }
+        return updateChannelRequest(id, nextInput);
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['channels'] });

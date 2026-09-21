@@ -1455,6 +1455,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           ...(isOAuthChannel ? { type: currentRow.type } : {}),
         } as z.infer<typeof updateChannelInputSchema>;
         delete updateInput.settings;
+        if (!form.formState.dirtyFields.priority) {
+          delete updateInput.priority;
+        }
 
         const finalChannelType = updateInput.type || currentRow.type;
         const keepsManagementApiKey = [
