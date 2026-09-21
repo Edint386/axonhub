@@ -18743,6 +18743,8 @@ type RequestMutation struct {
 	appendrequest_headers             objects.JSONRawMessage
 	request_body                      *objects.JSONRawMessage
 	appendrequest_body                objects.JSONRawMessage
+	response_headers                  *objects.JSONRawMessage
+	appendresponse_headers            objects.JSONRawMessage
 	response_body                     *objects.JSONRawMessage
 	appendresponse_body               objects.JSONRawMessage
 	response_chunks                   *[]objects.JSONRawMessage
@@ -19409,6 +19411,71 @@ func (m *RequestMutation) AppendedRequestBody() (objects.JSONRawMessage, bool) {
 func (m *RequestMutation) ResetRequestBody() {
 	m.request_body = nil
 	m.appendrequest_body = nil
+}
+
+// SetResponseHeaders sets the "response_headers" field.
+func (m *RequestMutation) SetResponseHeaders(orm objects.JSONRawMessage) {
+	m.response_headers = &orm
+	m.appendresponse_headers = nil
+}
+
+// ResponseHeaders returns the value of the "response_headers" field in the mutation.
+func (m *RequestMutation) ResponseHeaders() (r objects.JSONRawMessage, exists bool) {
+	v := m.response_headers
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseHeaders returns the old "response_headers" field's value of the Request entity.
+// If the Request object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestMutation) OldResponseHeaders(ctx context.Context) (v objects.JSONRawMessage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseHeaders is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseHeaders requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseHeaders: %w", err)
+	}
+	return oldValue.ResponseHeaders, nil
+}
+
+// AppendResponseHeaders adds orm to the "response_headers" field.
+func (m *RequestMutation) AppendResponseHeaders(orm objects.JSONRawMessage) {
+	m.appendresponse_headers = append(m.appendresponse_headers, orm...)
+}
+
+// AppendedResponseHeaders returns the list of values that were appended to the "response_headers" field in this mutation.
+func (m *RequestMutation) AppendedResponseHeaders() (objects.JSONRawMessage, bool) {
+	if len(m.appendresponse_headers) == 0 {
+		return nil, false
+	}
+	return m.appendresponse_headers, true
+}
+
+// ClearResponseHeaders clears the value of the "response_headers" field.
+func (m *RequestMutation) ClearResponseHeaders() {
+	m.response_headers = nil
+	m.appendresponse_headers = nil
+	m.clearedFields[request.FieldResponseHeaders] = struct{}{}
+}
+
+// ResponseHeadersCleared returns if the "response_headers" field was cleared in this mutation.
+func (m *RequestMutation) ResponseHeadersCleared() bool {
+	_, ok := m.clearedFields[request.FieldResponseHeaders]
+	return ok
+}
+
+// ResetResponseHeaders resets all changes to the "response_headers" field.
+func (m *RequestMutation) ResetResponseHeaders() {
+	m.response_headers = nil
+	m.appendresponse_headers = nil
+	delete(m.clearedFields, request.FieldResponseHeaders)
 }
 
 // SetResponseBody sets the "response_body" field.
@@ -20474,7 +20541,7 @@ func (m *RequestMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestMutation) Fields() []string {
-	fields := make([]string, 0, 27)
+	fields := make([]string, 0, 28)
 	if m.created_at != nil {
 		fields = append(fields, request.FieldCreatedAt)
 	}
@@ -20510,6 +20577,9 @@ func (m *RequestMutation) Fields() []string {
 	}
 	if m.request_body != nil {
 		fields = append(fields, request.FieldRequestBody)
+	}
+	if m.response_headers != nil {
+		fields = append(fields, request.FieldResponseHeaders)
 	}
 	if m.response_body != nil {
 		fields = append(fields, request.FieldResponseBody)
@@ -20588,6 +20658,8 @@ func (m *RequestMutation) Field(name string) (ent.Value, bool) {
 		return m.RequestHeaders()
 	case request.FieldRequestBody:
 		return m.RequestBody()
+	case request.FieldResponseHeaders:
+		return m.ResponseHeaders()
 	case request.FieldResponseBody:
 		return m.ResponseBody()
 	case request.FieldResponseChunks:
@@ -20651,6 +20723,8 @@ func (m *RequestMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldRequestHeaders(ctx)
 	case request.FieldRequestBody:
 		return m.OldRequestBody(ctx)
+	case request.FieldResponseHeaders:
+		return m.OldResponseHeaders(ctx)
 	case request.FieldResponseBody:
 		return m.OldResponseBody(ctx)
 	case request.FieldResponseChunks:
@@ -20773,6 +20847,13 @@ func (m *RequestMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRequestBody(v)
+		return nil
+	case request.FieldResponseHeaders:
+		v, ok := value.(objects.JSONRawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseHeaders(v)
 		return nil
 	case request.FieldResponseBody:
 		v, ok := value.(objects.JSONRawMessage)
@@ -20975,6 +21056,9 @@ func (m *RequestMutation) ClearedFields() []string {
 	if m.FieldCleared(request.FieldRequestHeaders) {
 		fields = append(fields, request.FieldRequestHeaders)
 	}
+	if m.FieldCleared(request.FieldResponseHeaders) {
+		fields = append(fields, request.FieldResponseHeaders)
+	}
 	if m.FieldCleared(request.FieldResponseBody) {
 		fields = append(fields, request.FieldResponseBody)
 	}
@@ -21033,6 +21117,9 @@ func (m *RequestMutation) ClearField(name string) error {
 		return nil
 	case request.FieldRequestHeaders:
 		m.ClearRequestHeaders()
+		return nil
+	case request.FieldResponseHeaders:
+		m.ClearResponseHeaders()
 		return nil
 	case request.FieldResponseBody:
 		m.ClearResponseBody()
@@ -21107,6 +21194,9 @@ func (m *RequestMutation) ResetField(name string) error {
 		return nil
 	case request.FieldRequestBody:
 		m.ResetRequestBody()
+		return nil
+	case request.FieldResponseHeaders:
+		m.ResetResponseHeaders()
 		return nil
 	case request.FieldResponseBody:
 		m.ResetResponseBody()
@@ -21374,6 +21464,8 @@ type RequestExecutionMutation struct {
 	channel_api_key_suffix            *string
 	request_body                      *objects.JSONRawMessage
 	appendrequest_body                objects.JSONRawMessage
+	response_headers                  *objects.JSONRawMessage
+	appendresponse_headers            objects.JSONRawMessage
 	response_body                     *objects.JSONRawMessage
 	appendresponse_body               objects.JSONRawMessage
 	response_chunks                   *[]objects.JSONRawMessage
@@ -22033,6 +22125,71 @@ func (m *RequestExecutionMutation) AppendedRequestBody() (objects.JSONRawMessage
 func (m *RequestExecutionMutation) ResetRequestBody() {
 	m.request_body = nil
 	m.appendrequest_body = nil
+}
+
+// SetResponseHeaders sets the "response_headers" field.
+func (m *RequestExecutionMutation) SetResponseHeaders(orm objects.JSONRawMessage) {
+	m.response_headers = &orm
+	m.appendresponse_headers = nil
+}
+
+// ResponseHeaders returns the value of the "response_headers" field in the mutation.
+func (m *RequestExecutionMutation) ResponseHeaders() (r objects.JSONRawMessage, exists bool) {
+	v := m.response_headers
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseHeaders returns the old "response_headers" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldResponseHeaders(ctx context.Context) (v objects.JSONRawMessage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseHeaders is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseHeaders requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseHeaders: %w", err)
+	}
+	return oldValue.ResponseHeaders, nil
+}
+
+// AppendResponseHeaders adds orm to the "response_headers" field.
+func (m *RequestExecutionMutation) AppendResponseHeaders(orm objects.JSONRawMessage) {
+	m.appendresponse_headers = append(m.appendresponse_headers, orm...)
+}
+
+// AppendedResponseHeaders returns the list of values that were appended to the "response_headers" field in this mutation.
+func (m *RequestExecutionMutation) AppendedResponseHeaders() (objects.JSONRawMessage, bool) {
+	if len(m.appendresponse_headers) == 0 {
+		return nil, false
+	}
+	return m.appendresponse_headers, true
+}
+
+// ClearResponseHeaders clears the value of the "response_headers" field.
+func (m *RequestExecutionMutation) ClearResponseHeaders() {
+	m.response_headers = nil
+	m.appendresponse_headers = nil
+	m.clearedFields[requestexecution.FieldResponseHeaders] = struct{}{}
+}
+
+// ResponseHeadersCleared returns if the "response_headers" field was cleared in this mutation.
+func (m *RequestExecutionMutation) ResponseHeadersCleared() bool {
+	_, ok := m.clearedFields[requestexecution.FieldResponseHeaders]
+	return ok
+}
+
+// ResetResponseHeaders resets all changes to the "response_headers" field.
+func (m *RequestExecutionMutation) ResetResponseHeaders() {
+	m.response_headers = nil
+	m.appendresponse_headers = nil
+	delete(m.clearedFields, requestexecution.FieldResponseHeaders)
 }
 
 // SetResponseBody sets the "response_body" field.
@@ -22831,7 +22988,7 @@ func (m *RequestExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.created_at != nil {
 		fields = append(fields, requestexecution.FieldCreatedAt)
 	}
@@ -22867,6 +23024,9 @@ func (m *RequestExecutionMutation) Fields() []string {
 	}
 	if m.request_body != nil {
 		fields = append(fields, requestexecution.FieldRequestBody)
+	}
+	if m.response_headers != nil {
+		fields = append(fields, requestexecution.FieldResponseHeaders)
 	}
 	if m.response_body != nil {
 		fields = append(fields, requestexecution.FieldResponseBody)
@@ -22936,6 +23096,8 @@ func (m *RequestExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.ChannelAPIKeySuffix()
 	case requestexecution.FieldRequestBody:
 		return m.RequestBody()
+	case requestexecution.FieldResponseHeaders:
+		return m.ResponseHeaders()
 	case requestexecution.FieldResponseBody:
 		return m.ResponseBody()
 	case requestexecution.FieldResponseChunks:
@@ -22993,6 +23155,8 @@ func (m *RequestExecutionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldChannelAPIKeySuffix(ctx)
 	case requestexecution.FieldRequestBody:
 		return m.OldRequestBody(ctx)
+	case requestexecution.FieldResponseHeaders:
+		return m.OldResponseHeaders(ctx)
 	case requestexecution.FieldResponseBody:
 		return m.OldResponseBody(ctx)
 	case requestexecution.FieldResponseChunks:
@@ -23109,6 +23273,13 @@ func (m *RequestExecutionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRequestBody(v)
+		return nil
+	case requestexecution.FieldResponseHeaders:
+		v, ok := value.(objects.JSONRawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseHeaders(v)
 		return nil
 	case requestexecution.FieldResponseBody:
 		v, ok := value.(objects.JSONRawMessage)
@@ -23302,6 +23473,9 @@ func (m *RequestExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(requestexecution.FieldChannelAPIKeySuffix) {
 		fields = append(fields, requestexecution.FieldChannelAPIKeySuffix)
 	}
+	if m.FieldCleared(requestexecution.FieldResponseHeaders) {
+		fields = append(fields, requestexecution.FieldResponseHeaders)
+	}
 	if m.FieldCleared(requestexecution.FieldResponseBody) {
 		fields = append(fields, requestexecution.FieldResponseBody)
 	}
@@ -23357,6 +23531,9 @@ func (m *RequestExecutionMutation) ClearField(name string) error {
 		return nil
 	case requestexecution.FieldChannelAPIKeySuffix:
 		m.ClearChannelAPIKeySuffix()
+		return nil
+	case requestexecution.FieldResponseHeaders:
+		m.ClearResponseHeaders()
 		return nil
 	case requestexecution.FieldResponseBody:
 		m.ClearResponseBody()
@@ -23428,6 +23605,9 @@ func (m *RequestExecutionMutation) ResetField(name string) error {
 		return nil
 	case requestexecution.FieldRequestBody:
 		m.ResetRequestBody()
+		return nil
+	case requestexecution.FieldResponseHeaders:
+		m.ResetResponseHeaders()
 		return nil
 	case requestexecution.FieldResponseBody:
 		m.ResetResponseBody()
