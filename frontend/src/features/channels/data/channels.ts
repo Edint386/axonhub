@@ -44,6 +44,8 @@ import {
   testAPIKeyResultSchema,
   CodexTurnStateRuntime,
   codexTurnStateRuntimeSchema,
+  DetectedChannelEndpoint,
+  detectedChannelEndpointSchema,
 } from './schema';
 
 const QUERY_CHANNEL_NAMES_QUERY = `
@@ -642,6 +644,19 @@ const TEST_CHANNEL_MUTATION = `
   }
 `;
 
+const DETECT_CHANNEL_ENDPOINTS_MUTATION = `
+  mutation DetectChannelEndpoints($input: DetectChannelEndpointsInput!) {
+    detectChannelEndpoints(input: $input) {
+      endpoints {
+        apiFormat
+        supported
+        statusCode
+        reason
+      }
+    }
+  }
+`;
+
 const TEST_CHANNEL_API_KEYS_MUTATION = `
   mutation TestChannelAPIKeys($channelID: ID!, $modelID: String) {
     testChannelAPIKeys(channelID: $channelID, modelID: $modelID) {
@@ -1159,6 +1174,7 @@ export const DEFAULT_CHANNEL_COLUMN_VISIBILITY: ChannelListColumnVisibility = {
   model: false,
   tags: false,
   proxy: false,
+  endpointProtocols: true,
 };
 
 const channelListColumnVisibilitySchema = z.record(z.string(), z.boolean());
@@ -1408,6 +1424,21 @@ const CHANNEL_QUERY_QUOTA_SELECTION = `
           }
 `;
 
+const CHANNEL_QUERY_ENDPOINTS_SELECTION = `
+          defaultEndpoints {
+            apiFormat
+            path
+            baseURL
+            transport
+          }
+          endpoints {
+            apiFormat
+            path
+            baseURL
+            transport
+          }
+`;
+
 function isChannelColumnVisible(columnVisibility: ChannelListColumnVisibility | undefined, columnID: string): boolean {
   return columnVisibility?.[columnID] !== false;
 }
@@ -1424,6 +1455,7 @@ export function buildQueryChannelsQuery(columnVisibility?: ChannelListColumnVisi
         isChannelColumnVisible(columnVisibility, 'orderingWeight') ? CHANNEL_QUERY_ORDERING_WEIGHT_SELECTION : '',
         isChannelColumnVisible(columnVisibility, 'health') ? CHANNEL_QUERY_HEALTH_SELECTION : '',
         isChannelColumnVisible(columnVisibility, 'quota') ? CHANNEL_QUERY_QUOTA_SELECTION : '',
+        isChannelColumnVisible(columnVisibility, 'endpointProtocols') ? CHANNEL_QUERY_ENDPOINTS_SELECTION : '',
       ].join('');
 
   return `
@@ -1940,6 +1972,35 @@ export function useSaveChannelEndpoints() {
     },
     onError: (error) => {
       handleError(error, { context: t('channels.dialogs.edit.title') });
+    },
+  });
+}
+
+export interface DetectChannelEndpointsInput {
+  channelID: string;
+  model?: string;
+}
+
+/**
+ * Probes a channel upstream for the relay protocols it exposes. This is a
+ * read-only detection: nothing is persisted until the caller saves the
+ * detected endpoints.
+ */
+export function useDetectChannelEndpoints() {
+  const { t } = useTranslation();
+  const { handleError } = useErrorHandler();
+
+  return useMutation({
+    mutationFn: async (input: DetectChannelEndpointsInput) => {
+      const data = await graphqlRequest<{ detectChannelEndpoints: { endpoints: DetectedChannelEndpoint[] } }>(
+        DETECT_CHANNEL_ENDPOINTS_MUTATION,
+        { input }
+      );
+
+      return (data.detectChannelEndpoints?.endpoints ?? []).map((endpoint) => detectedChannelEndpointSchema.parse(endpoint));
+    },
+    onError: (error) => {
+      handleError(error, { context: t('channels.endpoints.detect.title') });
     },
   });
 }
