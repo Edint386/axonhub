@@ -527,6 +527,7 @@ function QuotaRow({ channel, effectiveMode }: { channel: ProviderQuotaChannel; e
   );
   if (routingIndicator === 'exhausted') modeBadge = { key: 'quota.status.remove_on_exhausted', color: 'red' };
   else if (routingIndicator === 'backpressure') modeBadge = { key: 'quota.status.backpressure', color: 'amber' };
+  else if (routingIndicator === 'ignored') modeBadge = { key: 'quota.status.ignore_quota', color: 'blue' };
 
   const percentage = Math.max(quota ? getChannelPercentage(channel) : 0, getLocalQuotaPercentage(channel));
   const batteryLevel = getBatteryLevel(percentage, status);

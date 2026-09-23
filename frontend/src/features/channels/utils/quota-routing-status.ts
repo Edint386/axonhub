@@ -2,7 +2,7 @@ import type { QuotaRoutingMode } from '@/features/system/data/system';
 import { parseQuotaLimits } from '@/features/system/data/quotas';
 import type { Channel } from '../data/schema';
 
-export type ChannelQuotaRoutingIndicator = 'exhausted' | 'backpressure';
+export type ChannelQuotaRoutingIndicator = 'exhausted' | 'backpressure' | 'ignored';
 type QuotaLimit = { window: string; status: string; usageRatio: number; periodStart?: string | null; nextResetAt?: string | null };
 
 export function getChannelQuotaRoutingIndicator(
@@ -14,9 +14,15 @@ export function getChannelQuotaRoutingIndicator(
 ): ChannelQuotaRoutingIndicator | undefined {
   const channelMode = channel.settings?.quotaRoutingMode ?? channel.quotaRoutingMode;
   const effectiveMode = effectiveModeOverride ?? (channelMode && channelMode !== 'INHERIT' ? channelMode : globalDefaultMode);
-  if (effectiveMode === 'IGNORE_QUOTA') return undefined;
+  const status = statusOverride ?? channel.providerQuotaStatus?.status;
+  if (effectiveMode === 'IGNORE_QUOTA') {
+    // Keep the old exemption signal visible while the provider is warning or
+    // exhausted. The channel still participates in routing, but operators
+    // need to know that it is intentionally exempt from quota gating.
+    return status === 'warning' || status === 'exhausted' ? 'ignored' : undefined;
+  }
 
-  if ((statusOverride ?? channel.providerQuotaStatus?.status) === 'exhausted') return 'exhausted';
+  if (status === 'exhausted') return 'exhausted';
 
   if (effectiveMode === 'BACKPRESSURE' && hasQuotaWindowPressure(channel.providerQuotaStatus?.quotaData, limits)) {
     return 'backpressure';

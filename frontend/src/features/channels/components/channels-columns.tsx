@@ -456,6 +456,12 @@ const NameCell = memo(({ row, globalDefaultMode }: { row: Row<Channel>; globalDe
             <span className='sr-only'>{t('quota.status.backpressure')}</span>
           </>
         )}
+        {quotaRoutingIndicator === 'ignored' && (
+          <>
+            <IconShieldLock className='h-4 w-4 shrink-0 text-blue-500' aria-hidden='true' />
+            <span className='sr-only'>{t('quota.status.ignore_quota')}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -481,6 +487,7 @@ const NameCell = memo(({ row, globalDefaultMode }: { row: Row<Channel>; globalDe
           )}
           {quotaRoutingIndicator === 'exhausted' && <p className='text-destructive text-sm'>{t('quota.status.exhausted')}</p>}
           {quotaRoutingIndicator === 'backpressure' && <p className='text-sm text-amber-500'>{t('quota.status.backpressure')}</p>}
+          {quotaRoutingIndicator === 'ignored' && <p className='text-sm text-blue-500'>{t('quota.status.ignore_quota')}</p>}
         </div>
       </TooltipContent>
     </Tooltip>

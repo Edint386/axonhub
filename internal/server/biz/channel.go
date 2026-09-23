@@ -165,6 +165,12 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 
 	svc.channelNotifier = notifier
 
+	// The turn-state source must exist before the initial channel cache is
+	// built. OAuth Codex outbounds capture this dependency during construction;
+	// creating it afterwards leaves channels loaded during startup without a
+	// ticket source until a later channel rebuild.
+	svc.turnState = NewCodexTurnStateManager(svc)
+
 	svc.enabledChannelsCache = live.NewCache(live.Options[[]*Channel]{
 		Name:            "axonhub:enabled_channels",
 		InitialValue:    []*Channel{},
@@ -178,7 +184,6 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 	// Start performance metrics background flush
 	go svc.startPerformanceProcess()
 
-	svc.turnState = NewCodexTurnStateManager(svc)
 	svc.turnState.Start()
 
 	return svc

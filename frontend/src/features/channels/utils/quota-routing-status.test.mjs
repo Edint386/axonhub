@@ -23,9 +23,17 @@ test('exhausted status is shown when the backend removes exhausted channels', ()
   );
 });
 
-test('ignore quota mode does not show a quota routing indicator', () => {
+test('ignore quota mode shows an exemption indicator while quota is under pressure', () => {
   assert.equal(
     getChannelQuotaRoutingIndicator({ providerQuotaStatus: status('exhausted'), settings: { quotaRoutingMode: 'IGNORE_QUOTA' } }),
+    'ignored'
+  );
+  assert.equal(
+    getChannelQuotaRoutingIndicator({ providerQuotaStatus: status('warning'), settings: { quotaRoutingMode: 'IGNORE_QUOTA' } }),
+    'ignored'
+  );
+  assert.equal(
+    getChannelQuotaRoutingIndicator({ providerQuotaStatus: status('available'), settings: { quotaRoutingMode: 'IGNORE_QUOTA' } }),
     undefined
   );
 });
