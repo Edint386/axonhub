@@ -1154,6 +1154,12 @@ func (svc *ProviderQuotaService) mergeLimitsIntoQuotaData(quotaData provider_quo
 			if l.Window != "" {
 				m["window"] = l.Window
 			}
+			if l.Account != "" {
+				m["account"] = l.Account
+			}
+			if l.AvailabilityGroup != "" {
+				m["availabilityGroup"] = l.AvailabilityGroup
+			}
 			if l.PeriodStart != nil {
 				m["periodStart"] = l.PeriodStart.Format(time.RFC3339)
 			}
@@ -1221,6 +1227,14 @@ func extractLimitsFromQuotaData(data map[string]any) []provider_quota.QuotaLimit
 
 		if w, ok := m["window"].(string); ok {
 			ls.Window = w
+		}
+
+		if a, ok := m["account"].(string); ok {
+			ls.Account = a
+		}
+
+		if g, ok := m["availabilityGroup"].(string); ok {
+			ls.AvailabilityGroup = g
 		}
 
 		if ts, ok := m["periodStart"].(string); ok {
