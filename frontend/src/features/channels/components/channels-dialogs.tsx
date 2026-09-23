@@ -1,4 +1,8 @@
 import { useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useChannels } from '../context/channels-context';
 import { useChannelDetails } from '../data/channels';
 import { ChannelsActionDialog } from './channels-action-dialog';
@@ -32,10 +36,46 @@ import { ChannelsTestHistoryDrawer } from './channels-test-history-drawer';
 import { ChannelsCodexTurnStateDialog } from './channels-codex-turn-state-dialog';
 import { ChannelsTransformOptionsDialog } from './channels-transform-options-dialog';
 
+interface ChannelDetailsLoadDialogProps {
+  open: boolean;
+  loading: boolean;
+  onRetry: () => void;
+  onClose: () => void;
+}
+
+function ChannelDetailsLoadDialog({ open, loading, onRetry, onClose }: ChannelDetailsLoadDialogProps) {
+  const { t } = useTranslation();
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className='sm:max-w-[420px]'>
+        <DialogHeader>
+          <DialogTitle>{t('channels.title')}</DialogTitle>
+          <DialogDescription>{loading ? t('common.loading') : t('common.errors.loadFailed')}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>
+            {t('common.buttons.close')}
+          </Button>
+          <Button onClick={onRetry} disabled={loading}>
+            {loading && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
+            {t('common.buttons.retry')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ChannelsDialogs() {
   const { open, setOpen, currentRow: partialCurrentRow, setCurrentRow, selectedChannels } = useChannels();
+  // Only dialogs that operate on a selected channel need the detail snapshot.
+  // Keep the delayed row cleanup from making the add, settings, or bulk dialogs
+  // look like a failed channel-detail request.
+  const rowDialogOpen =
+    open != null && open !== 'add' && open !== 'settings' && open !== 'channelSettings' && !open.startsWith('bulk');
   const detailsQuery = useChannelDetails(partialCurrentRow?.id, {
-    enabled: Boolean(partialCurrentRow && open),
+    enabled: Boolean(partialCurrentRow && rowDialogOpen),
   });
 
   useEffect(() => {
@@ -44,15 +84,25 @@ export function ChannelsDialogs() {
     }
   }, [detailsQuery.data, partialCurrentRow, setCurrentRow]);
 
-  // List rows intentionally contain only fields required by visible columns.
-  // Delay row-scoped dialogs until the full snapshot has been loaded so hiding
-  // a column never removes data from edit/configuration dialogs.
-  const currentRow =
-    partialCurrentRow && (!open || detailsQuery.isError || detailsQuery.data === partialCurrentRow)
-      ? (detailsQuery.data ?? partialCurrentRow)
-      : null;
+  // Never open a channel form with the partial list row, even if details fail:
+  // saving it could clear omitted fields. Context-based dialogs also need the
+  // effect above to publish the full snapshot before they initialize.
+  const hasFullDetails = partialCurrentRow != null && detailsQuery.data === partialCurrentRow;
+  const currentRow = partialCurrentRow && (!open || hasFullDetails) ? partialCurrentRow : null;
+  const detailsDialogOpen = Boolean(partialCurrentRow && rowDialogOpen && !currentRow);
+  const detailsLoading = detailsQuery.isFetching || (!detailsQuery.isError && !hasFullDetails);
   return (
     <>
+      <ChannelDetailsLoadDialog
+        open={detailsDialogOpen}
+        loading={detailsLoading}
+        onRetry={() => void detailsQuery.refetch()}
+        onClose={() => {
+          setOpen(null);
+          setCurrentRow(null);
+        }}
+      />
+
       <ChannelsSystemSettingsDialog />
 
       <ChannelsActionDialog key='channel-add' open={open === 'add'} onOpenChange={(isOpen) => setOpen(isOpen ? 'add' : null)} />
