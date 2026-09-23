@@ -706,7 +706,7 @@ type PerformanceRecord struct {
 	ChannelID int
 	APIKey    string // API key used for the request (sensitive, do not log full value)
 	// Source identifies synthetic health probes versus real API traffic.
-	Source request.Source
+	Source             request.Source
 	StartTime          time.Time
 	FirstTokenTime     *time.Time
 	ReasoningStartTime *time.Time
