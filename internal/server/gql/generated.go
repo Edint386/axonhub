@@ -1005,16 +1005,17 @@ type ComplexityRoot struct {
 	}
 
 	ModelCard struct {
-		Cost        func(childComplexity int) int
-		Knowledge   func(childComplexity int) int
-		LastUpdated func(childComplexity int) int
-		Limit       func(childComplexity int) int
-		Modalities  func(childComplexity int) int
-		Reasoning   func(childComplexity int) int
-		ReleaseDate func(childComplexity int) int
-		Temperature func(childComplexity int) int
-		ToolCall    func(childComplexity int) int
-		Vision      func(childComplexity int) int
+		Cost             func(childComplexity int) int
+		Knowledge        func(childComplexity int) int
+		LastUpdated      func(childComplexity int) int
+		Limit            func(childComplexity int) int
+		Modalities       func(childComplexity int) int
+		Reasoning        func(childComplexity int) int
+		ReasoningEfforts func(childComplexity int) int
+		ReleaseDate      func(childComplexity int) int
+		Temperature      func(childComplexity int) int
+		ToolCall         func(childComplexity int) int
+		Vision           func(childComplexity int) int
 	}
 
 	ModelCardCost struct {
@@ -6290,6 +6291,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ModelCard.Reasoning(childComplexity), true
+	case "ModelCard.reasoningEfforts":
+		if e.complexity.ModelCard.ReasoningEfforts == nil {
+			break
+		}
+
+		return e.complexity.ModelCard.ReasoningEfforts(childComplexity), true
 	case "ModelCard.releaseDate":
 		if e.complexity.ModelCard.ReleaseDate == nil {
 			break
@@ -34560,6 +34567,8 @@ func (ec *executionContext) fieldContext_Model_modelCard(_ context.Context, fiel
 			switch field.Name {
 			case "reasoning":
 				return ec.fieldContext_ModelCard_reasoning(ctx, field)
+			case "reasoningEfforts":
+				return ec.fieldContext_ModelCard_reasoningEfforts(ctx, field)
 			case "toolCall":
 				return ec.fieldContext_ModelCard_toolCall(ctx, field)
 			case "temperature":
@@ -35145,6 +35154,35 @@ func (ec *executionContext) fieldContext_ModelCard_reasoning(_ context.Context, 
 				return ec.fieldContext_ModelCardReasoning_default(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ModelCardReasoning", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ModelCard_reasoningEfforts(ctx context.Context, field graphql.CollectedField, obj *objects.ModelCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ModelCard_reasoningEfforts,
+		func(ctx context.Context) (any, error) {
+			return obj.ReasoningEfforts, nil
+		},
+		nil,
+		ec.marshalOString2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ModelCard_reasoningEfforts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ModelCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -80890,7 +80928,7 @@ func (ec *executionContext) unmarshalInputModelCardInput(ctx context.Context, ob
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"reasoning", "toolCall", "temperature", "modalities", "vision", "cost", "limit", "knowledge", "releaseDate", "lastUpdated"}
+	fieldsInOrder := [...]string{"reasoning", "reasoningEfforts", "toolCall", "temperature", "modalities", "vision", "cost", "limit", "knowledge", "releaseDate", "lastUpdated"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -80904,6 +80942,13 @@ func (ec *executionContext) unmarshalInputModelCardInput(ctx context.Context, ob
 				return it, err
 			}
 			it.Reasoning = data
+		case "reasoningEfforts":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reasoningEfforts"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ReasoningEfforts = data
 		case "toolCall":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("toolCall"))
 			data, err := ec.unmarshalOBoolean2bool(ctx, v)
@@ -106931,6 +106976,8 @@ func (ec *executionContext) _ModelCard(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "reasoningEfforts":
+			out.Values[i] = ec._ModelCard_reasoningEfforts(ctx, field, obj)
 		case "toolCall":
 			out.Values[i] = ec._ModelCard_toolCall(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
