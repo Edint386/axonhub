@@ -7,6 +7,10 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/authStore';
 import { useSelectedProjectId } from '@/stores/projectStore';
+import { ensureFreshAccessToken } from '@/lib/auth-session';
+import { copyTextToClipboard } from '@/lib/clipboard';
+import { cn } from '@/lib/utils';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,9 +37,6 @@ import { Response as UIResponse } from '@/components/ai-elements/response';
 import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { useAllChannelSummarys } from '@/features/channels/data/channels';
 import { useQueryModels } from '@/features/models/data/models';
-import { usePermissions } from '@/hooks/usePermissions';
-import { copyTextToClipboard } from '@/lib/clipboard';
-import { cn } from '@/lib/utils';
 import { readSelection, resolveSelection, writeSelection, type PlaygroundModelSource } from './selection';
 
 function PlaygroundImageButton() {
@@ -63,9 +64,7 @@ function PlaygroundAttachments() {
 
   return (
     <PromptInputHeader>
-      <PromptInputAttachments>
-        {(attachment) => <PromptInputAttachment data={attachment} />}
-      </PromptInputAttachments>
+      <PromptInputAttachments>{(attachment) => <PromptInputAttachment data={attachment} />}</PromptInputAttachments>
     </PromptInputHeader>
   );
 }
@@ -187,7 +186,14 @@ export default function Playground() {
         };
       },
       fetch: async (url, init) => {
-        const res = await fetch(url, init);
+        const token = await ensureFreshAccessToken();
+        const headers = new Headers(init?.headers);
+        if (token) {
+          headers.set('Authorization', `Bearer ${token}`);
+        } else {
+          headers.delete('Authorization');
+        }
+        const res = await fetch(url, { ...init, headers });
         if (!res.ok) {
           let message = res.statusText || 'Request failed';
           let code: number | undefined = res.status;
@@ -611,13 +617,7 @@ export default function Playground() {
                                     src={part.url}
                                   />
                                 ) : (
-                                  <a
-                                    key={index}
-                                    className='text-primary underline'
-                                    href={part.url}
-                                    rel='noreferrer'
-                                    target='_blank'
-                                  >
+                                  <a key={index} className='text-primary underline' href={part.url} rel='noreferrer' target='_blank'>
                                     {part.filename || 'attachment'}
                                   </a>
                                 );
@@ -666,7 +666,7 @@ export default function Playground() {
                 value={input}
                 placeholder={t('playground.chat.typeMessage')}
                 onChange={(e) => setInput(e.currentTarget.value)}
-                className='pl-12 pr-16'
+                className='pr-16 pl-12'
               />
               <PlaygroundImageButton />
               <PlaygroundSubmit input={input} status={status} onStop={stop} />
