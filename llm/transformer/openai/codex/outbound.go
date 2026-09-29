@@ -59,6 +59,11 @@ type OutboundTransformer struct {
 	webSocketExecutors map[pipeline.Executor]*responses.WebSocketExecutor
 }
 
+// SupportsCodexResponseHeaders identifies the official Codex response-header contract.
+func (*OutboundTransformer) SupportsCodexResponseHeaders() bool {
+	return true
+}
+
 var (
 	_ transformer.Outbound                  = (*OutboundTransformer)(nil)
 	_ transformer.PassThroughBodyPolicy     = (*OutboundTransformer)(nil)
@@ -523,11 +528,18 @@ func (e *codexExecutor) doStreamAndAggregate(ctx context.Context, request *httpc
 	if err != nil {
 		return nil, err
 	}
-	outHeaders := http.Header{"Content-Type": []string{"application/json"}}
+	outHeaders := httpclient.MergeForwardResponseHeaders(http.Header{
+		"Content-Type": []string{"application/json"},
+	}, httpclient.GetResponseHeaders(stream))
 	if state := headers.Get(TurnStateHeader); state != "" {
 		outHeaders.Set(TurnStateHeader, state)
 	}
-	return &httpclient.Response{StatusCode: http.StatusOK, Headers: outHeaders, Body: body, Request: request}, nil
+	return &httpclient.Response{
+		StatusCode: http.StatusOK,
+		Headers:    outHeaders,
+		Body:       body,
+		Request:    request,
+	}, nil
 }
 
 // doOnceAndDispatch sends a single upstream request and inspects the completed

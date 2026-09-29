@@ -439,7 +439,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 		return event
 	})
 
-	return &headerStream{Stream: stream, headers: rawResp.Header.Clone()}, nil
+	return WithResponseHeaders(&headerStream{Stream: stream, headers: rawResp.Header.Clone()}, rawResp.Header.Clone()), nil
 }
 
 func socksDialFromConfig(config *ProxyConfig) (func(ctx context.Context, network, addr string) (net.Conn, error), bool) {
@@ -481,7 +481,7 @@ func StreamResponseHeaders(stream streams.Stream[*StreamEvent]) http.Header {
 	if headered, ok := stream.(HeaderedStream); ok {
 		return headered.ResponseHeaders()
 	}
-	return nil
+	return GetResponseHeaders(stream)
 }
 
 func urlForLog(value *url.URL) string {
