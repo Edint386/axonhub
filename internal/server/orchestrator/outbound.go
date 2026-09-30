@@ -584,6 +584,10 @@ func (p *PersistentOutboundTransformer) TransformRequest(ctx context.Context, ll
 		p.state.PassThroughBodyBlocked = true
 	}
 
+	if llmRequest.Stream == nil && outboundFormat == llm.APIFormatAnthropicMessage {
+		llmRequest.Stream = lo.ToPtr(false)
+	}
+
 	if shouldForceStreamingForCandidate(candidate, llmRequest) {
 		p.state.PassThroughBodyBlocked = true
 		streamPtr := lo.ToPtr(true)
