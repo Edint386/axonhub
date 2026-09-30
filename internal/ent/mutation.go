@@ -18735,6 +18735,8 @@ type RequestMutation struct {
 	id                                *int
 	created_at                        *time.Time
 	updated_at                        *time.Time
+	user_id                           *int
+	adduser_id                        *int
 	source                            *request.Source
 	model_id                          *string
 	reasoning_effort                  *string
@@ -19004,6 +19006,76 @@ func (m *RequestMutation) APIKeyIDCleared() bool {
 func (m *RequestMutation) ResetAPIKeyID() {
 	m.api_key = nil
 	delete(m.clearedFields, request.FieldAPIKeyID)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *RequestMutation) SetUserID(i int) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *RequestMutation) UserID() (r int, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the Request entity.
+// If the Request object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestMutation) OldUserID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *RequestMutation) AddUserID(i int) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *RequestMutation) AddedUserID() (r int, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (m *RequestMutation) ClearUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+	m.clearedFields[request.FieldUserID] = struct{}{}
+}
+
+// UserIDCleared returns if the "user_id" field was cleared in this mutation.
+func (m *RequestMutation) UserIDCleared() bool {
+	_, ok := m.clearedFields[request.FieldUserID]
+	return ok
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *RequestMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+	delete(m.clearedFields, request.FieldUserID)
 }
 
 // SetProjectID sets the "project_id" field.
@@ -20541,7 +20613,7 @@ func (m *RequestMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestMutation) Fields() []string {
-	fields := make([]string, 0, 28)
+	fields := make([]string, 0, 29)
 	if m.created_at != nil {
 		fields = append(fields, request.FieldCreatedAt)
 	}
@@ -20550,6 +20622,9 @@ func (m *RequestMutation) Fields() []string {
 	}
 	if m.api_key != nil {
 		fields = append(fields, request.FieldAPIKeyID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, request.FieldUserID)
 	}
 	if m.project != nil {
 		fields = append(fields, request.FieldProjectID)
@@ -20640,6 +20715,8 @@ func (m *RequestMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedAt()
 	case request.FieldAPIKeyID:
 		return m.APIKeyID()
+	case request.FieldUserID:
+		return m.UserID()
 	case request.FieldProjectID:
 		return m.ProjectID()
 	case request.FieldTraceID:
@@ -20705,6 +20782,8 @@ func (m *RequestMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldUpdatedAt(ctx)
 	case request.FieldAPIKeyID:
 		return m.OldAPIKeyID(ctx)
+	case request.FieldUserID:
+		return m.OldUserID(ctx)
 	case request.FieldProjectID:
 		return m.OldProjectID(ctx)
 	case request.FieldTraceID:
@@ -20784,6 +20863,13 @@ func (m *RequestMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAPIKeyID(v)
+		return nil
+	case request.FieldUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
 		return nil
 	case request.FieldProjectID:
 		v, ok := value.(int)
@@ -20968,6 +21054,9 @@ func (m *RequestMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *RequestMutation) AddedFields() []string {
 	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, request.FieldUserID)
+	}
 	if m.addmetrics_latency_ms != nil {
 		fields = append(fields, request.FieldMetricsLatencyMs)
 	}
@@ -20988,6 +21077,8 @@ func (m *RequestMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *RequestMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case request.FieldUserID:
+		return m.AddedUserID()
 	case request.FieldMetricsLatencyMs:
 		return m.AddedMetricsLatencyMs()
 	case request.FieldMetricsFirstTokenLatencyMs:
@@ -21005,6 +21096,13 @@ func (m *RequestMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *RequestMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case request.FieldUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
 	case request.FieldMetricsLatencyMs:
 		v, ok := value.(int64)
 		if !ok {
@@ -21043,6 +21141,9 @@ func (m *RequestMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(request.FieldAPIKeyID) {
 		fields = append(fields, request.FieldAPIKeyID)
+	}
+	if m.FieldCleared(request.FieldUserID) {
+		fields = append(fields, request.FieldUserID)
 	}
 	if m.FieldCleared(request.FieldTraceID) {
 		fields = append(fields, request.FieldTraceID)
@@ -21106,6 +21207,9 @@ func (m *RequestMutation) ClearField(name string) error {
 	case request.FieldAPIKeyID:
 		m.ClearAPIKeyID()
 		return nil
+	case request.FieldUserID:
+		m.ClearUserID()
+		return nil
 	case request.FieldTraceID:
 		m.ClearTraceID()
 		return nil
@@ -21167,6 +21271,9 @@ func (m *RequestMutation) ResetField(name string) error {
 		return nil
 	case request.FieldAPIKeyID:
 		m.ResetAPIKeyID()
+		return nil
+	case request.FieldUserID:
+		m.ResetUserID()
 		return nil
 	case request.FieldProjectID:
 		m.ResetProjectID()
