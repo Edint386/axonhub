@@ -439,7 +439,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 		return event
 	})
 
-	return WithResponseHeaders(&headerStream{Stream: stream, headers: rawResp.Header.Clone()}, rawResp.Header.Clone()), nil
+	return &headerStream{Stream: stream, headers: rawResp.Header.Clone()}, nil
 }
 
 func socksDialFromConfig(config *ProxyConfig) (func(ctx context.Context, network, addr string) (net.Conn, error), bool) {
@@ -475,6 +475,13 @@ func (s *headerStream) ResponseHeaders() http.Header {
 		return nil
 	}
 	return s.headers
+}
+
+// responseHeaders exposes only the server-approved response metadata to the
+// generic pipeline. StreamResponseHeaders above retains the complete raw set
+// for internal Codex transport handling.
+func (s *headerStream) responseHeaders() http.Header {
+	return MergeForwardResponseHeaders(nil, s.headers)
 }
 
 func StreamResponseHeaders(stream streams.Stream[*StreamEvent]) http.Header {
