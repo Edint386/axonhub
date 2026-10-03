@@ -19,66 +19,6 @@ import (
 	"github.com/looplj/axonhub/llm/streams"
 )
 
-func TestOutboundTransformer_TransformStream_PreservesFunctionCallNamespace(t *testing.T) {
-	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
-	require.NoError(t, err)
-
-	mustEvent := func(event StreamEvent) *httpclient.StreamEvent {
-		data, err := json.Marshal(event)
-		require.NoError(t, err)
-		return &httpclient.StreamEvent{
-			Type: string(event.Type),
-			Data: data,
-		}
-	}
-
-	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream([]*httpclient.StreamEvent{
-		mustEvent(StreamEvent{
-			Type: StreamEventTypeOutputItemAdded,
-			Item: &Item{
-				ID:        "fc_1",
-				Type:      "function_call",
-				CallID:    "call_js",
-				Name:      "js",
-				Namespace: "mcp__node_repl",
-				Status:    lo.ToPtr("in_progress"),
-			},
-		}),
-		mustEvent(StreamEvent{
-			Type:        StreamEventTypeFunctionCallArgumentsDelta,
-			ItemID:      lo.ToPtr("fc_1"),
-			OutputIndex: 0,
-			Delta:       `{"code":"nodeRepl.write(\"ok\")"}`,
-		}),
-		mustEvent(StreamEvent{
-			Type: StreamEventTypeResponseCompleted,
-			Response: &Response{
-				ID:     "resp_1",
-				Object: "response",
-				Status: lo.ToPtr("completed"),
-			},
-		}),
-	}))
-	require.NoError(t, err)
-
-	var found bool
-	for stream.Next() {
-		resp := stream.Current()
-		if resp == llm.DoneResponse || len(resp.Choices) == 0 || resp.Choices[0].Delta == nil {
-			continue
-		}
-		toolCalls := resp.Choices[0].Delta.ToolCalls
-		if len(toolCalls) == 0 {
-			continue
-		}
-		found = true
-		require.Equal(t, "mcp__node_repl", toolCalls[0].TransformerMetadata[responsesToolCallNamespaceTransformerMetadataKey])
-		break
-	}
-	require.True(t, found)
-	require.NoError(t, stream.Err())
-}
-
 func TestOutboundTransformer_StreamTransformation_WithTestData(t *testing.T) {
 	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
 	require.NoError(t, err)
@@ -848,22 +788,6 @@ func TestResponsesStream_RoundTrip_DefersFunctionCallUntilLateIdentityArrives(t 
 	require.JSONEq(t, arguments, receivedArguments)
 }
 
-func TestResponsesStream_RoundTrip_SeparatesInterleavedLateNamespaceToolCalls(t *testing.T) {
-	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
-	require.NoError(t, err)
-
-	upstreamEvents := []*httpclient.StreamEvent{
-		{Data: []byte(`{"type":"response.created","response":{"id":"resp_interleaved_namespaces","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
-		{Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_slack","type":"function_call","call_id":"call_slack","arguments":""}}`)},
-		{Data: []byte(`{"type":"response.output_item.added","output_index":1,"item":{"id":"fc_teams","type":"function_call","call_id":"call_teams","arguments":""}}`)},
-		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_slack","output_index":0,"delta":"{\"target\":\"alpha"}`)},
-		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_teams","output_index":1,"delta":"{\"target\":\"beta"}`)},
-		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_slack","output_index":0,"delta":"\"}"}`)},
-		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_teams","output_index":1,"delta":"\"}"}`)},
-		{Data: []byte(`{"type":"response.function_call_arguments.done","item_id":"fc_teams","output_index":1,"name":"send","namespace":"teams","arguments":"{\"target\":\"beta\"}"}`)},
-		{Data: []byte(`{"type":"response.function_call_arguments.done","item_id":"fc_slack","output_index":0,"name":"send","namespace":"slack","arguments":"{\"target\":\"alpha\"}"}`)},
-		{Data: []byte(`{"type":"response.completed","response":{"id":"resp_interleaved_namespaces","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
-
 func TestResponsesStream_RoundTrip_PreservesCustomToolInputProvidedOnlyInFinalEvents(t *testing.T) {
 	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
 	require.NoError(t, err)
@@ -879,18 +803,6 @@ func TestResponsesStream_RoundTrip_PreservesCustomToolInputProvidedOnlyInFinalEv
 
 	unifiedStream, err := outbound.TransformStream(t.Context(), nil, streams.SliceStream(upstreamEvents))
 	require.NoError(t, err)
-	clientStream, err := NewInboundTransformer().TransformStream(t.Context(), unifiedStream)
-	require.NoError(t, err)
-	clientEvents, err := streams.All(clientStream)
-	require.NoError(t, err)
-
-	addedItems := make(map[string]*Item)
-	doneItems := make(map[string]*Item)
-	doneArguments := make(map[string]*StreamEvent)
-	itemToCallID := make(map[string]string)
-	streamedArguments := make(map[string]string)
-
-
 
 	clientStream, err := NewInboundTransformer().TransformStream(t.Context(), unifiedStream)
 	require.NoError(t, err)
@@ -906,53 +818,6 @@ func TestResponsesStream_RoundTrip_PreservesCustomToolInputProvidedOnlyInFinalEv
 
 		var event StreamEvent
 		require.NoError(t, json.Unmarshal(clientEvent.Data, &event))
-		switch event.Type {
-		case StreamEventTypeOutputItemAdded:
-			if event.Item != nil && event.Item.Type == "function_call" {
-				addedItems[event.Item.CallID] = event.Item
-				itemToCallID[event.Item.ID] = event.Item.CallID
-			}
-		case StreamEventTypeFunctionCallArgumentsDelta:
-			require.NotNil(t, event.ItemID)
-			callID := itemToCallID[*event.ItemID]
-			require.NotEmpty(t, callID)
-			streamedArguments[callID] += event.Delta
-		case StreamEventTypeFunctionCallArgumentsDone:
-			doneArguments[event.CallID] = &event
-		case StreamEventTypeOutputItemDone:
-			if event.Item != nil && event.Item.Type == "function_call" {
-				doneItems[event.Item.CallID] = event.Item
-			}
-		}
-	}
-
-	expected := map[string]struct {
-		namespace string
-		arguments string
-	}{
-		"call_slack": {namespace: "slack", arguments: `{"target":"alpha"}`},
-		"call_teams": {namespace: "teams", arguments: `{"target":"beta"}`},
-	}
-	require.Len(t, addedItems, len(expected))
-	require.Len(t, doneItems, len(expected))
-	require.Len(t, doneArguments, len(expected))
-
-	for callID, want := range expected {
-		require.Equal(t, "send", addedItems[callID].Name)
-		require.Equal(t, want.namespace, addedItems[callID].Namespace)
-		require.Equal(t, want.arguments, streamedArguments[callID])
-
-		require.Equal(t, "send", doneArguments[callID].Name)
-		require.Equal(t, want.namespace, doneArguments[callID].Namespace)
-		require.JSONEq(t, want.arguments, doneArguments[callID].Arguments)
-
-		require.Equal(t, "send", doneItems[callID].Name)
-		require.Equal(t, want.namespace, doneItems[callID].Namespace)
-		require.JSONEq(t, want.arguments, doneItems[callID].Arguments)
-	}
-}
-
-
 		if event.Type == StreamEventTypeOutputItemDone && event.Item != nil && event.Item.Type == "custom_tool_call" {
 			completedInput = lo.FromPtr(event.Item.Input)
 		}
@@ -1676,5 +1541,88 @@ func TestOutboundTransformer_TransformStream_PreservesOfficialWebSocketError(t *
 			require.Equal(t, "invalid websocket request", responseErr.Detail.Message)
 			require.Equal(t, "input", responseErr.Detail.Param)
 		})
+	}
+}
+
+func TestResponsesStream_RoundTrip_SeparatesInterleavedLateNamespaceToolCalls(t *testing.T) {
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	upstreamEvents := []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"response.created","response":{"id":"resp_interleaved_namespaces","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+		{Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_slack","type":"function_call","call_id":"call_slack","arguments":""}}`)},
+		{Data: []byte(`{"type":"response.output_item.added","output_index":1,"item":{"id":"fc_teams","type":"function_call","call_id":"call_teams","arguments":""}}`)},
+		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_slack","output_index":0,"delta":"{\"target\":\"alpha"}`)},
+		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_teams","output_index":1,"delta":"{\"target\":\"beta"}`)},
+		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_slack","output_index":0,"delta":"\"}"}`)},
+		{Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_teams","output_index":1,"delta":"\"}"}`)},
+		{Data: []byte(`{"type":"response.function_call_arguments.done","item_id":"fc_teams","output_index":1,"name":"send","namespace":"teams","arguments":"{\"target\":\"beta\"}"}`)},
+		{Data: []byte(`{"type":"response.function_call_arguments.done","item_id":"fc_slack","output_index":0,"name":"send","namespace":"slack","arguments":"{\"target\":\"alpha\"}"}`)},
+		{Data: []byte(`{"type":"response.completed","response":{"id":"resp_interleaved_namespaces","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+	}
+
+	unifiedStream, err := outbound.TransformStream(t.Context(), nil, streams.SliceStream(upstreamEvents))
+	require.NoError(t, err)
+	clientStream, err := NewInboundTransformer().TransformStream(t.Context(), unifiedStream)
+	require.NoError(t, err)
+	clientEvents, err := streams.All(clientStream)
+	require.NoError(t, err)
+
+	addedItems := make(map[string]*Item)
+	doneItems := make(map[string]*Item)
+	doneArguments := make(map[string]*StreamEvent)
+	itemToCallID := make(map[string]string)
+	streamedArguments := make(map[string]string)
+
+	for _, clientEvent := range clientEvents {
+		if string(clientEvent.Data) == "[DONE]" {
+			continue
+		}
+
+		var event StreamEvent
+		require.NoError(t, json.Unmarshal(clientEvent.Data, &event))
+		switch event.Type {
+		case StreamEventTypeOutputItemAdded:
+			if event.Item != nil && event.Item.Type == "function_call" {
+				addedItems[event.Item.CallID] = event.Item
+				itemToCallID[event.Item.ID] = event.Item.CallID
+			}
+		case StreamEventTypeFunctionCallArgumentsDelta:
+			require.NotNil(t, event.ItemID)
+			callID := itemToCallID[*event.ItemID]
+			require.NotEmpty(t, callID)
+			streamedArguments[callID] += event.Delta
+		case StreamEventTypeFunctionCallArgumentsDone:
+			doneArguments[event.CallID] = &event
+		case StreamEventTypeOutputItemDone:
+			if event.Item != nil && event.Item.Type == "function_call" {
+				doneItems[event.Item.CallID] = event.Item
+			}
+		}
+	}
+
+	expected := map[string]struct {
+		namespace string
+		arguments string
+	}{
+		"call_slack": {namespace: "slack", arguments: `{"target":"alpha"}`},
+		"call_teams": {namespace: "teams", arguments: `{"target":"beta"}`},
+	}
+	require.Len(t, addedItems, len(expected))
+	require.Len(t, doneItems, len(expected))
+	require.Len(t, doneArguments, len(expected))
+
+	for callID, want := range expected {
+		require.Equal(t, "send", addedItems[callID].Name)
+		require.Equal(t, want.namespace, addedItems[callID].Namespace)
+		require.Equal(t, want.arguments, streamedArguments[callID])
+
+		require.Equal(t, "send", doneArguments[callID].Name)
+		require.Equal(t, want.namespace, doneArguments[callID].Namespace)
+		require.JSONEq(t, want.arguments, doneArguments[callID].Arguments)
+
+		require.Equal(t, "send", doneItems[callID].Name)
+		require.Equal(t, want.namespace, doneItems[callID].Namespace)
+		require.JSONEq(t, want.arguments, doneItems[callID].Arguments)
 	}
 }
