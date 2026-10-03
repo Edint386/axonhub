@@ -315,8 +315,6 @@ func (svc *ChannelService) buildCodexOutbound(
 						BaseURL:         baseURL,
 						Transport:       transport,
 						AlphaSearchPath: alphaSearchPath,
-						ChannelID:       c.ID,
-						TicketSource:    svc.turnState,
 					})
 				}
 			}
@@ -361,8 +359,6 @@ func (svc *ChannelService) buildCodexOutbound(
 			BaseURL:         baseURL,
 			Transport:       transport,
 			AlphaSearchPath: alphaSearchPath,
-			ChannelID:       c.ID,
-			TicketSource:    svc.turnState,
 		})
 	}
 
@@ -374,8 +370,6 @@ func (svc *ChannelService) buildCodexOutbound(
 		BaseURL:         baseURL,
 		Transport:       transport,
 		AlphaSearchPath: alphaSearchPath,
-		ChannelID:       c.ID,
-		TicketSource:    svc.turnState,
 	})
 }
 

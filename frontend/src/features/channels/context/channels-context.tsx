@@ -32,7 +32,6 @@ type ChannelsDialogType =
   | 'price'
   | 'transformOptions'
   | 'rateLimit'
-  | 'codexTurnState'
   | 'availability'
   | 'keyManagement'
   | 'callerAccess'

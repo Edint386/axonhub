@@ -165,12 +165,6 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 
 	svc.channelNotifier = notifier
 
-	// The turn-state source must exist before the initial channel cache is
-	// built. OAuth Codex outbounds capture this dependency during construction;
-	// creating it afterwards leaves channels loaded during startup without a
-	// ticket source until a later channel rebuild.
-	svc.turnState = NewCodexTurnStateManager(svc)
-
 	svc.enabledChannelsCache = live.NewCache(live.Options[[]*Channel]{
 		Name:            "axonhub:enabled_channels",
 		InitialValue:    []*Channel{},
@@ -184,16 +178,11 @@ func NewChannelService(params ChannelServiceParams) *ChannelService {
 	// Start performance metrics background flush
 	go svc.startPerformanceProcess()
 
-	svc.turnState.Start()
-
 	return svc
 }
 
 func (svc *ChannelService) Stop() {
 	svc.enabledChannelsCache.Stop()
-	if svc.turnState != nil {
-		svc.turnState.Stop()
-	}
 }
 
 type ChannelService struct {
@@ -248,7 +237,6 @@ type ChannelService struct {
 	// immutable value so the request path reads it without locking.
 	channelLatencyStats atomic.Pointer[channelLatencyStatsSnapshot]
 
-	turnState *CodexTurnStateManager
 }
 
 func (svc *ChannelService) RegisterScheduledTasks(ctx context.Context, s *scheduler.Scheduler) error {

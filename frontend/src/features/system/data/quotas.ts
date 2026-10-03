@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { graphqlRequest } from '@/gql/graphql';
 import { channelQuotaUsageSchema } from '@/features/channels/data/schema';
-import type { ChannelQuota, ChannelQuotaUsage, CodexTurnStateRuntime } from '@/features/channels/data/schema';
+import type { ChannelQuota, ChannelQuotaUsage } from '@/features/channels/data/schema';
 import type { ChannelQuotaRoutingMode } from '@/features/channels/data/schema';
 
 const CHECK_PROVIDER_QUOTAS_QUERY = `
@@ -34,16 +34,6 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
             quotaData
             providerType
             accountKey
-          }
-          codexTurnStateRuntime {
-            enabled
-            phase
-            models {
-              model
-              phase
-              lastError
-              ticketExpiresAt
-            }
           }
           settings {
             quota {
@@ -711,7 +701,6 @@ export type ProviderQuotaChannel = {
   localQuotaUsageLoading?: boolean;
   // Quota routing mode declared on the channel settings; INHERIT defers to the global default.
   quotaRoutingMode: ChannelQuotaRoutingMode;
-  codexTurnStateRuntime?: CodexTurnStateRuntime | null;
   quotaStatus: {
     status: 'available' | 'warning' | 'exhausted' | 'unknown';
     nextResetAt: string | null;
@@ -872,7 +861,6 @@ type QueryChannelNode = {
     providerQuota?: { opencodeGo?: { workspaceId?: string | null } | null } | null;
   } | null;
   providerQuotaStatus: ProviderQuotaStatusNode | null;
-  codexTurnStateRuntime?: CodexTurnStateRuntime | null;
 };
 
 type QueryChannelsResponse = {
@@ -900,7 +888,6 @@ function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel
     name: node.name,
     quotaRoutingMode: node.settings?.quotaRoutingMode ?? 'INHERIT',
     accountKey: optionalString(quotaStatus.accountKey),
-    codexTurnStateRuntime: node.codexTurnStateRuntime ?? null,
     quotaStatus: {
       status: quotaStatus.status,
       nextResetAt: quotaStatus.nextResetAt,
@@ -1136,7 +1123,6 @@ export function useProviderQuotaStatuses() {
       name: channel.name,
       type: channel.type,
       quotaRoutingMode: 'INHERIT',
-      codexTurnStateRuntime: channel.codexTurnStateRuntime ?? null,
       quotaStatus: {
         status: 'unknown',
         nextResetAt: null,
@@ -1148,7 +1134,6 @@ export function useProviderQuotaStatuses() {
 
     return {
       ...baseChannel,
-      codexTurnStateRuntime: channel.codexTurnStateRuntime ?? baseChannel.codexTurnStateRuntime ?? null,
       workspaceId: channel.settings?.providerQuota?.opencodeGo?.workspaceId ?? null,
       localQuota: channel.settings?.quota ?? null,
       localQuotaUsage: localQuotaUsage?.data,

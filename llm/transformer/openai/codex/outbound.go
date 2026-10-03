@@ -23,7 +23,6 @@ import (
 	"github.com/looplj/axonhub/llm/pipeline"
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer"
-	"github.com/looplj/axonhub/llm/transformer/openai/codex/turnstate"
 	"github.com/looplj/axonhub/llm/transformer/openai/responses"
 	"github.com/looplj/axonhub/llm/transformer/shared"
 )
@@ -44,8 +43,6 @@ type OutboundTransformer struct {
 	transport       string
 	baseURL         string
 	alphaSearchPath string
-	channelID       int
-	tickets         turnstate.Source
 
 	// official reports whether the configured upstream is the official Codex
 	// backend (chatgpt.com). Official endpoints always stream SSE, so they keep
@@ -77,8 +74,6 @@ type Params struct {
 	BaseURL         string
 	Transport       string
 	AlphaSearchPath string
-	ChannelID       int
-	TicketSource    turnstate.Source
 }
 
 // isOfficialCodexBaseURL reports whether baseURL points at the official Codex
@@ -124,8 +119,6 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 		transport:         params.Transport,
 		baseURL:           strings.TrimSuffix(baseURL, "##"),
 		alphaSearchPath:   alphaSearchPath,
-		channelID:         params.ChannelID,
-		tickets:           params.TicketSource,
 		official:          isOfficialCodexBaseURL(baseURL),
 		responsesOutbound: ro,
 	}, nil
@@ -460,10 +453,6 @@ type codexExecutor struct {
 
 func (e *codexExecutor) Do(ctx context.Context, request *httpclient.Request) (*httpclient.Response, error) {
 	request = e.requestForTransport(request)
-	ticket, err := e.applyTicket(ctx, request)
-	if err != nil {
-		return nil, err
-	}
 	// Compact and alpha search are non-streaming endpoints; proxy them
 	// through the real HTTP client instead of the SSE stream path.
 	if request.RequestType == string(llm.RequestTypeCompact) ||
@@ -477,85 +466,48 @@ func (e *codexExecutor) Do(ctx context.Context, request *httpclient.Request) (*h
 	// response Content-Type. The request is never reissued, which could
 	// duplicate model execution and billing.
 	if e.transformer != nil && e.transformer.isOfficialCodex() {
-		return e.doStreamAndAggregate(ctx, request, ticket)
+		return e.doStreamAndAggregate(ctx, request)
 	}
 
-	resp, err := e.doOnceAndDispatch(ctx, request)
-	e.observeResponse(ticket, resp, err)
-	return resp, err
+	return e.doOnceAndDispatch(ctx, request)
 }
 
 // doStreamAndAggregate preserves the original Codex behavior: consume the
 // upstream SSE stream and aggregate the events into a completed Responses
 // JSON body.
-func (e *codexExecutor) doStreamAndAggregate(ctx context.Context, request *httpclient.Request, ticket *turnstate.Ticket) (*httpclient.Response, error) {
+func (e *codexExecutor) doStreamAndAggregate(ctx context.Context, request *httpclient.Request) (*httpclient.Response, error) {
 	stream, err := e.executor(ctx).DoStream(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-
-	defer func() {
-		_ = stream.Close()
-	}()
+	defer func() { _ = stream.Close() }()
 
 	headers := httpclient.StreamResponseHeaders(stream)
-	model := ""
-	if ticket != nil {
-		model = ticket.Model
-	}
-	if model == "" {
-		model = strings.TrimSpace(gjson.GetBytes(request.Body, "model").String())
-	}
-	observer := turnstate.NewCompletionObserver(model)
-
 	var chunks []*httpclient.StreamEvent
 	for stream.Next() {
 		ev := stream.Current()
 		if ev == nil {
 			continue
 		}
-		if len(ev.Data) > 0 {
-			observer.WriteJSON(ev.Data)
-		}
-
 		chunks = append(chunks, &httpclient.StreamEvent{
-			Type:        ev.Type,
-			LastEventID: ev.LastEventID,
-			Data:        append([]byte(nil), ev.Data...),
+			Type: ev.Type, LastEventID: ev.LastEventID, Data: append([]byte(nil), ev.Data...),
 		})
 	}
-
 	if err := stream.Err(); err != nil {
 		return nil, err
 	}
 	if err := responses.TopLevelWebSocketError(chunks); err != nil {
 		return nil, err
 	}
-
 	body, _, err := e.transformer.AggregateStreamChunks(ctx, request, chunks)
 	if err != nil {
 		return nil, err
 	}
-
-	actual := ""
-	if complete, matches, observed := observer.Result(); complete && !matches {
-		actual = observed
+	outHeaders := http.Header{"Content-Type": []string{"application/json"}}
+	if state := headers.Get(TurnStateHeader); state != "" {
+		outHeaders.Set(TurnStateHeader, state)
 	}
-	e.observeCollected(ticket, headers, actual)
-
-	outHeaders := http.Header{
-		"Content-Type": []string{"application/json"},
-	}
-	if state := turnstate.HeaderValue(headers); state != "" {
-		outHeaders.Set(turnstate.Header, state)
-	}
-
-	return &httpclient.Response{
-		StatusCode: http.StatusOK,
-		Headers:    outHeaders,
-		Body:       body,
-		Request:    request,
-	}, nil
+	return &httpclient.Response{StatusCode: http.StatusOK, Headers: outHeaders, Body: body, Request: request}, nil
 }
 
 // doOnceAndDispatch sends a single upstream request and inspects the completed
@@ -640,15 +592,7 @@ func decodeSSEChunks(ctx context.Context, body []byte) ([]*httpclient.StreamEven
 }
 
 func (e *codexExecutor) DoStream(ctx context.Context, request *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
-	ticket, err := e.applyTicket(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	stream, err := e.executor(ctx).DoStream(ctx, e.requestForTransport(request))
-	if err != nil {
-		return nil, err
-	}
-	return e.observeStream(ticket, request, stream), nil
+	return e.executor(ctx).DoStream(ctx, e.requestForTransport(request))
 }
 
 func (e *codexExecutor) executor(_ context.Context) pipeline.Executor {

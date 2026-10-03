@@ -33,7 +33,6 @@ import { ChannelsStatusDialog } from './channels-status-dialog';
 import { ChannelsSystemSettingsDialog } from './channels-system-settings-dialog';
 import { ChannelsTestDialog } from './channels-test-dialog';
 import { ChannelsTestHistoryDrawer } from './channels-test-history-drawer';
-import { ChannelsCodexTurnStateDialog } from './channels-codex-turn-state-dialog';
 import { ChannelsTransformOptionsDialog } from './channels-transform-options-dialog';
 
 interface ChannelDetailsLoadDialogProps {
@@ -364,22 +363,6 @@ export function ChannelsDialogs() {
             }}
             currentRow={currentRow}
           />
-
-          {(currentRow.type === 'codex' || currentRow.type === 'fenno') && (
-            <ChannelsCodexTurnStateDialog
-              key={`channel-codex-turn-state-${currentRow.id}`}
-              open={open === 'codexTurnState'}
-              onOpenChange={(isOpen) => {
-                if (!isOpen) {
-                  setOpen(null);
-                  setTimeout(() => {
-                    setCurrentRow(null);
-                  }, 500);
-                }
-              }}
-              currentRow={currentRow}
-            />
-          )}
 
           <ChannelsEndpointsDialog
             key={`channel-endpoints-${currentRow.id}`}
