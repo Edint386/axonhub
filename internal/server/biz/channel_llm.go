@@ -307,6 +307,21 @@ func (svc *ChannelService) buildCodexOutbound(
 	alphaSearchPath string,
 	httpClient *httpclient.HttpClient,
 ) (transformer.Outbound, error) {
+	imageMainModel := strings.TrimSpace(c.DefaultTestModel)
+	if imageMainModel != "" {
+		modelChannel := ch
+		if modelChannel == nil {
+			modelChannel = &Channel{Channel: c}
+		}
+		modelKey := imageMainModel
+		if c.Settings != nil && c.Settings.LowercaseModelID {
+			modelKey = strings.ToLower(modelKey)
+		}
+		if mapped, err := modelChannel.ChooseModel(modelKey); err == nil {
+			imageMainModel = mapped
+		}
+	}
+
 	if c.Credentials.IsOAuth() {
 		if ch != nil {
 			if existing, ok := ch.Outbound.(*codex.OutboundTransformer); ok {
@@ -316,6 +331,7 @@ func (svc *ChannelService) buildCodexOutbound(
 						BaseURL:         baseURL,
 						Transport:       transport,
 						AlphaSearchPath: alphaSearchPath,
+						ImageMainModel:  imageMainModel,
 					})
 				}
 			}
@@ -360,6 +376,7 @@ func (svc *ChannelService) buildCodexOutbound(
 			BaseURL:         baseURL,
 			Transport:       transport,
 			AlphaSearchPath: alphaSearchPath,
+			ImageMainModel:  imageMainModel,
 		})
 	}
 
@@ -371,6 +388,7 @@ func (svc *ChannelService) buildCodexOutbound(
 		BaseURL:         baseURL,
 		Transport:       transport,
 		AlphaSearchPath: alphaSearchPath,
+		ImageMainModel:  imageMainModel,
 	})
 }
 
