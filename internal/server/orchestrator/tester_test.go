@@ -70,7 +70,7 @@ func TestChannelTestAPIFormatPrefersDecisionsEndpoint(t *testing.T) {
 		},
 	}}
 
-	require.Equal(t, llm.APIFormatOpenAIDecisions, channelTestAPIFormat(ch))
+	require.Equal(t, llm.APIFormatOpenAIDecisions, channelTestAPIFormat(ch, "gpt-6-luna"))
 }
 
 func TestParseDecisionsTestResponseRequiresAnswers(t *testing.T) {
@@ -80,6 +80,31 @@ func TestParseDecisionsTestResponseRequiresAnswers(t *testing.T) {
 
 	_, err = parseDecisionsTestResponse([]byte(`{"model":"gpt-6-luna","answers":[]}`))
 	require.EqualError(t, err, "no answers in Decisions response")
+}
+
+func TestChannelTestAPIFormatUsesModelProtocolPriority(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		formats []string
+		want    llm.APIFormat
+	}{
+		{"chat first", []string{llm.APIFormatOpenAIChatCompletion.String(), llm.APIFormatTypeSafeSystemOne.String()}, llm.APIFormatOpenAIChatCompletion},
+		{"systemone first", []string{llm.APIFormatTypeSafeSystemOne.String(), llm.APIFormatOpenAIChatCompletion.String()}, llm.APIFormatTypeSafeSystemOne},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ch := &biz.Channel{Channel: &ent.Channel{
+				Type:            channel.TypeOpenai,
+				SupportedModels: []string{"test-model"},
+				Endpoints:       []objects.ChannelEndpoint{{APIFormat: llm.APIFormatTypeSafeSystemOne.String(), Path: "/systemone"}},
+				Settings: &objects.ChannelSettings{
+					ExtraModelPrefix: "alias",
+					ModelProtocols:   []objects.ModelProtocol{{Model: "test-model", APIFormats: tt.formats}},
+				},
+			}}
+			require.Equal(t, tt.want, channelTestAPIFormat(ch, "test-model"))
+			require.Equal(t, tt.want, channelTestAPIFormat(ch, "alias/test-model"))
+		})
+	}
 }
 
 // TestUsesResponsesWebSocket verifies explicit and URL-inferred WebSocket transports.
@@ -183,6 +208,7 @@ func TestHandleNonStreamingResponseUsesTotalAsTTFBFallback(t *testing.T) {
 		ChatCompletionResult{ChatCompletion: &httpclient.Response{Body: body}},
 		time.Now(),
 		false,
+		llm.APIFormatOpenAIChatCompletion,
 	)
 	require.True(t, result.Success)
 	require.False(t, result.Stream)
