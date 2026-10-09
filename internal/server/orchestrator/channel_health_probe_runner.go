@@ -18,6 +18,7 @@ import (
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/internal/server/scheduler"
+	"github.com/looplj/axonhub/llm"
 )
 
 const (
@@ -97,6 +98,7 @@ func (runner *ChannelHealthProbeRunner) runScheduled(ctx context.Context) {
 		log.Error(ctx, "failed to list scheduled channel health probes", log.Cause(err))
 		return
 	}
+	targets = runner.withSupportedStreamModes(ctx, targets)
 
 	if policy.Enabled {
 		// The chain's stop condition is the EFFECTIVE ceiling, not the operator's
@@ -282,11 +284,61 @@ func (runner *ChannelHealthProbeRunner) RunManual(
 	input biz.RunChannelHealthProbeInput,
 ) (*biz.ChannelHealthProbeRunRecord, error) {
 	ctx = contexts.WithSource(ctx, request.SourceTest)
+	if input.Stream {
+		input.Stream = runner.supportsStreamProbe(ctx, make(map[int]*biz.Channel), input.ChannelID.ID, input.ModelID)
+	}
 	run, err := runner.service.CreateManualRun(ctx, input, time.Now().UTC())
 	if err != nil {
 		return nil, err
 	}
 	return runner.execute(ctx, run)
+}
+
+// withSupportedStreamModes keeps each target's requested mode unless its channel
+// is tested through a format that answers in one response (System One,
+// Decisions). Those are probed without streaming, and because a run's stream
+// flag is fixed when it is created, the stored run records the mode that ran.
+func (runner *ChannelHealthProbeRunner) withSupportedStreamModes(
+	ctx context.Context,
+	targets []biz.ChannelHealthProbeTarget,
+) []biz.ChannelHealthProbeTarget {
+	channels := make(map[int]*biz.Channel)
+	for i := range targets {
+		if targets[i].Stream {
+			targets[i].Stream = runner.supportsStreamProbe(ctx, channels, targets[i].ChannelID, targets[i].ModelID)
+		}
+	}
+
+	return targets
+}
+
+// supportsStreamProbe reports whether modelID on the channel can be probed with
+// streaming. A channel that cannot be loaded keeps the requested mode; the probe
+// itself then reports the failure.
+func (runner *ChannelHealthProbeRunner) supportsStreamProbe(
+	ctx context.Context,
+	channels map[int]*biz.Channel,
+	channelID int,
+	modelID string,
+) bool {
+	ch, ok := channels[channelID]
+	if !ok {
+		loaded, err := runner.tester.channelService.GetChannel(ctx, channelID)
+		if err != nil {
+			loaded = nil
+		}
+		channels[channelID] = loaded
+		ch = loaded
+	}
+	if ch == nil {
+		return true
+	}
+
+	return channelTestFormatStreams(channelTestAPIFormat(ch, modelID))
+}
+
+func channelTestFormatStreams(apiFormat llm.APIFormat) bool {
+	return apiFormat != llm.APIFormatTypeSafeSystemOne && apiFormat != llm.APIFormatOpenAIDecisions
 }
 
 func (runner *ChannelHealthProbeRunner) execute(
