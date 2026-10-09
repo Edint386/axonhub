@@ -14,7 +14,7 @@ test('quota badges retain upstream provider states and render channel-local quot
   const quotaBadges = read('components/quota-badges.tsx');
 
   assert.match(quotaTypes, /providerQuotaStatus != null \|\| node\.settings\?\.quota != null/);
-  assert.match(quotaBadges, /isClineUnavailablePassQuotaData\(quota\.quotaData\)/);
+  assert.match(quotaBadges, /isClineUnavailablePassQuotaData\(quota\.quotaData(?: as ProviderClineQuotaData)?\)/);
   assert.match(quotaBadges, /if \(!quota && !channel\.localQuota\) return null/);
   assert.match(quotaBadges, /getWorstQuotaStatus\(channel\.quotaStatus\?\.status, getLocalQuotaStatus\(channel\)\)/);
   assert.match(quotaBadges, /quota\.label\.local_requests/);
