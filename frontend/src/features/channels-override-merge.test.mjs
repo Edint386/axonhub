@@ -124,3 +124,20 @@ test('mergeChannelSettingsForUpdate preserves quotaRoutingMode through a patch m
   const unset = mergeChannelSettingsForUpdate({ extraModelPrefix: 'x' }, {});
   assert.equal(unset.quotaRoutingMode, undefined);
 });
+
+test('mergeChannelSettingsForUpdate only sends quota null when the patch clears it', () => {
+  const quota = { requests: 100, totalTokens: null, cost: null, period: { type: 'all_time' } };
+
+  // A snapshot without the quota field must omit it so the backend keeps the stored quota.
+  const unloaded = mergeChannelSettingsForUpdate({ extraModelPrefix: 'x' }, { lowercaseModelId: true });
+  assert.equal(unloaded.quota, undefined);
+  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(unloaded)), 'quota'), false);
+
+  // A loaded quota is carried through unrelated patches.
+  assert.deepEqual(mergeChannelSettingsForUpdate({ quota }, { lowercaseModelId: true }).quota, quota);
+
+  // Disabling quota in the rate-limit dialog sends an explicit null.
+  const cleared = mergeChannelSettingsForUpdate({ quota }, { quota: null });
+  assert.equal(cleared.quota, null);
+  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(cleared)), 'quota'), true);
+});

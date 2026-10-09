@@ -216,7 +216,7 @@ func (r *mutationResolver) BulkCreateChannels(ctx context.Context, input biz.Bul
 
 // UpdateChannel is the resolver for the updateChannel field.
 func (r *mutationResolver) UpdateChannel(ctx context.Context, id objects.GUID, input ent.UpdateChannelInput) (*ent.Channel, error) {
-	return r.channelService.UpdateChannel(ctx, id.ID, &input)
+	return r.channelService.UpdateChannel(withChannelSettingsExplicitNulls(ctx), id.ID, &input)
 }
 
 // SaveChannelEndpoints is the resolver for the saveChannelEndpoints field.

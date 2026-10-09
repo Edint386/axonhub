@@ -922,10 +922,11 @@ func normalizeAutoDisableRules(rules []objects.APIKeyAutoDisableRule, allowDelet
 }
 
 // mergeChannelSettingsForUpdate copies input settings and keeps stored
-// providerQuota / healthProbe when the update omitted them. Channel settings
-// are persisted as one JSON blob, so a dialog that only edits rate limits
-// would otherwise wipe probe config and quota credentials.
-func mergeChannelSettingsForUpdate(existing, input *objects.ChannelSettings) *objects.ChannelSettings {
+// providerQuota / healthProbe / quota when the update omitted them. Channel
+// settings are persisted as one JSON blob, so a dialog that only edits rate
+// limits would otherwise wipe probe config and quota credentials. Quota is only
+// cleared when the client sent it as an explicit null.
+func mergeChannelSettingsForUpdate(ctx context.Context, existing, input *objects.ChannelSettings) *objects.ChannelSettings {
 	if input == nil {
 		return existing
 	}
@@ -934,6 +935,9 @@ func mergeChannelSettingsForUpdate(existing, input *objects.ChannelSettings) *ob
 	}
 
 	merged := *input
+	if merged.Quota == nil && !channelSettingsFieldExplicitlyNull(ctx, "quota") {
+		merged.Quota = existing.Quota
+	}
 	if merged.ProviderQuota == nil {
 		merged.ProviderQuota = existing.ProviderQuota
 	} else {
@@ -1237,7 +1241,7 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 			}
 			settings := input.Settings
 			if existingSettingsRow != nil {
-				settings = mergeChannelSettingsForUpdate(existingSettingsRow.Settings, input.Settings)
+				settings = mergeChannelSettingsForUpdate(ctx, existingSettingsRow.Settings, input.Settings)
 			}
 			mut.SetSettings(settings)
 		} else if clearStaleQuotaSettings {

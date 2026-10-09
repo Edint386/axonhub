@@ -30,7 +30,7 @@ func TestMergeChannelSettingsForUpdatePreservesProbeAndProviderQuota(t *testing.
 			Quota:            &objects.APIKeyQuota{Requests: lo.ToPtr(int64(10))},
 		}
 
-		merged := mergeChannelSettingsForUpdate(existing, input)
+		merged := mergeChannelSettingsForUpdate(t.Context(), existing, input)
 		require.Equal(t, "new-", merged.ExtraModelPrefix)
 		require.NotNil(t, merged.Quota)
 		require.Equal(t, int64(10), *merged.Quota.Requests)
@@ -48,7 +48,7 @@ func TestMergeChannelSettingsForUpdatePreservesProbeAndProviderQuota(t *testing.
 			},
 		}
 
-		merged := mergeChannelSettingsForUpdate(existing, input)
+		merged := mergeChannelSettingsForUpdate(t.Context(), existing, input)
 		require.NotNil(t, merged.ProviderQuota)
 		require.NotNil(t, merged.ProviderQuota.OpencodeGo)
 		require.Equal(t, "wk_2", merged.ProviderQuota.OpencodeGo.WorkspaceID)
@@ -64,7 +64,7 @@ func TestMergeChannelSettingsForUpdatePreservesProbeAndProviderQuota(t *testing.
 			},
 		}
 
-		merged := mergeChannelSettingsForUpdate(existing, input)
+		merged := mergeChannelSettingsForUpdate(t.Context(), existing, input)
 		require.NotNil(t, merged.HealthProbe)
 		require.NotNil(t, merged.HealthProbe.ProbeEnabled)
 		require.False(t, *merged.HealthProbe.ProbeEnabled)
@@ -83,9 +83,45 @@ func TestMergeChannelSettingsForUpdatePreservesProbeAndProviderQuota(t *testing.
 			},
 		}
 
-		merged := mergeChannelSettingsForUpdate(existingWithOllama, input)
+		merged := mergeChannelSettingsForUpdate(t.Context(), existingWithOllama, input)
 		require.NotNil(t, merged.ProviderQuota)
 		require.NotNil(t, merged.ProviderQuota.Ollama)
 		require.Empty(t, merged.ProviderQuota.Ollama.AuthCookie)
+	})
+}
+
+func TestMergeChannelSettingsForUpdateQuota(t *testing.T) {
+	existing := &objects.ChannelSettings{
+		Quota: &objects.APIKeyQuota{
+			Requests: lo.ToPtr(int64(100)),
+			Period:   objects.APIKeyQuotaPeriod{Type: objects.APIKeyQuotaPeriodTypeAllTime},
+		},
+	}
+
+	t.Run("omitted quota keeps the stored quota", func(t *testing.T) {
+		merged := mergeChannelSettingsForUpdate(t.Context(), existing, &objects.ChannelSettings{ExtraModelPrefix: "new-"})
+		require.Equal(t, "new-", merged.ExtraModelPrefix)
+		require.Equal(t, existing.Quota, merged.Quota)
+	})
+
+	t.Run("explicit null quota clears the stored quota", func(t *testing.T) {
+		ctx := WithChannelSettingsExplicitNulls(t.Context(), []string{"quota"})
+		merged := mergeChannelSettingsForUpdate(ctx, existing, &objects.ChannelSettings{})
+		require.Nil(t, merged.Quota)
+	})
+
+	t.Run("explicit null on another field keeps the stored quota", func(t *testing.T) {
+		ctx := WithChannelSettingsExplicitNulls(t.Context(), []string{"rateLimit"})
+		merged := mergeChannelSettingsForUpdate(ctx, existing, &objects.ChannelSettings{})
+		require.Equal(t, existing.Quota, merged.Quota)
+	})
+
+	t.Run("submitted quota replaces the stored quota", func(t *testing.T) {
+		quota := &objects.APIKeyQuota{
+			TotalTokens: lo.ToPtr(int64(5000)),
+			Period:      objects.APIKeyQuotaPeriod{Type: objects.APIKeyQuotaPeriodTypeAllTime},
+		}
+		merged := mergeChannelSettingsForUpdate(t.Context(), existing, &objects.ChannelSettings{Quota: quota})
+		require.Equal(t, quota, merged.Quota)
 	})
 }

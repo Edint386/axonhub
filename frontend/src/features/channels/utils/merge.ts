@@ -124,7 +124,9 @@ export function mergeChannelSettingsForUpdate(
     passThroughUserAgent: pick('passThroughUserAgent', existing?.passThroughUserAgent ?? null),
     passThroughBody: pick('passThroughBody', existing?.passThroughBody ?? null),
     rateLimit: pick('rateLimit', existing?.rateLimit ?? null),
-    quota: pick('quota', existing?.quota ?? null),
+    // Leave an unloaded quota undefined so it is omitted and the backend keeps
+    // the stored value; only an explicit patch value of null clears it.
+    quota: pick('quota', existing?.quota),
     retryableStatusCodes: pick('retryableStatusCodes', existing?.retryableStatusCodes ?? []),
     retryableErrorPatterns: pick('retryableErrorPatterns', existing?.retryableErrorPatterns ?? []),
     modelProtocols: pick('modelProtocols', existing?.modelProtocols ?? []),
