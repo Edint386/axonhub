@@ -445,7 +445,7 @@ func TestUpstreamModelPersistence_ConflictsSurviveTermination(t *testing.T) {
 			require.Equal(t, "a", saved.UpstreamModelID)
 			require.Equal(t, "a", saved.UpstreamModelID, "only the first reported name is kept")
 			require.Empty(t, saved.ResponseChunks)
-			require.NoError(t, state.RequestService.UpdateRequestExecutionStatus(ctx, saved.ID, saved.Status, "", nil, nil))
+			require.NoError(t, state.RequestService.UpdateRequestExecutionStatus(ctx, saved.ID, saved.Status, "", nil))
 			saved, err = db.RequestExecution.Get(ctx, saved.ID)
 			require.NoError(t, err)
 			require.Equal(t, "a", saved.UpstreamModelID, "status-only updates preserve the recorded name")
