@@ -528,6 +528,34 @@ func TestLoadBalancedSelector_Select_ChannelPriorityWithinModelPriority(t *testi
 	require.Equal(t, 3, result[2].Channel.ID)
 }
 
+func TestLoadBalancedSelector_Select_ChannelPriorityBeatsLoadBalancerOrder(t *testing.T) {
+	ctx := context.Background()
+
+	// Without priority tiers, the ordering-weight tie-breaker would select the
+	// low-priority channel first.
+	candidates := []*ChannelModelsCandidate{
+		{
+			Channel:  &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "low-priority-heavy", Priority: 1, OrderingWeight: 100}},
+			Priority: 0,
+		},
+		{
+			Channel:  &biz.Channel{Channel: &ent.Channel{ID: 2, Name: "high-priority-light", Priority: 100, OrderingWeight: 1}},
+			Priority: 0,
+		},
+	}
+
+	systemService := &mockSystemService{retryPolicy: &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 1}}
+	selector := WithLoadBalancedSelector(
+		&staticChannelSelector{candidates: candidates},
+		NewLoadBalancer(systemService, nil),
+		systemService,
+	)
+
+	result, err := selector.Select(ctx, &llm.Request{Model: "gpt-4"})
+	require.NoError(t, err)
+	require.Equal(t, []int{2, 1}, []int{result[0].Channel.ID, result[1].Channel.ID})
+}
+
 func TestLoadBalancedSelector_Select_RateLimitedHighPriorityFallsThrough(t *testing.T) {
 	ctx := context.Background()
 

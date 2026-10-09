@@ -160,6 +160,27 @@ func TestLoadBalancedSelector_abandons_exhausted_sticky_candidate(t *testing.T) 
 	require.Equal(t, 1, gate.DroppedCount())
 }
 
+func TestLoadBalancedSelector_pins_sticky_after_exhausted_higher_priority_tier_is_removed(t *testing.T) {
+	// Given
+	highPriority := quotaRoutingCandidate(1, "")
+	highPriority.Channel.Priority = 10
+	selector, gate := newQuotaRoutingSelector(
+		[]*ChannelModelsCandidate{highPriority, quotaRoutingCandidate(2, ""), quotaRoutingCandidate(3, "")},
+		map[int]*biz.QuotaChannelStatus{1: quotaExhaustedStatus()},
+		biz.QuotaRoutingSettings{DefaultMode: objects.QuotaRoutingModeRemoveOnExhausted},
+	)
+	ctx := contexts.WithTrace(context.Background(), &ent.Trace{ID: 10, ThreadID: 20})
+
+	// When
+	got, err := selector.Select(ctx, &llm.Request{Model: "model"})
+
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, []int{2, 3}, quotaRoutingIDs(got))
+	require.True(t, got[0].TraceSticky)
+	require.Equal(t, 1, gate.DroppedCount())
+}
+
 func TestQuotaRoutingGate_phaseTwo_returns_single_stickyOnly_candidate(t *testing.T) {
 	// Given
 	gate := NewQuotaRoutingGate(&mockQuotaStatusProvider{statuses: map[int]*biz.QuotaChannelStatus{1: quotaStickyOnlyStatus()}}, biz.QuotaRoutingSettings{DefaultMode: objects.QuotaRoutingModeBackpressure})

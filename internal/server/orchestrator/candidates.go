@@ -774,7 +774,7 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 		candidates = s.quotaGate.Filter(ctx, candidates, req, stickyID)
 	}
 
-	if stickyOK {
+	if stickyOK && stickyCandidateEligible(ctx, candidates, stickyID, loadBalancer) {
 		if stickyCandidate, remainingCandidates := s.pinStickyCandidate(candidates, stickyID); stickyCandidate != nil {
 			stickyCandidate.TraceSticky = true
 
@@ -926,23 +926,29 @@ func (s *LoadBalancedSelector) sortCandidates(
 	}
 
 	// Group candidates by priority first (lower priority value = higher priority)
-	priorityGroups := make(map[int][]*ChannelModelsCandidate)
+	priorityGroups := make(map[candidatePriorityTier][]*ChannelModelsCandidate)
 	for _, c := range candidates {
-		priorityGroups[c.Priority] = append(priorityGroups[c.Priority], c)
+		tier := candidatePriorityTierOf(c)
+		priorityGroups[tier] = append(priorityGroups[tier], c)
 	}
 
 	// Get sorted priority keys (lower priority value = higher priority)
 	priorities := lo.Keys(priorityGroups)
 
-	// Sort priorities: lower value = higher priority
-	slices.Sort(priorities)
+	// Sort priorities: lower model priority first, then higher channel priority
+	slices.SortFunc(priorities, compareCandidatePriorityTiers)
 
 	// For each priority group, apply load balancing to sort candidates within the group
 	// Stop early if we have collected enough candidates
 	var result []*ChannelModelsCandidate
+	var deferredUnavailable []*ChannelModelsCandidate
 
 	for _, p := range priorities {
-		group := priorityGroups[p]
+		group, unavailable := splitHardUnavailableCandidates(ctx, loadBalancer, priorityGroups[p], req.Model)
+		deferredUnavailable = append(deferredUnavailable, unavailable...)
+		if len(group) == 0 {
+			continue
+		}
 
 		// Apply load balancing to sort candidates within this priority group.
 		useStream := req.Stream != nil && *req.Stream
@@ -966,6 +972,7 @@ func (s *LoadBalancedSelector) sortCandidates(
 			break
 		}
 	}
+	result = appendDeferredCandidates(result, deferredUnavailable, requiredCount)
 
 	// Priority groups are sorted independently, but only the first candidate in
 	// the final result is selected for the initial attempt. Track it once after
