@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	entrequest "github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/objects"
 )
@@ -82,6 +83,68 @@ func TestAggregatedMetrics_ExpireStaleLatencySignals(t *testing.T) {
 	require.EqualValues(t, 9, stale.RequestCount)
 	require.EqualValues(t, 8, stale.SuccessCount)
 	require.EqualValues(t, 1, stale.FailureCount)
+
+	// The two modes expire independently: a channel serving only streaming traffic
+	// must not lose its streaming signal because its non-streaming one went cold.
+	mixed := fresh.Clone()
+	mixed.NonStreamingLastSampleAt = new(now.Add(-2 * window))
+	mixed.expireStaleLatencySignals(now, window)
+	require.EqualValues(t, 320, mixed.StreamingFirstTokenLatencyEWMA)
+	require.EqualValues(t, 5, mixed.StreamingSampleCount)
+	require.Zero(t, mixed.NonStreamingLatencyEWMA)
+	require.Zero(t, mixed.NonStreamingSampleCount)
+}
+
+// The expiry has to be applied on the path the load balancer actually reads, not
+// merely exist as a method -- that wiring is the whole fix.
+func TestChannelService_GetChannelMetricsExpiresStaleLatencySignals(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:stale-latency?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	svc := newTestChannelService(client)
+
+	const channelID = 11
+
+	recordSuccess := func() {
+		now := time.Now()
+		svc.IncrementChannelSelection(channelID)
+		svc.RecordPerformance(ctx, &PerformanceRecord{
+			ChannelID:        channelID,
+			Source:           entrequest.SourceAPI,
+			StartTime:        now.Add(-time.Second),
+			EndTime:          now,
+			Success:          true,
+			RequestCompleted: true,
+		})
+	}
+
+	recordSuccess()
+	metrics, err := svc.GetChannelMetrics(ctx, channelID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, metrics.NonStreamingSampleCount)
+
+	// Age the newest sample past the sliding window. Samples older than the window
+	// are dropped on write, so the stale state can only be reached this way.
+	cm := svc.getChannelMetrics(channelID)
+	cm.mu.Lock()
+	cm.aggregatedMetrics.NonStreamingLastSampleAt = new(time.Now().Add(-2 * time.Duration(svc.performanceWindowSeconds()) * time.Second))
+	liveEWMA := cm.aggregatedMetrics.NonStreamingLatencyEWMA
+	cm.mu.Unlock()
+	require.Positive(t, liveEWMA)
+
+	metrics, err = svc.GetChannelMetrics(ctx, channelID)
+	require.NoError(t, err)
+	require.Zero(t, metrics.NonStreamingSampleCount, "a sample older than the window must read as unknown")
+	require.Zero(t, metrics.NonStreamingLatencyEWMA)
+
+	// A fresh sample makes the channel known again. The live aggregate kept its EWMA
+	// through the stale period, so this blends into it rather than restarting.
+	recordSuccess()
+	metrics, err = svc.GetChannelMetrics(ctx, channelID)
+	require.NoError(t, err)
+	require.Positive(t, metrics.NonStreamingSampleCount)
+	require.Positive(t, metrics.NonStreamingLatencyEWMA)
 }
 
 func TestChannelMetrics_RecordSuccess(t *testing.T) {
