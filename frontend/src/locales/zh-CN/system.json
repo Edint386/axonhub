@@ -504,6 +504,5 @@
   "quota.label.local_quota": "本地配额",
   "quota.label.local_requests": "请求",
   "quota.label.local_total_tokens": "总 Token",
-  "quota.label.local_cost": "成本",
-  "system.quota.enforcement.allowedChannels.selectedCount": "已选择 {{count}} 个通道"
+  "quota.label.local_cost": "成本"
 }
