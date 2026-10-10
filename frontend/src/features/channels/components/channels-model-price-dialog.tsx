@@ -395,7 +395,7 @@ function mapPriceToForm(price: ModelPrice): PriceFormData['prices'][number]['pri
   };
 }
 
-function mapServerPricesToFormData(currentPrices: ChannelModelPrices): PriceFormData {
+function mapServerPricesToFormData(currentPrices: ChannelModelPrices['prices']): PriceFormData {
   return {
     prices: currentPrices.map((p) => ({
       modelId: p.modelID,
@@ -440,7 +440,7 @@ function findProviderModelById(providersData: ProvidersData, modelId: string, pr
   return null;
 }
 
-function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 1): PriceFormData['prices'][number]['price']['items'] {
+function buildItemsFromProviderModel(model: ProviderModel): PriceFormData['prices'][number]['price']['items'] {
   const items: PriceFormData['prices'][number]['price']['items'] = [];
   const cost = model.cost;
 
@@ -449,7 +449,7 @@ function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 
       itemCode,
       pricing: {
         mode: 'usage_per_unit',
-        usagePerUnit: (value * multiplier).toFixed(4),
+        usagePerUnit: value.toFixed(4),
       },
     });
   };
@@ -471,8 +471,7 @@ function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 
 
 function mergeItemsWithProviderCost(
   currentItems: PriceFormData['prices'][number]['price']['items'],
-  model: ProviderModel,
-  multiplier: number = 1
+  model: ProviderModel
 ): PriceFormData['prices'][number]['price']['items'] {
   const byCode = new Map<(typeof priceItemCodes)[number], PriceFormData['prices'][number]['price']['items'][number]>();
   currentItems.forEach((item) => {
@@ -486,7 +485,7 @@ function mergeItemsWithProviderCost(
         ...existing,
         pricing: {
           mode: 'usage_per_unit',
-          usagePerUnit: (value * multiplier).toFixed(4),
+          usagePerUnit: value.toFixed(4),
           flatFee: '',
           usageTiered: null,
         },
@@ -495,7 +494,7 @@ function mergeItemsWithProviderCost(
     }
     byCode.set(itemCode, {
       itemCode,
-      pricing: { mode: 'usage_per_unit', usagePerUnit: (value * multiplier).toFixed(4) },
+      pricing: { mode: 'usage_per_unit', usagePerUnit: value.toFixed(4) },
     });
   };
 
@@ -733,7 +732,6 @@ export function ChannelsModelPriceDialog() {
     const next = defaultProviderId && providersData.providers[defaultProviderId] ? defaultProviderId : '';
     setSelectedProviderId(next);
     setSelectedModelId('');
-    setMultiplier(1);
   }, [defaultProviderId, isOpen, providersData]);
 
   const providerModels = useMemo(() => {
@@ -752,7 +750,8 @@ export function ChannelsModelPriceDialog() {
 
   useEffect(() => {
     if (isOpen && currentPrices) {
-      reset(mapServerPricesToFormData(currentPrices));
+      reset(mapServerPricesToFormData(currentPrices.prices));
+      setMultiplier(currentPrices.multiplier);
     }
   }, [isOpen, currentPrices, reset]);
 
@@ -773,15 +772,16 @@ export function ChannelsModelPriceDialog() {
     importSessionRef.current = { channelId: '', open: false };
     setOpen(null);
     reset();
+    setMultiplier(1);
   }, [setOpen, reset]);
 
   const handleExport = useCallback(() => {
-    if (!currentRow || !currentPrices || currentPrices.length === 0) {
+    if (!currentRow || !currentPrices || currentPrices.prices.length === 0) {
       toast.error(t('price.export.empty'));
       return;
     }
 
-    const payload = currentPrices.map((p) => ({
+    const payload = currentPrices.prices.map((p) => ({
       modelId: p.modelID,
       price: p.price,
     }));
@@ -977,6 +977,7 @@ export function ChannelsModelPriceDialog() {
 
         await savePrices.mutateAsync({
           channelId: currentRow.id,
+          multiplier,
           input,
         });
         handleClose();
@@ -984,7 +985,7 @@ export function ChannelsModelPriceDialog() {
         // Error handled by mutation
       }
     },
-    [currentRow, handleClose, savePrices]
+    [currentRow, handleClose, multiplier, savePrices]
   );
 
   const addPrice = useCallback(() => {
@@ -1008,10 +1009,10 @@ export function ChannelsModelPriceDialog() {
   const applyProviderModelToIndex = useCallback(
     (priceIndex: number, providerModel: ProviderModel) => {
       const currentItems = getValues(`prices.${priceIndex}.price.items`) || [];
-      const merged = mergeItemsWithProviderCost(currentItems, providerModel, multiplier);
+      const merged = mergeItemsWithProviderCost(currentItems, providerModel);
       setValue(`prices.${priceIndex}.price.items`, merged, { shouldDirty: true, shouldValidate: true });
     },
-    [getValues, setValue, multiplier]
+    [getValues, setValue]
   );
 
   const applyProviderModelById = useCallback(
@@ -1035,11 +1036,11 @@ export function ChannelsModelPriceDialog() {
       pendingScrollToNewCardRef.current = true;
       append({
         modelId,
-        price: { items: buildItemsFromProviderModel(found.model, multiplier) },
+        price: { items: buildItemsFromProviderModel(found.model) },
       });
       toast.success(t('price.apply.added', { modelId }));
     },
-    [append, applyProviderModelToIndex, getValues, providersData, t, multiplier]
+    [append, applyProviderModelToIndex, getValues, providersData, t]
   );
 
   const onModelSelected = useCallback(
@@ -1194,7 +1195,10 @@ export function ChannelsModelPriceDialog() {
                     <Input
                       type='number'
                       value={multiplier}
-                      onChange={(e) => setMultiplier(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => {
+                        const value = e.target.valueAsNumber;
+                        setMultiplier(Number.isFinite(value) ? Math.max(0, value) : 0);
+                      }}
                       className='h-8'
                       step='0.01'
                       min='0'
@@ -1229,7 +1233,7 @@ export function ChannelsModelPriceDialog() {
                           if (existingModelIds.has(modelId)) return;
                           append({
                             modelId,
-                            price: { items: buildItemsFromProviderModel(found.model, multiplier) },
+                            price: { items: buildItemsFromProviderModel(found.model) },
                           });
                           added += 1;
                         });
