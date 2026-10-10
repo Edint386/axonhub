@@ -523,7 +523,7 @@ function QuotaRow({ channel, effectiveMode }: { channel: ProviderQuotaChannel; e
   // (red). Without a resolvable mode the badge is omitted.
   let modeBadge: { key: string; color: string } | null = null;
   const routingIndicator = getChannelQuotaRoutingIndicator(
-    { ready: quota?.ready ?? false, providerType: channel.providerType ?? '', providerQuotaStatus: quota ? { status: providerStatus ?? 'unknown', ready: quota.ready, providerType: channel.providerType ?? '', quotaData: quota.quotaData as Record<string, unknown> } : null, quotaRoutingMode: effectiveMode },
+    { providerQuotaStatus: quota ? { status: providerStatus ?? 'unknown', ready: quota.ready, providerType: channel.providerType ?? '', quotaData: quota.quotaData as Record<string, unknown> } : null, quotaRoutingMode: effectiveMode },
     undefined,
     effectiveMode,
     quota?.limits,
