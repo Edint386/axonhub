@@ -12,7 +12,10 @@ const (
 	BillingWeeklyURL  = DefaultBaseURL + "/billing?format=credits"
 	BillingMonthlyURL = DefaultBaseURL + "/billing"
 
-	CLIClientVersion          = "0.2.114"
+	// custom override: the xAI CLI proxy rejects 0.2.114 (upstream's value) as
+	// outdated and requires 1.0.13 or later. Take upstream's value instead once
+	// upstream raises it to 1.0.13 or later.
+	CLIClientVersion          = "1.0.13"
 	CLIClientVersionHeader    = "x-grok-client-version"
 	CLIClientIdentifier       = "grok-shell"
 	CLIClientIdentifierHeader = "x-grok-client-identifier"
