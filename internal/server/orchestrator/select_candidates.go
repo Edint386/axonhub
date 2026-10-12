@@ -134,6 +134,10 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 }
 
 func randomizeAliasModelOrder(candidates []*ChannelModelsCandidate) []*ChannelModelsCandidate {
+	return randomizeAliasModelOrderWithRand(candidates, rand.IntN)
+}
+
+func randomizeAliasModelOrderWithRand(candidates []*ChannelModelsCandidate, intN func(int) int) []*ChannelModelsCandidate {
 	if len(candidates) == 0 {
 		return candidates
 	}
@@ -146,66 +150,81 @@ func randomizeAliasModelOrder(candidates []*ChannelModelsCandidate) []*ChannelMo
 		}
 
 		cloned := *candidate
-		cloned.Models = randomizeDuplicateRequestModelGroups(candidate.Models)
+		if order := aliasModelOrderWithRand(candidate.Models, intN); order != nil {
+			cloned.Models = permuteByOrder(candidate.Models, order)
+			// The per-model endpoint formats are index-aligned with Models, so they
+			// must follow the same order; otherwise a target is sent with another
+			// target's protocol.
+			if len(candidate.modelAPIFormats) == len(candidate.Models) {
+				cloned.modelAPIFormats = permuteByOrder(candidate.modelAPIFormats, order)
+				cloned.APIFormat = cloned.modelAPIFormats[0]
+			}
+		}
 		randomized[i] = &cloned
 	}
 
 	return randomized
 }
 
-func randomizeDuplicateRequestModelGroups(models []biz.ChannelModelEntry) []biz.ChannelModelEntry {
-	return randomizeDuplicateRequestModelGroupsWithRand(models, rand.IntN)
+func randomizeDuplicateRequestModelGroupsWithRand(models []biz.ChannelModelEntry, intN func(int) int) []biz.ChannelModelEntry {
+	order := aliasModelOrderWithRand(models, intN)
+	if order == nil {
+		return models
+	}
+
+	return permuteByOrder(models, order)
 }
 
-func randomizeDuplicateRequestModelGroupsWithRand(models []biz.ChannelModelEntry, intN func(int) int) []biz.ChannelModelEntry {
+// aliasModelOrderWithRand returns a random order for models in which the targets
+// of every alias (entries sharing a request model) are shuffled among the
+// positions that alias already holds. order[i] is the original index of the
+// entry placed at i. It returns nil when no alias has more than one target.
+func aliasModelOrderWithRand(models []biz.ChannelModelEntry, intN func(int) int) []int {
 	if len(models) < 2 {
-		return models
+		return nil
 	}
 
-	countByRequestModel := make(map[string]int, len(models))
-	for _, model := range models {
-		countByRequestModel[model.RequestModel]++
-	}
-
-	hasDuplicateRequestModel := false
-	for _, count := range countByRequestModel {
-		if count > 1 {
-			hasDuplicateRequestModel = true
-			break
+	requestModels := make([]string, 0, len(models))
+	positionsByRequestModel := make(map[string][]int, len(models))
+	for i, model := range models {
+		if _, seen := positionsByRequestModel[model.RequestModel]; !seen {
+			requestModels = append(requestModels, model.RequestModel)
 		}
-	}
-	if !hasDuplicateRequestModel {
-		return models
+		positionsByRequestModel[model.RequestModel] = append(positionsByRequestModel[model.RequestModel], i)
 	}
 
-	randomized := append([]biz.ChannelModelEntry(nil), models...)
-	entriesByRequestModel := make(map[string][]biz.ChannelModelEntry, len(countByRequestModel))
-	for _, model := range models {
-		if countByRequestModel[model.RequestModel] < 2 {
+	var order []int
+	for _, requestModel := range requestModels {
+		positions := positionsByRequestModel[requestModel]
+		if len(positions) < 2 {
 			continue
 		}
-		entriesByRequestModel[model.RequestModel] = append(entriesByRequestModel[model.RequestModel], model)
-	}
 
-	for requestModel, entries := range entriesByRequestModel {
-		shuffled := append([]biz.ChannelModelEntry(nil), entries...)
+		if order == nil {
+			order = make([]int, len(models))
+			for i := range order {
+				order[i] = i
+			}
+		}
+
+		shuffled := append([]int(nil), positions...)
 		for i := len(shuffled) - 1; i > 0; i-- {
 			j := intN(i + 1)
 			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 		}
-		entriesByRequestModel[requestModel] = shuffled
-	}
-
-	nextIndexByRequestModel := make(map[string]int, len(entriesByRequestModel))
-	for i, model := range randomized {
-		entries, ok := entriesByRequestModel[model.RequestModel]
-		if !ok {
-			continue
+		for k, position := range positions {
+			order[position] = shuffled[k]
 		}
-		nextIndex := nextIndexByRequestModel[model.RequestModel]
-		randomized[i] = entries[nextIndex]
-		nextIndexByRequestModel[model.RequestModel] = nextIndex + 1
 	}
 
-	return randomized
+	return order
+}
+
+func permuteByOrder[T any](items []T, order []int) []T {
+	permuted := make([]T, len(order))
+	for i, from := range order {
+		permuted[i] = items[from]
+	}
+
+	return permuted
 }
