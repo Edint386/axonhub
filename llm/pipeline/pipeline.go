@@ -281,6 +281,7 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 
 	channelSwitches := 0
 	sameChannelRetries := 0
+	aliasSwitches := 0 // fork: see AliasFailover
 
 	// Step 3: Process the request
 	for {
@@ -308,8 +309,14 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 		canRetry := false
 		timeoutRetry := isResponseTimeoutError(lastErr)
 
+		// fork: try the next alias target before same-channel retries; see AliasFailover.
+		aliasSwitched, abandonChannel := p.nextAliasTarget(ctx, lastErr, timeoutRetry, &aliasSwitches)
+		if aliasSwitched {
+			continue
+		}
+
 		// 1. Try same-channel retry first if supported
-		if !timeoutRetry {
+		if !timeoutRetry && !abandonChannel {
 			if channelRetryable, ok := p.Outbound.(ChannelRetryable); ok {
 				if sameChannelRetries < p.getMaxSameChannelRetries() && channelRetryable.CanRetry(lastErr) {
 					if err := channelRetryable.PrepareForRetry(ctx); err == nil {
@@ -334,6 +341,7 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 					if err := retryable.NextChannel(ctx); err == nil {
 						channelSwitches++
 						sameChannelRetries = 0 // Reset same-channel attempts for new channel
+						aliasSwitches = 0      // fork: the new channel has its own alias targets
 						canRetry = true
 
 						slog.DebugContext(ctx, "switched to next channel",

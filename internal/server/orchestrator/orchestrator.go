@@ -218,6 +218,7 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		Proxy:                 processor.proxy,
 		CurrentCandidateIndex: 0,
 	}
+	state.AliasFailoverEnabled = retryPolicy.Enabled // fork: see alias_failover.go
 
 	var pipelineOpts []pipeline.Option
 

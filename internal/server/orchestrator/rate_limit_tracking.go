@@ -92,6 +92,13 @@ func (m *rateLimitTracking) OnOutboundRawError(ctx context.Context, err error) {
 		return
 	}
 
+	// fork: a 429 on one target of a multi-target alias limits that upstream
+	// model only, and the next target is tried right away, so the channel does
+	// not cool down while a target is left (see alias_failover.go).
+	if m.outbound.HasNextAliasTarget() {
+		return
+	}
+
 	// Parse Retry-After header from 429 error
 	cooldown, ok := httpclient.ParseRetryAfter(err)
 	if !ok {

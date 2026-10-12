@@ -117,4 +117,9 @@ type PersistenceState struct {
 	// the effective request for the current candidate attempt. In that case the
 	// serialized transformer body must win over the inbound raw body.
 	PassThroughBodyBlocked bool
+
+	// fork: AliasFailoverEnabled lets the outbound switch between the targets of
+	// a multi-target model alias without spending the same-channel retry budget
+	// (see alias_failover.go). It follows the retry policy's master switch.
+	AliasFailoverEnabled bool
 }

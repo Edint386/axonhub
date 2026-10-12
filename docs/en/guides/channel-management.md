@@ -110,6 +110,20 @@ You can configure the same `from` value more than once to target multiple models
 
 When a client requests `fast`, AxonHub randomizes those target models for that request and starts with the first target in the randomized order. If retry policy is enabled and the current target fails, AxonHub continues with the next target in that same randomized order within the channel.
 
+Switching between targets of the same alias **does not count against Max Single Channel Retries**. Free tiers such as Groq usually rate-limit each model separately, so one failing target says nothing about the others. For the errors below, AxonHub therefore tries the remaining targets of the alias in the channel even when Max Single Channel Retries is 0, and it does not wait for the retry delay between targets:
+
+- 429 rate limits (with or without Retry-After), 5xx, connection resets and interrupted streams, 404 (model missing or retired), 413 (request too large for the model's token limit), empty responses (with Empty Response Detection enabled in the retry policy), and errors matched by the channel's Retry Status Codes or Retry Error Messages. For example, add `model_decommissioned` to Retry Error Messages to fail over from a retired model automatically.
+
+Everything else:
+
+- Errors that hit every target alike, such as 400, 401 and 403 (unless listed in Retry Status Codes or matched by Retry Error Messages), do not switch for free. They follow the regular retry flow: each one uses one single-channel retry and waits for the retry delay, and the request moves to the next channel once the retries are used up. Network timeouts (connect, TLS handshake and similar) follow the regular flow too.
+- Response timeouts (stream first-event and non-stream timeouts) do not switch targets; they move to the next channel.
+- Local queueing, local RPM limits and the model circuit breaker apply to the whole channel or alias and never trigger a switch.
+- Targets are not switched when the retry policy is disabled.
+- After every target has been tried, the remaining single-channel retries go to the last target; a 429 on the last target moves to the next channel.
+
+**Tip**: every target switch counts as a channel failure. If the channel has an auto-disable rule on 429, or the model circuit breaker load-balancing strategy is used, several rate-limited targets in a row can trip the rule or the breaker sooner. While another target is left, a 429 with Retry-After on one target does not put the channel into the load balancer's rate-limit cooldown; only a 429 on the last target does.
+
 **Note**: The target model (`to`) must be in the Supported Models list. If the target model is not supported, the mapping is silently ignored.
 
 ### Extra Model Prefix

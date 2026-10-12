@@ -157,8 +157,9 @@ func isTerminalLlmStreamEvent(resp *llm.Response) bool {
 	return resp == llm.DoneResponse || (resp != nil && resp.Object == "[DONE]") || hasFinishReason(resp)
 }
 
+// fork: a remaining alias target needs the same pre-commit buffering as a retry.
 func (p *pipeline) hasStreamRetryBudget() bool {
-	return p.maxSameChannelRetries > 0 || p.maxChannelRetries > 0
+	return p.maxSameChannelRetries > 0 || p.maxChannelRetries > 0 || p.hasAliasFailoverTarget()
 }
 
 func shouldWrapPreReadStreamError(err error) bool {

@@ -418,3 +418,36 @@ func TestRateLimitTracking_OnOutboundRawError_NilChannel(t *testing.T) {
 }
 
 // ========== parseRetryAfter tests moved to llm/httpclient/errors_test.go ==========
+
+func TestRateLimitTracking_OnOutboundRawError_429OnAliasTargetWithSiblingLeft(t *testing.T) {
+	tracker := NewChannelRequestTracker()
+
+	channel := &biz.Channel{Channel: &ent.Channel{ID: 3, Name: "groq"}}
+	state := &PersistenceState{
+		AliasFailoverEnabled: true,
+		CurrentCandidate: &ChannelModelsCandidate{
+			Channel: channel,
+			Models: []biz.ChannelModelEntry{
+				{RequestModel: "general", ActualModel: "llama", Source: "mapping"},
+				{RequestModel: "general", ActualModel: "qwen", Source: "mapping"},
+			},
+		},
+	}
+	middleware := &rateLimitTracking{
+		outbound: &PersistentOutboundTransformer{state: state},
+		tracker:  tracker,
+	}
+
+	rateLimited := &httpclient.Error{
+		StatusCode: http.StatusTooManyRequests,
+		Headers:    http.Header{"Retry-After": []string{"30"}},
+	}
+
+	middleware.OnOutboundRawError(context.Background(), rateLimited)
+	assert.False(t, tracker.IsCoolingDown(channel.ID),
+		"a 429 on one alias target must not cool down the channel while another target is left")
+
+	state.CurrentModelIndex = 1
+	middleware.OnOutboundRawError(context.Background(), rateLimited)
+	assert.True(t, tracker.IsCoolingDown(channel.ID), "the last alias target's 429 cools the channel down as usual")
+}
