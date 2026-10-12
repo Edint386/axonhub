@@ -25,6 +25,21 @@ func TestPromptResolverProjectID(t *testing.T) {
 	require.Equal(t, 42, projectID.ID)
 }
 
+func TestChannelHealthProbeRunResolverIDs(t *testing.T) {
+	run := &ent.ChannelHealthProbeRun{ID: 7, ChannelID: 42}
+	resolver := &channelHealthProbeRunResolver{}
+
+	id, err := resolver.ID(context.Background(), run)
+	require.NoError(t, err)
+	require.Equal(t, ent.TypeChannelHealthProbeRun, id.Type)
+	require.Equal(t, 7, id.ID)
+
+	channelID, err := resolver.ChannelID(context.Background(), run)
+	require.NoError(t, err)
+	require.Equal(t, ent.TypeChannel, channelID.Type)
+	require.Equal(t, 42, channelID.ID)
+}
+
 func TestChannelResolver_ProviderQuotaStatus_HidesDisabledCollectionProvider(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=1")
 	defer client.Close()

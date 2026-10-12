@@ -130,12 +130,18 @@ func (r *channelResolver) ProviderQuotaStatus(ctx context.Context, obj *ent.Chan
 
 // ID is the resolver for the id field.
 func (r *channelHealthProbeRunResolver) ID(ctx context.Context, obj *ent.ChannelHealthProbeRun) (*objects.GUID, error) {
-	panic(fmt.Errorf("not implemented: ID - id"))
+	return &objects.GUID{
+		Type: ent.TypeChannelHealthProbeRun,
+		ID:   obj.ID,
+	}, nil
 }
 
 // ChannelID is the resolver for the channelID field.
 func (r *channelHealthProbeRunResolver) ChannelID(ctx context.Context, obj *ent.ChannelHealthProbeRun) (*objects.GUID, error) {
-	panic(fmt.Errorf("not implemented: ChannelID - channelID"))
+	return &objects.GUID{
+		Type: ent.TypeChannel,
+		ID:   obj.ChannelID,
+	}, nil
 }
 
 // ID is the resolver for the id field.
