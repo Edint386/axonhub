@@ -163,16 +163,6 @@ input RetryableErrorPatternInput {
   regex: Boolean
 }
 
-type OpenCodeGoQuotaSettings {
-  workspaceId: String
-  authCookie: String
-}
-
-input OpenCodeGoQuotaSettingsInput {
-  workspaceId: String
-  authCookie: String
-}
-
 type ModelProtocol {
   model: String!
   apiFormats: [String!]!
@@ -185,6 +175,10 @@ input ModelProtocolInput {
   enabled: Boolean
 }
 
+# ProviderQuota carries credentials used only for provider quota polling
+# (e.g. the Command Code account session cookie). These are sensitive: the
+# output resolver only returns them to operators with write_channels, and the
+# values are never part of ordinary channel reads.
 type CommandCodeQuotaSettings {
   authCookie: String
 }
@@ -202,13 +196,11 @@ input OllamaQuotaSettingsInput {
 }
 
 type ChannelProviderQuotaSettings {
-  opencodeGo: OpenCodeGoQuotaSettings
   commandCode: CommandCodeQuotaSettings
   ollama: OllamaQuotaSettings
 }
 
 input ChannelProviderQuotaSettingsInput {
-  opencodeGo: OpenCodeGoQuotaSettingsInput
   commandCode: CommandCodeQuotaSettingsInput
   ollama: OllamaQuotaSettingsInput
 }

@@ -385,7 +385,6 @@ export const ollamaQuotaSettingsSchema = z.object({
 export type OllamaQuotaSettings = z.infer<typeof ollamaQuotaSettingsSchema>;
 
 export const channelProviderQuotaSettingsSchema = z.object({
-  opencodeGo: z.object({ workspaceId: z.string().optional().nullable(), authCookie: z.string().optional().nullable() }).optional().nullable(),
   commandCode: commandCodeQuotaSettingsSchema.optional().nullable(),
   ollama: ollamaQuotaSettingsSchema.optional().nullable(),
 });

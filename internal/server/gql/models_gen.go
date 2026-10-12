@@ -431,16 +431,6 @@ type OnboardingInfo struct {
 	AutoDisableChannel *AutoDisableChannelOnboarding `json:"autoDisableChannel,omitempty"`
 }
 
-type OpenCodeGoQuotaSettings struct {
-	WorkspaceID *string `json:"workspaceId,omitempty"`
-	AuthCookie  *string `json:"authCookie,omitempty"`
-}
-
-type OpenCodeGoQuotaSettingsInput struct {
-	WorkspaceID *string `json:"workspaceId,omitempty"`
-	AuthCookie  *string `json:"authCookie,omitempty"`
-}
-
 type PassThroughSettings struct {
 	Enabled bool `json:"enabled"`
 }

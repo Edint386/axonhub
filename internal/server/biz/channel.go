@@ -959,15 +959,6 @@ func mergeProviderQuotaSettings(existing, input *objects.ChannelProviderQuotaSet
 	}
 
 	merged := *input
-	if merged.OpencodeGo == nil {
-		merged.OpencodeGo = existing.OpencodeGo
-	} else if existing.OpencodeGo != nil {
-		opencodeGo := *merged.OpencodeGo
-		if strings.TrimSpace(opencodeGo.AuthCookie) == "" {
-			opencodeGo.AuthCookie = existing.OpencodeGo.AuthCookie
-		}
-		merged.OpencodeGo = &opencodeGo
-	}
 	// A non-nil Ollama block with an empty cookie is an explicit clear signal.
 	// An omitted Ollama block remains inherited, matching the existing
 	// provider-quota merge contract for partial channel updates.

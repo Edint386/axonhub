@@ -147,11 +147,6 @@ func (r *channelResolver) LiveLimiterStats(ctx context.Context, obj *ent.Channel
 	}, nil
 }
 
-// OpencodeGo is the resolver for the opencodeGo field.
-func (r *channelProviderQuotaSettingsResolver) OpencodeGo(ctx context.Context, obj *objects.ChannelProviderQuotaSettings) (*OpenCodeGoQuotaSettings, error) {
-	panic(fmt.Errorf("not implemented: OpencodeGo - opencodeGo"))
-}
-
 // HeaderOverrideOperations is the resolver for the headerOverrideOperations field.
 func (r *channelSettingsResolver) HeaderOverrideOperations(ctx context.Context, obj *objects.ChannelSettings) ([]*objects.OverrideOperation, error) {
 	if obj == nil {
@@ -1124,16 +1119,6 @@ func (r *traceResolver) UsageMetadata(ctx context.Context, obj *ent.Trace) (*biz
 	return r.traceService.UsageMetadata(ctx, obj.ID)
 }
 
-// OpencodeGo is the resolver for the opencodeGo field.
-func (r *channelProviderQuotaSettingsInputResolver) OpencodeGo(ctx context.Context, obj *objects.ChannelProviderQuotaSettings, data *OpenCodeGoQuotaSettingsInput) error {
-	panic(fmt.Errorf("not implemented: OpencodeGo - opencodeGo"))
-}
-
-// ChannelProviderQuotaSettings returns ChannelProviderQuotaSettingsResolver implementation.
-func (r *Resolver) ChannelProviderQuotaSettings() ChannelProviderQuotaSettingsResolver {
-	return &channelProviderQuotaSettingsResolver{r}
-}
-
 // ChannelSettings returns ChannelSettingsResolver implementation.
 func (r *Resolver) ChannelSettings() ChannelSettingsResolver { return &channelSettingsResolver{r} }
 
@@ -1143,13 +1128,6 @@ func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 // Segment returns SegmentResolver implementation.
 func (r *Resolver) Segment() SegmentResolver { return &segmentResolver{r} }
 
-// ChannelProviderQuotaSettingsInput returns ChannelProviderQuotaSettingsInputResolver implementation.
-func (r *Resolver) ChannelProviderQuotaSettingsInput() ChannelProviderQuotaSettingsInputResolver {
-	return &channelProviderQuotaSettingsInputResolver{r}
-}
-
-type channelProviderQuotaSettingsResolver struct{ *Resolver }
 type channelSettingsResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type segmentResolver struct{ *Resolver }
-type channelProviderQuotaSettingsInputResolver struct{ *Resolver }

@@ -1087,9 +1087,6 @@ func hasCredentialsForProvider(ch *ent.Channel) bool {
 		return false
 	}
 
-	if ch.Type == channel.TypeOpencodeGo || ch.Type == channel.TypeOpencodeGoAnthropic {
-		return hasOpenCodeGoQuotaCredentials(ch)
-	}
 	if isCommandCodeChannelType(ch.Type) {
 		// Command Code quota collection authenticates with the account API key
 		// (/alpha/billing/*), or with the Studio session cookie as a fallback.
@@ -1107,30 +1104,8 @@ func hasCredentialsForProvider(ch *ent.Channel) bool {
 		return err == nil
 	}
 
-	if ch.Type == channel.TypeOllama || ch.Type == channel.TypeOllamaAnthropic {
-		// Ollama Cloud quota collection is authenticated with the account
-		// session cookie, never the inference API key.
-		if ch.Settings == nil || ch.Settings.ProviderQuota == nil || ch.Settings.ProviderQuota.Ollama == nil {
-			return false
-		}
-
-		_, err := provider_quota.NormalizeOllamaCookie(ch.Settings.ProviderQuota.Ollama.AuthCookie)
-		return err == nil
-	}
-
 	return ch.Credentials.OAuth != nil || isOAuthJSON(ch.Credentials.APIKey) ||
 		strings.TrimSpace(ch.Credentials.APIKey) != "" || len(ch.Credentials.APIKeys) > 0
-}
-
-// hasOpenCodeGoQuotaCredentials reports whether the separate dashboard cookie
-// used by OpenCode Go quota polling is configured. Upstream request credentials
-// are not sufficient for this checker and should not trigger repeated failures.
-func hasOpenCodeGoQuotaCredentials(ch *ent.Channel) bool {
-	if ch.Settings == nil || ch.Settings.ProviderQuota == nil || ch.Settings.ProviderQuota.OpencodeGo == nil {
-		return false
-	}
-
-	return strings.TrimSpace(ch.Settings.ProviderQuota.OpencodeGo.AuthCookie) != ""
 }
 
 func (svc *ProviderQuotaService) mergeLimitsIntoQuotaData(quotaData provider_quota.QuotaData) map[string]any {

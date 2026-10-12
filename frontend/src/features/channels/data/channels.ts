@@ -106,15 +106,6 @@ const CHANNEL_QUOTA_FIELDS = `
           }
 `;
 
-const CHANNEL_PROVIDER_QUOTA_FIELDS = `
-          providerQuota {
-            opencodeGo {
-              workspaceId
-              authCookie
-            }
-          }
-`;
-
 const CHANNEL_HEALTH_PROBE_FIELDS = `
           healthProbe {
             probeEnabled
@@ -178,7 +169,6 @@ const CREATE_CHANNEL_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
-        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
@@ -275,7 +265,6 @@ const DUPLICATE_CHANNEL_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
-        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
@@ -372,7 +361,6 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
-        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
@@ -469,7 +457,6 @@ const UPDATE_CHANNEL_MUTATION = `
         passThroughBody
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
-        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
         retryableErrorPatterns {
@@ -703,7 +690,6 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           passThroughBody
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
-        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
           retryableStatusCodes
           retryableErrorPatterns {
@@ -948,7 +934,6 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           passThroughBody
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
-        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
           retryableStatusCodes
           retryableErrorPatterns {
@@ -1208,7 +1193,6 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
             passThroughBody
             ${CHANNEL_RATE_LIMIT_FIELDS}
             ${CHANNEL_QUOTA_FIELDS}
-        ${CHANNEL_PROVIDER_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
             retryableStatusCodes
             retryableErrorPatterns {

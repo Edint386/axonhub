@@ -14,10 +14,7 @@ func TestMergeChannelSettingsForUpdatePreservesProbeAndProviderQuota(t *testing.
 	existing := &objects.ChannelSettings{
 		ExtraModelPrefix: "old-",
 		ProviderQuota: &objects.ChannelProviderQuotaSettings{
-			OpencodeGo: &objects.OpenCodeGoQuotaSettings{
-				WorkspaceID: "wk_1",
-				AuthCookie:  "auth=live-session-cookie",
-			},
+			CommandCode: &objects.CommandCodeQuotaSettings{AuthCookie: "session=live"},
 		},
 		HealthProbe: &objects.ChannelHealthProbeSettings{
 			ProbeEnabled: &enabled,
@@ -35,24 +32,6 @@ func TestMergeChannelSettingsForUpdatePreservesProbeAndProviderQuota(t *testing.
 		require.NotNil(t, merged.Quota)
 		require.Equal(t, int64(10), *merged.Quota.Requests)
 		require.Equal(t, existing.ProviderQuota, merged.ProviderQuota)
-		require.Equal(t, existing.HealthProbe, merged.HealthProbe)
-	})
-
-	t.Run("empty auth cookie keeps stored credential", func(t *testing.T) {
-		input := &objects.ChannelSettings{
-			ProviderQuota: &objects.ChannelProviderQuotaSettings{
-				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
-					WorkspaceID: "wk_2",
-					AuthCookie:  "  ",
-				},
-			},
-		}
-
-		merged := mergeChannelSettingsForUpdate(t.Context(), existing, input)
-		require.NotNil(t, merged.ProviderQuota)
-		require.NotNil(t, merged.ProviderQuota.OpencodeGo)
-		require.Equal(t, "wk_2", merged.ProviderQuota.OpencodeGo.WorkspaceID)
-		require.Equal(t, "auth=live-session-cookie", merged.ProviderQuota.OpencodeGo.AuthCookie)
 		require.Equal(t, existing.HealthProbe, merged.HealthProbe)
 	})
 

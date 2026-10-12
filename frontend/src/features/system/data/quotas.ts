@@ -46,9 +46,6 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
                 calendarDuration { unit }
               }
             }
-            providerQuota {
-              opencodeGo { workspaceId }
-            }
           }
         }
       }
@@ -695,7 +692,6 @@ export type ProviderQuotaChannel = {
   // entry built by the quota popover grouping.
   sharedAccountNames?: string[];
   providerType?: string;
-  workspaceId?: string | null;
   localQuota?: ChannelQuota | null;
   localQuotaUsage?: ChannelQuotaUsage | null;
   localQuotaUsageLoading?: boolean;
@@ -858,7 +854,6 @@ type QueryChannelNode = {
   settings: {
     quotaRoutingMode: ChannelQuotaRoutingMode;
     quota?: ChannelQuota | null;
-    providerQuota?: { opencodeGo?: { workspaceId?: string | null } | null } | null;
   } | null;
   providerQuotaStatus: ProviderQuotaStatusNode | null;
 };
@@ -1134,7 +1129,6 @@ export function useProviderQuotaStatuses() {
 
     return {
       ...baseChannel,
-      workspaceId: channel.settings?.providerQuota?.opencodeGo?.workspaceId ?? null,
       localQuota: channel.settings?.quota ?? null,
       localQuotaUsage: localQuotaUsage?.data,
       localQuotaUsageLoading: localQuotaUsage?.isLoading ?? false,

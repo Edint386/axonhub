@@ -247,8 +247,9 @@ type ChannelSettings struct {
 	// case-sensitive substring of the error text.
 	RetryableErrorPatterns []RetryableErrorPattern `json:"retryableErrorPatterns,omitempty"`
 
-	// ProviderQuota stores provider-specific credentials used only for quota
-	// polling. Keep upstream request credentials in ChannelCredentials.
+	// ProviderQuota holds provider-specific quota collection credentials and
+	// options. Fields are sensitive (e.g. auth cookies) and only exposed to
+	// operators holding channel write permission.
 	ProviderQuota *ChannelProviderQuotaSettings `json:"providerQuota,omitempty"`
 
 	QuotaRoutingMode QuotaRoutingMode `json:"quotaRoutingMode,omitempty"`
@@ -299,10 +300,26 @@ func (s *ChannelHealthProbeSettings) IsProbeEnabled() bool {
 	return *s.ProbeEnabled
 }
 
+// ChannelProviderQuotaSettings groups per-provider quota collection settings.
+type ChannelProviderQuotaSettings struct {
+	// CommandCode holds the quota collection settings for Command Code channels.
+	CommandCode *CommandCodeQuotaSettings `json:"commandCode,omitempty"`
+
+	// Ollama holds the quota collection settings for Ollama Cloud channels.
+	Ollama *OllamaQuotaSettings `json:"ollama,omitempty"`
+}
+
+// CommandCodeQuotaSettings holds the fallback credential used to query the
+// Command Code account quota. Quota is normally read with the channel API key
+// (the /alpha/billing/* endpoints, the same key the official CLI uses);
+// AuthCookie is only used when that key cannot reach the billing API, and is
+// the commandcode.ai session cookie (a "__Secure-commandcode_prod_.session_token"
+// style value) sent to the Studio-wide internal billing endpoints.
 type CommandCodeQuotaSettings struct {
 	AuthCookie string `json:"authCookie,omitempty"`
 }
 
+// String redacts the auth cookie so settings never leak it into logs.
 func (s CommandCodeQuotaSettings) String() string {
 	if s.AuthCookie == "" {
 		return "CommandCodeQuotaSettings{AuthCookie: \"\"}"
@@ -328,17 +345,6 @@ func (s OllamaQuotaSettings) String() string {
 type RetryableErrorPattern struct {
 	Pattern string `json:"pattern"`
 	Regex   bool   `json:"regex,omitempty"`
-}
-
-type ChannelProviderQuotaSettings struct {
-	OpencodeGo  *OpenCodeGoQuotaSettings  `json:"opencodeGo,omitempty"`
-	CommandCode *CommandCodeQuotaSettings `json:"commandCode,omitempty"`
-	Ollama      *OllamaQuotaSettings      `json:"ollama,omitempty"`
-}
-
-type OpenCodeGoQuotaSettings struct {
-	WorkspaceID string `json:"workspaceId,omitempty"`
-	AuthCookie  string `json:"authCookie,omitempty"`
 }
 
 type ChannelRateLimit struct {
