@@ -857,17 +857,22 @@ func channelHealthProbeFirstTokenMs(run *ChannelHealthProbeRunRecord) (float64, 
 	return *value, true
 }
 
-func activeHealthProbeModelMap(models []ActiveHealthProbeModelSetting) map[string]ActiveHealthProbeModelSetting {
-	if len(models) == 0 {
-		return nil
-	}
-	result := make(map[string]ActiveHealthProbeModelSetting, len(models))
+// enabledActiveHealthProbeModelIDs returns the enabled model IDs in the
+// operator's configured order, which the dashboard also uses to pick a
+// channel's primary model (see primaryRealProbeModelID).
+func enabledActiveHealthProbeModelIDs(models []ActiveHealthProbeModelSetting) []string {
+	result := make([]string, 0, len(models))
+	seen := make(map[string]struct{}, len(models))
 	for _, model := range models {
-		model.ModelID = strings.TrimSpace(model.ModelID)
-		if model.ModelID == "" {
+		modelID := strings.TrimSpace(model.ModelID)
+		if modelID == "" || !model.Enabled {
 			continue
 		}
-		result[model.ModelID] = model
+		if _, ok := seen[modelID]; ok {
+			continue
+		}
+		seen[modelID] = struct{}{}
+		result = append(result, modelID)
 	}
 	return result
 }
@@ -1093,7 +1098,8 @@ func (svc *ChannelHealthProbeService) DueTargets(
 }
 
 // DueTargetsWithPolicy returns EVERY eligible channel/model pair for the current
-// schedule bucket, ordered by channel priority descending.
+// schedule bucket, grouped by model in the policy's configured order and ordered
+// by channel priority descending within each model.
 //
 // It deliberately does NOT filter out channels that were probed recently. The
 // priority chain in the orchestrator walks this list and stops after the first
@@ -1145,10 +1151,11 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 	}
 
 	candidates := make([]ChannelHealthProbeTarget, 0)
-	globalModels := activeHealthProbeModelMap(policy.Models)
-	if len(globalModels) == 0 {
+	modelIDs := enabledActiveHealthProbeModelIDs(policy.Models)
+	if len(modelIDs) == 0 {
 		return []ChannelHealthProbeTarget{}, nil
 	}
+	probeChannels := make([]*ent.Channel, 0, len(channels))
 	for _, ch := range channels {
 		var settings objects.ChannelHealthProbeSettings
 		if ch.Settings != nil && ch.Settings.HealthProbe != nil {
@@ -1161,18 +1168,14 @@ func (svc *ChannelHealthProbeService) DueTargetsWithPolicy(
 		if !settings.IsProbeEnabled() {
 			continue
 		}
+		probeChannels = append(probeChannels, ch)
+	}
 
-		models := make([]ActiveHealthProbeModelSetting, 0, len(globalModels))
-		for _, model := range globalModels {
-			if model.Enabled {
-				models = append(models, model)
-			}
-		}
-		slices.SortFunc(models, func(left, right ActiveHealthProbeModelSetting) int {
-			return strings.Compare(left.ModelID, right.ModelID)
-		})
-		for _, model := range models {
-			modelID := strings.TrimSpace(model.ModelID)
+	// Targets are listed model by model in the operator's configured order, with
+	// channels in priority order within each model, so the priority runner starts
+	// its per-model groups in the order the operator arranged them.
+	for _, modelID := range modelIDs {
+		for _, ch := range probeChannels {
 			if !isRealProbeModelSupported(ch, modelID) {
 				continue
 			}

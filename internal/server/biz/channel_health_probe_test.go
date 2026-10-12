@@ -365,6 +365,38 @@ func TestChannelHealthProbeDueTargetsUseGlobalModelSettings(t *testing.T) {
 	require.False(t, targets[0].Stream)
 }
 
+func TestChannelHealthProbeDueTargetsFollowConfiguredModelOrder(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:health-probe-model-order?mode=memory&_fk=0")
+	defer client.Close()
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	low := createHealthProbeTestChannel(t, ctx, client, "low", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
+	high := createHealthProbeTestChannel(t, ctx, client, "high", channel.StatusEnabled, &objects.ChannelHealthProbeSettings{})
+	high = client.Channel.UpdateOne(high).SetPriority(10).SaveX(ctx)
+
+	svc := &ChannelHealthProbeService{AbstractService: &AbstractService{db: client}}
+	// The configured order is deliberately not alphabetical.
+	targets, err := svc.DueTargetsWithPolicy(ctx, time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC), ActiveHealthProbeScanSetting{
+		Enabled: true,
+		Models: []ActiveHealthProbeModelSetting{
+			{ModelID: "other", Enabled: true},
+			{ModelID: "gpt-3.5", Enabled: false},
+			{ModelID: "gpt-4", Enabled: true},
+		},
+	})
+	require.NoError(t, err)
+
+	got := make([]string, 0, len(targets))
+	for _, target := range targets {
+		got = append(got, fmt.Sprintf("%s@%d", target.ModelID, target.ChannelID))
+	}
+	require.Equal(t, []string{
+		fmt.Sprintf("other@%d", high.ID),
+		fmt.Sprintf("other@%d", low.ID),
+		fmt.Sprintf("gpt-4@%d", high.ID),
+		fmt.Sprintf("gpt-4@%d", low.ID),
+	}, got)
+}
+
 func TestChannelHealthProbePrimaryModelFollowsGlobalOrder(t *testing.T) {
 	globalModels := []ActiveHealthProbeModelSetting{
 		{ModelID: "model-1", Enabled: true},
