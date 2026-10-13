@@ -548,6 +548,25 @@ export const testChannelAPIKeysPayloadSchema = z.object({
 });
 export type TestChannelAPIKeysPayload = z.infer<typeof testChannelAPIKeysPayloadSchema>;
 
+const optionalIntInputSchema = z.preprocess((value) => {
+  if (value === null || typeof value === 'undefined') {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return undefined;
+    }
+
+    if (/^[+-]?\d+$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+  }
+
+  return value;
+}, z.number().int().optional());
+
 // Pricing Schemas
 export const pricingModeSchema = z.enum(['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume']);
 export type PricingMode = z.infer<typeof pricingModeSchema>;
@@ -701,7 +720,7 @@ export const createChannelInputSchema = z
     defaultTestModel: z.string().min(1, 'Please select a default test model'),
     remark: z.string().optional(),
     orderingWeight: z.number().int().optional(),
-    priority: z.number().int().optional(),
+    priority: optionalIntInputSchema,
     settings: channelSettingsSchema.optional(),
     endpoints: z.array(channelEndpointSchema).optional(),
     credentials: z.object({
@@ -815,7 +834,7 @@ export const updateChannelInputSchema = z
     })
       .optional(),
     orderingWeight: z.number().optional(),
-    priority: z.number().optional(),
+    priority: optionalIntInputSchema,
   })
   .superRefine((data, ctx) => {
     const effectiveType = data.type;
