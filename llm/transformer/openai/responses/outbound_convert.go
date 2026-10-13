@@ -378,6 +378,7 @@ func convertToolMessageWithType(msg llm.Message, itemType string) Item {
 	}
 
 	return Item{
+		ID:     msg.ID,
 		Type:   itemType,
 		CallID: lo.FromPtr(msg.ToolCallID),
 		Output: &output,
