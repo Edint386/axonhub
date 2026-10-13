@@ -550,7 +550,7 @@ func TestCodexHandlers_Exchange_InvalidProxyDoesNotConsumeState(t *testing.T) {
 	require.Contains(t, retryW.Body.String(), "oauth state mismatch")
 }
 
-func TestCodexHandlers_Exchange_StateDeletedOnTokenExchangeFailure(t *testing.T) {
+func TestCodexHandlers_Exchange_RetainsStateOnTokenExchangeFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var tokenCalls int
@@ -559,8 +559,12 @@ func TestCodexHandlers_Exchange_StateDeletedOnTokenExchangeFailure(t *testing.T)
 		tokenCalls++
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte(`{"error":"bad_gateway"}`))
+		if tokenCalls == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"error":"bad_gateway"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"access_token":"a","refresh_token":"r","expires_in":3600,"token_type":"bearer"}`))
 	}))
 	t.Cleanup(tokenServer.Close)
 
@@ -624,8 +628,8 @@ func TestCodexHandlers_Exchange_StateDeletedOnTokenExchangeFailure(t *testing.T)
 
 	exchangeW2 := httptest.NewRecorder()
 	router.ServeHTTP(exchangeW2, exchangeReq2)
-	require.Equal(t, http.StatusBadRequest, exchangeW2.Code)
-	require.Contains(t, exchangeW2.Body.String(), "invalid or expired oauth session")
+	require.Equal(t, http.StatusOK, exchangeW2.Code)
+	require.Equal(t, 2, tokenCalls)
 }
 
 func TestCodexHandlers_Exchange_RejectsStateMismatch(t *testing.T) {
@@ -706,8 +710,7 @@ func TestCodexHandlers_Exchange_RejectsStateMismatch(t *testing.T) {
 
 	exchangeW2 := httptest.NewRecorder()
 	router.ServeHTTP(exchangeW2, exchangeReq2)
-	require.Equal(t, http.StatusBadRequest, exchangeW2.Code)
-	require.Contains(t, exchangeW2.Body.String(), "invalid or expired oauth session")
+	require.Equal(t, http.StatusOK, exchangeW2.Code)
 }
 
 func TestCodexHandlers_Exchange_DeletesStateOnSuccess(t *testing.T) {
