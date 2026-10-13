@@ -875,11 +875,12 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name          string
-		updates       []*ChannelOrderingItem
-		wantErr       bool
-		wantUpdated   int
-		verifyWeights map[int]int
+		name           string
+		updates        []*ChannelOrderingItem
+		wantErr        bool
+		wantUpdated    int
+		verifyWeights  map[int]int
+		verifyPriority map[int]int
 	}{
 		{
 			name: "update ordering weights successfully",
@@ -892,6 +893,41 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 			verifyWeights: map[int]int{
 				ch1.ID: 100,
 				ch2.ID: 50,
+			},
+		},
+		{
+			name: "update priorities successfully",
+			updates: []*ChannelOrderingItem{
+				{ID: ch1.ID, Priority: lo.ToPtr(90)},
+				{ID: ch2.ID, Priority: lo.ToPtr(80)},
+			},
+			wantErr:     false,
+			wantUpdated: 2,
+			// A priority-only update must leave the weights from the previous case untouched.
+			verifyWeights: map[int]int{
+				ch1.ID: 100,
+				ch2.ID: 50,
+			},
+			verifyPriority: map[int]int{
+				ch1.ID: 90,
+				ch2.ID: 80,
+			},
+		},
+		{
+			name: "update weights and priorities successfully",
+			updates: []*ChannelOrderingItem{
+				{ID: ch1.ID, OrderingWeight: lo.ToPtr(70), Priority: lo.ToPtr(700)},
+				{ID: ch2.ID, OrderingWeight: lo.ToPtr(60), Priority: lo.ToPtr(600)},
+			},
+			wantErr:     false,
+			wantUpdated: 2,
+			verifyWeights: map[int]int{
+				ch1.ID: 70,
+				ch2.ID: 60,
+			},
+			verifyPriority: map[int]int{
+				ch1.ID: 700,
+				ch2.ID: 600,
 			},
 		},
 		{
@@ -921,6 +957,15 @@ func TestChannelService_BulkUpdateChannelOrdering(t *testing.T) {
 						expectedWeight, ok := tt.verifyWeights[ch.ID]
 						if ok {
 							require.Equal(t, expectedWeight, ch.OrderingWeight)
+						}
+					}
+				}
+
+				if tt.verifyPriority != nil {
+					for _, ch := range result {
+						expectedPriority, ok := tt.verifyPriority[ch.ID]
+						if ok {
+							require.Equal(t, expectedPriority, ch.Priority)
 						}
 					}
 				}

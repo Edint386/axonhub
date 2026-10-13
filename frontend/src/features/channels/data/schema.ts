@@ -970,6 +970,7 @@ export const channelSummarySchema = z.object({
   status: channelStatusSchema,
   baseURL: z.string(),
   orderingWeight: z.number(),
+  priority: z.number(),
   tags: z.array(z.string()).optional().default([]).nullable(),
   endpoints: z.array(channelEndpointSchema).optional().default([]).nullable(),
   allModelEntries: z.array(channelModelEntrySchema).optional().default([]),
@@ -989,10 +990,15 @@ export type ChannelSummaryConnection = z.infer<typeof channelSummaryConnectionSc
 export const bulkUpdateChannelOrderingInputSchema = z.object({
   channels: z
     .array(
-      z.object({
-        id: z.string(),
-        orderingWeight: z.number(),
-      })
+      z
+        .object({
+          id: z.string(),
+          orderingWeight: z.number().optional(),
+          priority: z.number().int().optional(),
+        })
+        .refine((item) => item.orderingWeight !== undefined || item.priority !== undefined, {
+          message: 'orderingWeight or priority is required',
+        })
     )
     .min(1, 'At least one channel is required'),
 });
