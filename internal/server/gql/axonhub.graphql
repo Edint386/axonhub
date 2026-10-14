@@ -229,6 +229,8 @@ type ChannelSettings {
   passThroughBody: Boolean
   rateLimit: ChannelRateLimit
   quota: APIKeyQuota
+  """IANA timezone used by calendar-period channel quotas. Empty means the system timezone."""
+  quotaTimezone: String
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
   modelProtocols: [ModelProtocol!]
@@ -315,6 +317,7 @@ input ChannelSettingsInput {
   passThroughBody: Boolean
   rateLimit: ChannelRateLimitInput
   quota: APIKeyQuotaInput
+  quotaTimezone: String
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
   modelProtocols: [ModelProtocolInput!]

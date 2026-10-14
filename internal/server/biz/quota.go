@@ -3,14 +3,18 @@ package biz
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 
 	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
+	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xtime"
 )
@@ -48,7 +52,7 @@ func NewQuotaService(entClient *ent.Client, systemService *SystemService) *Quota
 }
 
 func (s *QuotaService) CheckAPIKeyQuota(ctx context.Context, apiKeyID int, quota *objects.APIKeyQuota) (QuotaCheckResult, error) {
-	return s.checkQuota(ctx, quota, "quota-api-key", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+	return s.checkQuota(ctx, quota, nil, "quota-api-key", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
 		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID)), window)
 		if err != nil {
 			return QuotaUsage{}, err
@@ -67,8 +71,10 @@ func (s *QuotaService) CheckAPIKeyQuota(ctx context.Context, apiKeyID int, quota
 	})
 }
 
-func (s *QuotaService) CheckChannelQuota(ctx context.Context, channelID int, quota *objects.APIKeyQuota) (QuotaCheckResult, error) {
-	return s.checkQuota(ctx, quota, "quota-channel", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+// CheckChannelQuota checks a channel quota. timezone is the channel's
+// QuotaTimezone; calendar periods use it, falling back to the system timezone.
+func (s *QuotaService) CheckChannelQuota(ctx context.Context, channelID int, quota *objects.APIKeyQuota, timezone *string) (QuotaCheckResult, error) {
+	return s.checkQuota(ctx, quota, s.channelQuotaLocation(ctx, quota, timezone), "quota-channel", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
 		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.ChannelIDEQ(channelID)), window)
 		if err != nil {
 			return QuotaUsage{}, err
@@ -89,12 +95,15 @@ func (s *QuotaService) CheckChannelQuota(ctx context.Context, channelID int, quo
 
 type quotaUsageLoader func(ctx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error)
 
-func (s *QuotaService) checkQuota(ctx context.Context, quota *objects.APIKeyQuota, bypassReason string, loadUsage quotaUsageLoader) (QuotaCheckResult, error) {
+// checkQuota evaluates quota in loc; a nil loc means the system timezone.
+func (s *QuotaService) checkQuota(ctx context.Context, quota *objects.APIKeyQuota, loc *time.Location, bypassReason string, loadUsage quotaUsageLoader) (QuotaCheckResult, error) {
 	if quota == nil {
 		return QuotaCheckResult{Allowed: true}, nil
 	}
 
-	loc := s.system.TimeLocation(ctx)
+	if loc == nil {
+		loc = s.system.TimeLocation(ctx)
+	}
 
 	window, err := quotaWindow(xtime.UTCNow(), quota.Period, loc)
 	if err != nil {
@@ -181,7 +190,7 @@ func (s *QuotaService) ProfileQuotaUsages(ctx context.Context, apiKey *ent.APIKe
 }
 
 func (s *QuotaService) GetQuota(ctx context.Context, apiKeyID int, quota *objects.APIKeyQuota) (QuotaResult, error) {
-	return s.getQuota(ctx, quota, "quota-api-key", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+	return s.getQuota(ctx, quota, nil, "quota-api-key", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
 		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.APIKeyIDEQ(apiKeyID)), window)
 		if err != nil {
 			return QuotaUsage{}, err
@@ -200,8 +209,10 @@ func (s *QuotaService) GetQuota(ctx context.Context, apiKeyID int, quota *object
 	})
 }
 
-func (s *QuotaService) GetChannelQuota(ctx context.Context, channelID int, quota *objects.APIKeyQuota) (QuotaResult, error) {
-	return s.getQuota(ctx, quota, "quota-channel", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
+// GetChannelQuota reports a channel quota's usage in the channel's own
+// QuotaTimezone (see CheckChannelQuota).
+func (s *QuotaService) GetChannelQuota(ctx context.Context, channelID int, quota *objects.APIKeyQuota, timezone *string) (QuotaResult, error) {
+	return s.getQuota(ctx, quota, s.channelQuotaLocation(ctx, quota, timezone), "quota-channel", func(bypassCtx context.Context, window QuotaWindow, needTokens bool, needCost bool) (QuotaUsage, error) {
 		reqCount, err := s.requestCount(bypassCtx, s.ent.UsageLog.Query().Where(usagelog.ChannelIDEQ(channelID)), window)
 		if err != nil {
 			return QuotaUsage{}, err
@@ -220,12 +231,15 @@ func (s *QuotaService) GetChannelQuota(ctx context.Context, channelID int, quota
 	})
 }
 
-func (s *QuotaService) getQuota(ctx context.Context, quota *objects.APIKeyQuota, bypassReason string, loadUsage quotaUsageLoader) (QuotaResult, error) {
+// getQuota reports quota usage in loc; a nil loc means the system timezone.
+func (s *QuotaService) getQuota(ctx context.Context, quota *objects.APIKeyQuota, loc *time.Location, bypassReason string, loadUsage quotaUsageLoader) (QuotaResult, error) {
 	if quota == nil {
 		return QuotaResult{}, nil
 	}
 
-	loc := s.system.TimeLocation(ctx)
+	if loc == nil {
+		loc = s.system.TimeLocation(ctx)
+	}
 
 	window, err := quotaWindow(xtime.UTCNow(), quota.Period, loc)
 	if err != nil {
@@ -244,6 +258,88 @@ func (s *QuotaService) getQuota(ctx context.Context, quota *objects.APIKeyQuota,
 		Usage:  usage,
 	}, nil
 }
+
+// NormalizeQuotaTimezone trims a channel QuotaTimezone in place and rejects a
+// value that is not a loadable IANA timezone. Nil and blank values mean the
+// system timezone; a blank value stays a pointer to "" so an explicit choice of
+// the system timezone is not mistaken for an omitted field. "Local" is rejected
+// because it is the server process timezone, not the system setting.
+func NormalizeQuotaTimezone(timezone *string) error {
+	if timezone == nil {
+		return nil
+	}
+
+	tz := strings.TrimSpace(*timezone)
+	*timezone = tz
+	if tz == "" {
+		return nil
+	}
+
+	if strings.EqualFold(tz, "Local") {
+		return fmt.Errorf("unknown timezone %q", tz)
+	}
+
+	if _, err := loadQuotaLocation(tz); err != nil {
+		return fmt.Errorf("unknown timezone %q", tz)
+	}
+
+	return nil
+}
+
+// quotaLocations caches time.LoadLocation results, failures included, per name;
+// channel quotas are checked on every routed request and LoadLocation reads the
+// zone data each time.
+var quotaLocations sync.Map
+
+type quotaLocationResult struct {
+	loc *time.Location
+	err error
+}
+
+func loadQuotaLocation(name string) (*time.Location, error) {
+	if cached, ok := quotaLocations.Load(name); ok {
+		result := cached.(quotaLocationResult)
+
+		return result.loc, result.err
+	}
+
+	loc, err := time.LoadLocation(name)
+	quotaLocations.Store(name, quotaLocationResult{loc: loc, err: err})
+
+	return loc, err
+}
+
+// channelQuotaLocation returns the location a channel quota is evaluated in, or
+// nil for the system timezone. Only calendar periods depend on a timezone, so
+// other periods skip the lookup. A stored value that does not load (for example
+// from a backup) falls back to the system timezone rather than failing routing.
+func (s *QuotaService) channelQuotaLocation(ctx context.Context, quota *objects.APIKeyQuota, timezone *string) *time.Location {
+	if quota == nil || quota.Period.Type != objects.APIKeyQuotaPeriodTypeCalendarDuration {
+		return nil
+	}
+
+	tz := strings.TrimSpace(lo.FromPtr(timezone))
+	if tz == "" || strings.EqualFold(tz, "Local") {
+		return nil
+	}
+
+	loc, err := loadQuotaLocation(tz)
+	if err != nil {
+		if _, warned := quotaLocationWarnings.LoadOrStore(tz, struct{}{}); !warned {
+			log.Warn(ctx, "invalid channel quota timezone, using the system timezone",
+				log.String("timezone", tz),
+				log.Cause(err),
+			)
+		}
+
+		return nil
+	}
+
+	return loc
+}
+
+// quotaLocationWarnings logs an unloadable channel quota timezone once per name.
+var quotaLocationWarnings sync.Map
 
 func ValidateQuota(q *objects.APIKeyQuota) error {
 	if q == nil {

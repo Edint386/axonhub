@@ -1027,7 +1027,7 @@ func (r *queryResolver) ChannelQuotaUsage(ctx context.Context, channelID objects
 	}
 
 	quota := channelEntity.Settings.Quota
-	quotaResult, err := r.quotaService.GetChannelQuota(ctx, channelID.ID, quota)
+	quotaResult, err := r.quotaService.GetChannelQuota(ctx, channelID.ID, quota, channelEntity.Settings.QuotaTimezone)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get channel quota usage: %w", err)
 	}

@@ -238,6 +238,10 @@ type ChannelSettings struct {
 	// When exhausted, the channel is skipped during candidate selection.
 	Quota *APIKeyQuota `json:"quota,omitempty"`
 
+	// QuotaTimezone is the IANA timezone (e.g. "Asia/Shanghai") that calendar-period
+	// channel quotas use to split days and months. Empty means the system timezone.
+	QuotaTimezone *string `json:"quotaTimezone,omitempty"`
+
 	// RetryableStatusCodes configures additional HTTP status codes that should
 	// trigger retry for this channel. Default retryable codes (429 and 5xx) are
 	// always handled by the retry policy even when this list is empty.

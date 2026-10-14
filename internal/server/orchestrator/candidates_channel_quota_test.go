@@ -82,7 +82,7 @@ func TestChannelQuotaSelector_FiltersExhaustedHighPriorityCandidate(t *testing.T
 
 	systemService := newTestSystemService(client)
 	quotaService := biz.NewQuotaService(client, systemService)
-	check, err := quotaService.CheckChannelQuota(ctx, exhausted.ID, exhausted.Settings.Quota)
+	check, err := quotaService.CheckChannelQuota(ctx, exhausted.ID, exhausted.Settings.Quota, exhausted.Settings.QuotaTimezone)
 	require.NoError(t, err)
 	require.False(t, check.Allowed)
 

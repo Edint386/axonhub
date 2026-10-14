@@ -104,6 +104,7 @@ const CHANNEL_QUOTA_FIELDS = `
               }
             }
           }
+          quotaTimezone
 `;
 
 const CHANNEL_HEALTH_PROBE_FIELDS = `

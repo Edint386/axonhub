@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,6 +16,8 @@ import { Form, FormField, FormItem, FormLabel, FormMessage, FormControl, FormDes
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { AutoCompleteSelect } from '@/components/auto-complete-select';
+import { GMTTimeZoneOptions } from '@/features/system/data/timezones';
 import { useChannelQuotaUsage, useUpdateChannel } from '../data/channels';
 import type { Channel, ChannelQuotaPeriod } from '../data/schema';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
@@ -56,6 +58,8 @@ const rateLimitFormSchema = z
     quotaPastDurationValue: quotaIntField,
     quotaPastDurationUnit: z.enum(['minute', 'hour', 'day']),
     quotaCalendarDurationUnit: z.enum(['day', 'month']),
+    // '' means the system timezone.
+    quotaTimezone: z.string(),
   })
   .superRefine((values, ctx) => {
     const queueSize = values.queueSize;
@@ -113,7 +117,11 @@ const emptyDefaults: RateLimitFormValues = {
   quotaPastDurationValue: 1,
   quotaPastDurationUnit: 'day',
   quotaCalendarDurationUnit: 'day',
+  quotaTimezone: '',
 };
+
+// Sentinel for the "follow the system timezone" option; the form stores ''.
+const SYSTEM_QUOTA_TIMEZONE = '__system__';
 
 function valuesFromChannel(currentRow: Channel): RateLimitFormValues {
   const quota = currentRow.settings?.quota;
@@ -132,6 +140,7 @@ function valuesFromChannel(currentRow: Channel): RateLimitFormValues {
     quotaPastDurationValue: quota?.period?.pastDuration?.value ?? 1,
     quotaPastDurationUnit: quota?.period?.pastDuration?.unit ?? 'day',
     quotaCalendarDurationUnit: quota?.period?.calendarDuration?.unit ?? 'day',
+    quotaTimezone: currentRow.settings?.quotaTimezone ?? '',
   };
 }
 
@@ -213,6 +222,18 @@ export function ChannelsRateLimitDialog({ open, onOpenChange, currentRow }: Prop
   const { t, i18n } = useTranslation();
   const updateChannel = useUpdateChannel();
   const locale = i18n.language.startsWith('zh') ? zhCN : enUS;
+  const [dialogContent, setDialogContent] = useState<HTMLDivElement | null>(null);
+  // The usage window comes from the server, so it reflects the saved timezone.
+  const savedQuotaTimezone = currentRow.settings?.quotaTimezone?.trim() ?? '';
+  const quotaTimezoneItems = useMemo(() => {
+    const items = [{ value: SYSTEM_QUOTA_TIMEZONE, label: t('channels.dialogs.rateLimit.quota.timezone.followSystem') }, ...GMTTimeZoneOptions];
+    // Keep a value saved through the API (e.g. an alias) visible and selected.
+    if (savedQuotaTimezone && !items.some((item) => item.value === savedQuotaTimezone)) {
+      items.push({ value: savedQuotaTimezone, label: savedQuotaTimezone });
+    }
+
+    return items;
+  }, [t, savedQuotaTimezone]);
 
   const form = useForm<RateLimitFormValues>({
     resolver: zodResolver(rateLimitFormSchema),
@@ -247,6 +268,32 @@ export function ChannelsRateLimitDialog({ open, onOpenChange, currentRow }: Prop
   const quotaUsage = quotaUsageQuery.data ?? undefined;
   const quotaUsagePeriod = quotaEnabled ? buildQuotaPeriod(quotaValues) : quotaUsage?.quota?.period;
   const quotaUsageEnd = quotaUsage?.window.end ?? (quotaUsagePeriod?.type !== 'calendar_duration' ? new Date() : null);
+  const quotaUsageCalendar = quotaUsage?.quota?.period?.type === 'calendar_duration';
+  // Calendar windows start at midnight in the channel's timezone; show them in it
+  // with the zone name so they read as midnight rather than a shifted local time.
+  const formatQuotaWindowTime = (value: Date | string) => {
+    const date = new Date(value);
+    if (quotaUsageCalendar && savedQuotaTimezone) {
+      try {
+        // Component options, not dateStyle/timeStyle: Intl rejects timeZoneName
+        // combined with the style shortcuts.
+        return new Intl.DateTimeFormat(i18n.language, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',
+          timeZone: savedQuotaTimezone,
+          timeZoneName: 'short',
+        }).format(date);
+      } catch {
+        // Unknown to this browser: fall back to local time below.
+      }
+    }
+
+    return format(date, 'PPpp', { locale });
+  };
 
   const onSubmit = async (values: RateLimitFormValues) => {
     try {
@@ -279,6 +326,7 @@ export function ChannelsRateLimitDialog({ open, onOpenChange, currentRow }: Prop
       const nextSettings = mergeChannelSettingsForUpdate(currentRow.settings, {
         rateLimit: rateLimitValue,
         quota,
+        quotaTimezone: values.quotaTimezone,
       });
 
       await updateChannel.mutateAsync({
@@ -360,7 +408,7 @@ export function ChannelsRateLimitDialog({ open, onOpenChange, currentRow }: Prop
         onOpenChange(state);
       }}
     >
-      <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'>
+      <DialogContent ref={setDialogContent} className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'>
         <DialogHeader className='text-left'>
           <DialogTitle>{t('channels.dialogs.rateLimit.title')}</DialogTitle>
           <DialogDescription>{t('channels.dialogs.rateLimit.description', { name: currentRow.name })}</DialogDescription>
@@ -600,6 +648,30 @@ export function ChannelsRateLimitDialog({ open, onOpenChange, currentRow }: Prop
                           )}
                         />
                       )}
+
+                      {quotaPeriodType === 'calendar_duration' && (
+                        <FormField
+                          control={form.control}
+                          name='quotaTimezone'
+                          render={({ field }) => (
+                            <FormItem className='md:col-span-3'>
+                              <FormLabel>{t('channels.dialogs.rateLimit.quota.timezone.label')}</FormLabel>
+                              <FormControl>
+                                <AutoCompleteSelect
+                                  selectedValue={field.value || SYSTEM_QUOTA_TIMEZONE}
+                                  onSelectedValueChange={(value) => field.onChange(value === SYSTEM_QUOTA_TIMEZONE ? '' : value)}
+                                  items={quotaTimezoneItems}
+                                  placeholder={t('channels.dialogs.rateLimit.quota.timezone.placeholder')}
+                                  emptyMessage={t('common.noResults')}
+                                  portalContainer={dialogContent}
+                                />
+                              </FormControl>
+                              <FormDescription>{t('channels.dialogs.rateLimit.quota.timezone.description')}</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
                     </div>
 
                     {quotaUsage && (
@@ -607,6 +679,10 @@ export function ChannelsRateLimitDialog({ open, onOpenChange, currentRow }: Prop
                         <div className='text-xs font-medium'>{t('channels.dialogs.rateLimit.quota.usageTitle')}</div>
                         <div className='text-muted-foreground text-xs'>
                           {t('channels.dialogs.rateLimit.quota.periodType')}: {quotaPeriodLabel(quotaUsagePeriod, t)}
+                          {quotaUsageCalendar &&
+                            ` · ${t('channels.dialogs.rateLimit.quota.timezone.label')}: ${
+                              savedQuotaTimezone || t('channels.dialogs.rateLimit.quota.timezone.followSystem')
+                            }`}
                         </div>
                         <div className='grid gap-3 md:grid-cols-3'>
                           <div>
@@ -636,10 +712,10 @@ export function ChannelsRateLimitDialog({ open, onOpenChange, currentRow }: Prop
                         <div className='text-muted-foreground grid gap-2 text-xs md:grid-cols-2'>
                           <div>
                             {t('common.filters.startTime')}{' '}
-                            {quotaUsage.window.start ? format(quotaUsage.window.start, 'PPpp', { locale }) : '-'}
+                            {quotaUsage.window.start ? formatQuotaWindowTime(quotaUsage.window.start) : '-'}
                           </div>
                           <div>
-                            {t('common.filters.endTime')} {quotaUsageEnd ? format(quotaUsageEnd, 'PPpp', { locale }) : '-'}
+                            {t('common.filters.endTime')} {quotaUsageEnd ? formatQuotaWindowTime(quotaUsageEnd) : '-'}
                           </div>
                         </div>
                       </div>

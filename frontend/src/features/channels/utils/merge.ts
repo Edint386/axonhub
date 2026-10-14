@@ -127,6 +127,9 @@ export function mergeChannelSettingsForUpdate(
     // Leave an unloaded quota undefined so it is omitted and the backend keeps
     // the stored value; only an explicit patch value of null clears it.
     quota: pick('quota', existing?.quota),
+    // Same rule as quota: unloaded stays undefined and is omitted, '' switches
+    // back to the system timezone.
+    quotaTimezone: pick('quotaTimezone', existing?.quotaTimezone),
     retryableStatusCodes: pick('retryableStatusCodes', existing?.retryableStatusCodes ?? []),
     retryableErrorPatterns: pick('retryableErrorPatterns', existing?.retryableErrorPatterns ?? []),
     modelProtocols: pick('modelProtocols', existing?.modelProtocols ?? []),

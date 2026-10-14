@@ -663,6 +663,10 @@ func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateCh
 			return nil, fmt.Errorf("invalid quota: %w", err)
 		}
 
+		if err := NormalizeQuotaTimezone(input.Settings.QuotaTimezone); err != nil {
+			return nil, fmt.Errorf("invalid quota timezone: %w", err)
+		}
+
 		if err := NormalizeRetryableStatusCodes(input.Settings); err != nil {
 			return nil, err
 		}
@@ -943,6 +947,9 @@ func mergeChannelSettingsForUpdate(ctx context.Context, existing, input *objects
 	if merged.Quota == nil && !channelSettingsFieldExplicitlyNull(ctx, "quota") {
 		merged.Quota = existing.Quota
 	}
+	if merged.QuotaTimezone == nil && !channelSettingsFieldExplicitlyNull(ctx, "quotaTimezone") {
+		merged.QuotaTimezone = existing.QuotaTimezone
+	}
 	if merged.ProviderQuota == nil {
 		merged.ProviderQuota = existing.ProviderQuota
 	} else {
@@ -1112,6 +1119,10 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 
 		if err := ValidateQuota(input.Settings.Quota); err != nil {
 			return nil, fmt.Errorf("invalid quota: %w", err)
+		}
+
+		if err := NormalizeQuotaTimezone(input.Settings.QuotaTimezone); err != nil {
+			return nil, fmt.Errorf("invalid quota timezone: %w", err)
 		}
 
 		if err := NormalizeRetryableStatusCodes(input.Settings); err != nil {

@@ -45,7 +45,7 @@ func (s *ChannelQuotaSelector) Select(ctx context.Context, req *llm.Request) ([]
 			continue
 		}
 
-		check, err := s.quota.CheckChannelQuota(ctx, candidate.Channel.ID, candidate.Channel.Settings.Quota)
+		check, err := s.quota.CheckChannelQuota(ctx, candidate.Channel.ID, candidate.Channel.Settings.Quota, candidate.Channel.Settings.QuotaTimezone)
 		if err != nil {
 			return nil, err
 		}

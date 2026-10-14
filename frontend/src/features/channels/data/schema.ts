@@ -411,6 +411,7 @@ export const channelSettingsSchema = z.object({
   passThroughBody: z.boolean().optional().nullable(),
   rateLimit: channelRateLimitSchema.optional().nullable(),
   quota: channelQuotaSchema.optional().nullable(),
+  quotaTimezone: z.string().optional().nullable(),
   healthProbe: channelHealthProbeSettingsSchema.optional().nullable(),
   retryableStatusCodes: z.array(z.number().int().min(400).max(599)).optional().nullable(),
   retryableErrorPatterns: z.array(retryableErrorPatternSchema).optional().nullable(),

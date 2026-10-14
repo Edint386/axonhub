@@ -350,13 +350,13 @@ func TestQuotaService_ChannelQuota_UsesChannelUsage(t *testing.T) {
 		},
 	}
 
-	usage, err := svc.GetChannelQuota(ctx, channelID, quota)
+	usage, err := svc.GetChannelQuota(ctx, channelID, quota, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, usage.Usage.RequestCount)
 	require.EqualValues(t, 70, usage.Usage.TotalTokens)
 	require.True(t, decimal.NewFromFloat(3.75).Equal(usage.Usage.TotalCost))
 
-	res, err := svc.CheckChannelQuota(ctx, channelID, quota)
+	res, err := svc.CheckChannelQuota(ctx, channelID, quota, nil)
 	require.NoError(t, err)
 	require.False(t, res.Allowed)
 	require.Contains(t, res.Message, "requests quota exceeded")

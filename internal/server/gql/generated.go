@@ -724,6 +724,7 @@ type ComplexityRoot struct {
 		Proxy                    func(childComplexity int) int
 		Quota                    func(childComplexity int) int
 		QuotaRoutingMode         func(childComplexity int) int
+		QuotaTimezone            func(childComplexity int) int
 		RateLimit                func(childComplexity int) int
 		RetryableErrorPatterns   func(childComplexity int) int
 		RetryableStatusCodes     func(childComplexity int) int
@@ -5286,6 +5287,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.QuotaRoutingMode(childComplexity), true
+	case "ChannelSettings.quotaTimezone":
+		if e.complexity.ChannelSettings.QuotaTimezone == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.QuotaTimezone(childComplexity), true
 	case "ChannelSettings.rateLimit":
 		if e.complexity.ChannelSettings.RateLimit == nil {
 			break
@@ -23106,6 +23113,8 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_rateLimit(ctx, field)
 			case "quota":
 				return ec.fieldContext_ChannelSettings_quota(ctx, field)
+			case "quotaTimezone":
+				return ec.fieldContext_ChannelSettings_quotaTimezone(ctx, field)
 			case "retryableStatusCodes":
 				return ec.fieldContext_ChannelSettings_retryableStatusCodes(ctx, field)
 			case "retryableErrorPatterns":
@@ -30255,6 +30264,35 @@ func (ec *executionContext) fieldContext_ChannelSettings_quota(_ context.Context
 				return ec.fieldContext_APIKeyQuota_period(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type APIKeyQuota", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelSettings_quotaTimezone(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_quotaTimezone,
+		func(ctx context.Context) (any, error) {
+			return obj.QuotaTimezone, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_quotaTimezone(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -76954,7 +76992,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "providerQuota", "healthProbe", "quotaRoutingMode"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "quota", "quotaTimezone", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "providerQuota", "healthProbe", "quotaRoutingMode"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -77059,6 +77097,13 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.Quota = data
+		case "quotaTimezone":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("quotaTimezone"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.QuotaTimezone = data
 		case "retryableStatusCodes":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("retryableStatusCodes"))
 			data, err := ec.unmarshalOInt2ᚕintᚄ(ctx, v)
@@ -105266,6 +105311,8 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_rateLimit(ctx, field, obj)
 		case "quota":
 			out.Values[i] = ec._ChannelSettings_quota(ctx, field, obj)
+		case "quotaTimezone":
+			out.Values[i] = ec._ChannelSettings_quotaTimezone(ctx, field, obj)
 		case "retryableStatusCodes":
 			out.Values[i] = ec._ChannelSettings_retryableStatusCodes(ctx, field, obj)
 		case "retryableErrorPatterns":
