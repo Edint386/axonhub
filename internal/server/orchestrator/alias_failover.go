@@ -30,6 +30,14 @@ func (p *PersistentOutboundTransformer) HasNextAliasTarget() bool {
 		return false
 	}
 
+	// A Responses continuation without a replayable snapshot is pinned to the
+	// target that owns previous_response_id (selectResponsesContinuationCandidate),
+	// so a sibling target would only re-run the same model or fail recovery. Leave
+	// those attempts to the upstream retry rules.
+	if c := p.state.ResponsesContinuation; c != nil && c.previous != "" && !c.complete {
+		return false
+	}
+
 	candidate := p.state.CurrentCandidate
 	current := p.state.CurrentModelIndex
 	if candidate == nil || candidate.Channel == nil || current < 0 || current+1 >= len(candidate.Models) {

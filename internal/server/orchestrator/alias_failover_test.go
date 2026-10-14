@@ -81,6 +81,24 @@ func TestPersistentOutboundTransformer_HasNextAliasTarget(t *testing.T) {
 		transformer.state.CurrentCandidate = nil
 		require.False(t, transformer.HasNextAliasTarget())
 	})
+
+	t.Run("pinned Responses continuation", func(t *testing.T) {
+		transformer := aliasFailoverTransformer(true, generalAlias("llama", "qwen")...)
+		transformer.state.ResponsesContinuation = &responsesContinuation{previous: "resp_prev", complete: false}
+		require.False(t, transformer.HasNextAliasTarget(), "a continuation pinned to its owner target must not switch targets")
+	})
+
+	t.Run("replayable Responses continuation", func(t *testing.T) {
+		transformer := aliasFailoverTransformer(true, generalAlias("llama", "qwen")...)
+		transformer.state.ResponsesContinuation = &responsesContinuation{previous: "resp_prev", complete: true}
+		require.True(t, transformer.HasNextAliasTarget())
+	})
+
+	t.Run("fresh Responses request", func(t *testing.T) {
+		transformer := aliasFailoverTransformer(true, generalAlias("llama", "qwen")...)
+		transformer.state.ResponsesContinuation = &responsesContinuation{complete: true}
+		require.True(t, transformer.HasNextAliasTarget())
+	})
 }
 
 func TestIsAliasFailoverError(t *testing.T) {
