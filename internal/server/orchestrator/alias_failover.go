@@ -100,6 +100,15 @@ func isAliasFailoverError(err error, ch *biz.Channel) bool {
 		return false
 	}
 
+	// Errors that hit every target alike keep the regular retry flow unless the
+	// channel's retry codes or patterns list them. Checked before the empty
+	// response errors because a structured Responses failure (response.failed)
+	// carries ErrEmptyResponse together with its own status.
+	switch ExtractStatusCodeFromError(err) {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
+		return isRetryableErrorForChannel(err, ch)
+	}
+
 	if errors.Is(err, pipeline.ErrEmptyResponse) ||
 		errors.Is(err, pipeline.ErrEmptyStreamChunks) ||
 		errors.Is(err, pipeline.ErrEmptyAggregatedBody) {
