@@ -1125,6 +1125,11 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
           credentials {
             apiKey
             apiKeys
+            vertexApiKeys {
+              projectID
+              apiKey
+              region
+            }
             gcp {
               region
               projectID
