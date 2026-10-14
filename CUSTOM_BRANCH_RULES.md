@@ -20,15 +20,23 @@
 
 ## 3. 同步上游的流程
 
+同步方式是**合并（merge）**，不再用 cherry-pick 复制上游提交。复制出来的提交编号是新的，Git 和 GitHub 会一直把上游原提交算作"落后"（2026-09-17 到 2026-10-15 用 cherry-pick 期间累积到 117 个）。2026-10-15 做了一次不改代码的"标记合并"（`cb6eae4d3`，`git merge -s ours`，事先逐个确认这 117 个提交的内容都已在 custom 里），从那以后 `git merge-base` 和"落后数"都是准的。
+
+一次合并会带进多个上游提交，上游提交保留原编号、原作者，所有冲突在同一个合并提交里解决。2026-09-06 那次一口气合并 68 个提交、冲掉了多个 custom 功能，所以现在要求：经常同步、每次少量，并且先逐个模拟、再真合并、最后核对两者结果一致。
+
 1. **只读预检**（合并前）：
-   - `git fetch upstream unstable`，按提交标题对比找出 custom 缺少的上游提交。custom 用 cherry-pick 同步，`git rev-list` 的"落后数"会虚高，以标题对比为准。
-   - 在临时 worktree 里按上游顺序逐个模拟 cherry-pick，记录冲突。
+   - `git fetch upstream unstable`，记下这次要合并的上游版本：`UP=$(git rev-parse upstream/unstable)`。后面真合并的必须就是这个编号，避免预检和合并之间上游又有新提交。
+   - 缺少的上游提交：`git log --reverse --format='%h %s' $(git merge-base HEAD $UP)..$UP`。再拿这些提交标题和 custom 独有的提交（`git log --format=%s $UP..HEAD`）对一遍：如果有人手工 cherry-pick 过其中某个，真合并会把同一个改动加两次，要先查清楚。
+   - 在临时 worktree 里按上游顺序逐个模拟 cherry-pick（只为了一个一个看清冲突，模拟结果不进正式历史），记下最终结果的提交编号 `SIM`。
    - 检查规则 1：custom 没改过的文件，合并后必须与上游完全一致。
    - 检查规则 2：重叠文件里 custom 的改动（相对上游的 diff）合并前后保持不变。
    - 在模拟结果上跑测试，然后向所有者汇报冲突的来龙去脉和推荐方案。
-2. **合并**：按上游顺序逐个 cherry-pick，保留上游原作者、原时间和原提交信息，末尾加 `Co-Authored-By` 署名行。
-   - 冲突多数是"两边在同一处各自新增"，两边都保留。
+2. **合并**：在真实分支上执行 `git -c merge.conflictStyle=diff3 merge --no-ff $UP`。
+   - 提交信息写 `merge: sync upstream/unstable (<短编号>) into custom`，正文列出带进来的上游提交标题，末尾加 `Co-Authored-By` 署名行。
+   - 冲突按模拟时的方式解决。多数是"两边在同一处各自新增"，两边都保留。
+   - Git 有时会把 custom 里已有的代码在别处再加一遍（同一段代码换了位置时它认不出来），所以合并后要检查有没有重复的函数或代码块。
    - 必须同时保住第 5 节列出的 custom 钩子。
+   - 合并完核对 `git diff $SIM HEAD` 为空，即真合并的结果和逐个模拟的结果完全一样。不一样就撤销（`git reset --hard <合并前编号>`），查清原因再说。
 3. **重新生成**（规则 3）：
    - GraphQL / ent：`cd internal/server/gql && go generate`。之后删除 gqlgen 留在 `*.resolvers.go` 末尾的 `!!! WARNING !!!` 注释块；`TestNoUnimplementedResolverStubs` 会拦截残留的 `not implemented` 占位函数（上游自带的 `Nodes` 除外）。
    - 前端路由树 `frontend/src/routeTree.gen.ts` 用 `@tanstack/router-plugin` 的生成器重新生成，不手改。
