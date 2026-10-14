@@ -284,9 +284,7 @@ func (runner *ChannelHealthProbeRunner) RunManual(
 	input biz.RunChannelHealthProbeInput,
 ) (*biz.ChannelHealthProbeRunRecord, error) {
 	ctx = contexts.WithSource(ctx, request.SourceTest)
-	if input.Stream {
-		input.Stream = runner.supportsStreamProbe(ctx, make(map[int]*biz.Channel), input.ChannelID.ID, input.ModelID)
-	}
+	input.Stream = runner.probeStreamMode(ctx, make(map[int]*biz.Channel), input.ChannelID.ID, input.ModelID, input.Stream)
 	run, err := runner.service.CreateManualRun(ctx, input, time.Now().UTC())
 	if err != nil {
 		return nil, err
@@ -294,22 +292,40 @@ func (runner *ChannelHealthProbeRunner) RunManual(
 	return runner.execute(ctx, run)
 }
 
-// withSupportedStreamModes keeps each target's requested mode unless its channel
-// is tested through a format that answers in one response (System One,
-// Decisions). Those are probed without streaming, and because a run's stream
-// flag is fixed when it is created, the stored run records the mode that ran.
+// withSupportedStreamModes sets each target to the mode its channel test really
+// uses (see probeStreamMode). A run's stream flag is fixed when it is created, so
+// the stored run records the mode that ran.
 func (runner *ChannelHealthProbeRunner) withSupportedStreamModes(
 	ctx context.Context,
 	targets []biz.ChannelHealthProbeTarget,
 ) []biz.ChannelHealthProbeTarget {
 	channels := make(map[int]*biz.Channel)
 	for i := range targets {
-		if targets[i].Stream {
-			targets[i].Stream = runner.supportsStreamProbe(ctx, channels, targets[i].ChannelID, targets[i].ModelID)
-		}
+		targets[i].Stream = runner.probeStreamMode(ctx, channels, targets[i].ChannelID, targets[i].ModelID, targets[i].Stream)
 	}
 
 	return targets
+}
+
+// probeStreamMode returns the stream mode the channel test will actually use for
+// the requested mode. Formats that answer in one response (System One, Decisions)
+// are probed without streaming, and channels with a Responses WebSocket endpoint
+// are always tested streaming because buildChannelTestRequest forces it.
+func (runner *ChannelHealthProbeRunner) probeStreamMode(
+	ctx context.Context,
+	channels map[int]*biz.Channel,
+	channelID int,
+	modelID string,
+	requested bool,
+) bool {
+	if !runner.supportsStreamProbe(ctx, channels, channelID, modelID) {
+		return false
+	}
+	if ch := channels[channelID]; ch != nil && usesResponsesWebSocket(ch) {
+		return true
+	}
+
+	return requested
 }
 
 // supportsStreamProbe reports whether modelID on the channel can be probed with

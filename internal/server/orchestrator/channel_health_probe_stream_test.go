@@ -44,6 +44,11 @@ func TestChannelHealthProbeRunnerProbesSingleResponseFormatsWithoutStreaming(t *
 		{APIFormat: llm.APIFormatOpenAIDecisions.String(), Path: "/decisions"},
 	})
 	chatID := createChannel("Chat", channel.TypeOpenai, nil)
+	// The channel test always streams over a Responses WebSocket endpoint, so a
+	// requested non-streaming probe must be recorded as streaming.
+	webSocketID := createChannel("Responses WebSocket", channel.TypeOpenaiResponses, []objects.ChannelEndpoint{
+		{APIFormat: llm.APIFormatOpenAIResponseWebSocket.String()},
+	})
 
 	runner := &ChannelHealthProbeRunner{tester: &TestChannelOrchestrator{channelService: channelService}}
 	targets := runner.withSupportedStreamModes(ctx, []biz.ChannelHealthProbeTarget{
@@ -51,9 +56,11 @@ func TestChannelHealthProbeRunnerProbesSingleResponseFormatsWithoutStreaming(t *
 		{ChannelID: decisionsID, ModelID: "test-model", Stream: true},
 		{ChannelID: chatID, ModelID: "test-model", Stream: true},
 		{ChannelID: chatID, ModelID: "test-model", Stream: false},
+		{ChannelID: webSocketID, ModelID: "test-model", Stream: false},
+		{ChannelID: webSocketID, ModelID: "test-model", Stream: true},
 	})
 
-	require.Equal(t, []bool{false, false, true, false}, lo.Map(targets, func(target biz.ChannelHealthProbeTarget, _ int) bool {
+	require.Equal(t, []bool{false, false, true, false, true, true}, lo.Map(targets, func(target biz.ChannelHealthProbeTarget, _ int) bool {
 		return target.Stream
 	}))
 }
