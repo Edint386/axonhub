@@ -149,6 +149,7 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 		cachedEnabledAPIKeys:     c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys),
 		cachedCallerACLMemberIDs: callerACLMemberIDs,
 	}
+	ch.setModelPriceMultiplier(c.ModelPriceMultiplier)
 
 	// Precompute other caches
 	entries := ch.GetModelEntries()
