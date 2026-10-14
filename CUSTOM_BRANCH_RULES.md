@@ -35,7 +35,7 @@
 4. **验证**：
    - 后端：`go test ./...`；`llm/` 是独立 Go 模块，要在 `llm/` 目录里跑 `go test ./...`。
    - 前端单元测试：`cd frontend && node --test "src/**/*.test.mjs"`。
-   - 前端类型检查必须用 `./node_modules/.bin/tsc -p tsconfig.app.json --noEmit --pretty false`。根目录的 `tsconfig.json` 是 `"files": []`，直接跑什么都不检查。上游本身就有一批类型错误，所以只把"custom 独有、上游没有"的错误当问题，要和上游对比。
+   - 前端类型检查必须用 `./node_modules/.bin/tsc -p tsconfig.app.json --noEmit --pretty false`。根目录的 `tsconfig.json` 是 `"files": []`，直接跑什么都不检查。上游本身就有一批类型错误，所以判断标准是"这次合并有没有新增错误"：把错误去掉行号列号后，和合并前的 custom 逐条（按多重集合）对比。不要拿 custom 和上游按原文对比：custom 的渠道表单多一个 `priority` 字段，上游已有的同一个错误在 custom 里文字会不一样（比如 "21 more" 对 "20 more"），会被误判成 custom 独有。已知的老错误：`quota-badges.tsx` 的 `ProviderQuotaLimit`/`QuotaLimit` 不匹配（上游潜在问题，运行无影响，按规则 4 不改）。
    - 合并后再做一次语义复核：测试通过不代表 custom 功能和上游新逻辑配合正确，需要逐项检查 custom 功能有没有被新代码路径绕过。
 5. **汇报 → 等所有者同意 → 推送。**
 
@@ -52,7 +52,7 @@
 | 位置 | 内容 | 守护测试 |
 |---|---|---|
 | `llm/pipeline/pipeline.go`、`stream.go`；`internal/server/orchestrator/orchestrator.go`（`state.AliasFailoverEnabled`）、`state.go`、`rate_limit_tracking.go` | 多目标别名的"同渠道免费切换"挂接点（标有 `// fork:`） | `cd llm && go test ./pipeline/ -run Alias`；`go test ./internal/server/orchestrator/ -run 'Alias\|RateLimitTracking'` |
-| `internal/server/orchestrator/orchestrator.go` PersistenceState | `QuotaService: processor.QuotaService`（渠道额度） | 渠道额度相关测试 |
+| `internal/server/orchestrator/orchestrator.go` PersistenceState | `QuotaService: processor.QuotaService`（渠道额度） | `TestChatCompletionOrchestrator_Process_SkipsChannelOverQuota` |
 | `internal/server/orchestrator/pass_through.go` `responsesTransportAdaptationEnabled` | `PassThroughBodyBlocked` 时返回 false | `TestResponsesTransportAdaptationHonoursPassThroughBodyBlocked` |
 | `internal/server/biz/channel_llm.go` `buildChannel` | `ch.setModelPriceMultiplier(c.ModelPriceMultiplier)`（渠道价格倍率，倍率 0 = 免费） | `TestUsageCost_ZeroChannelMultiplierSurvivesChannelBuild` |
 | `internal/server/biz/usage_log.go` 模型库价格兜底 | 兜底计费也乘渠道倍率 | `TestUsageCost_ModelLibraryFallbackAppliesChannelMultiplier` |
