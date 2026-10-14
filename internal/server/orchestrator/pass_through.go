@@ -110,6 +110,13 @@ func responsesTransportAdaptationEnabled(_ context.Context, outbound *Persistent
 		return false
 	}
 
+	// fork: semantic outbound transforms (transform options, reasoning-effort
+	// mapping, default max tokens) must win over the raw body, exactly as they do
+	// for plain pass-through; see PassThroughBodyBlocked.
+	if outbound.state.PassThroughBodyBlocked {
+		return false
+	}
+
 	source := outbound.state.LlmRequest.APIFormat
 	target := llm.APIFormat(outbound.state.RawProviderRequest.APIFormat)
 	if source == target || !responsestransformer.IsResponsesFormat(source) || !responsestransformer.IsResponsesFormat(target) {
