@@ -119,6 +119,35 @@ type cancelOnCloseStream struct {
 	once   sync.Once
 }
 
+func (s *cancelOnCloseStream) AcknowledgeDelivery() {
+	if observer, ok := s.stream.(streams.DeliveryAcknowledger); ok {
+		observer.AcknowledgeDelivery()
+	}
+}
+
+func (s *cancelOnCloseStream) DeliveryAcknowledged() bool {
+	observer, ok := s.stream.(streams.DeliveryAcknowledger)
+	return ok && observer.DeliveryAcknowledged()
+}
+
+func (s *cancelOnCloseStream) Deliver(ctx context.Context, write func() (bool, error)) error {
+	boundary, ok := s.stream.(streams.DeliveryBoundary)
+	if ok {
+		return boundary.Deliver(ctx, write)
+	}
+	terminal, err := write()
+	if err == nil && terminal {
+		s.AcknowledgeDelivery()
+	}
+	return err
+}
+
+func (s *cancelOnCloseStream) WaitForFinalization() {
+	if waiter, ok := s.stream.(streams.FinalizationWaiter); ok {
+		waiter.WaitForFinalization()
+	}
+}
+
 func (s *cancelOnCloseStream) Next() bool {
 	return s.stream.Next()
 }
@@ -367,12 +396,12 @@ func (p *pipeline) stream(
 	}
 
 	if slog.Default().Enabled(ctx, slog.LevelDebug) {
-		outboundStream = streams.Map(outboundStream,
+		outboundStream = preserveStreamCapabilities(outboundStream, streams.Map(outboundStream,
 			func(event *httpclient.StreamEvent) *httpclient.StreamEvent {
 				slog.DebugContext(ctx, "Outbound stream event", slog.Any("event", event))
 				return event
 			},
-		)
+		))
 	}
 
 	llmStream, err := p.Outbound.TransformStream(ctx, request, outboundStream)
@@ -407,10 +436,10 @@ func (p *pipeline) stream(
 	}
 
 	if slog.Default().Enabled(ctx, slog.LevelDebug) {
-		llmStream = streams.Map(llmStream, func(event *llm.Response) *llm.Response {
+		llmStream = preserveStreamCapabilities(llmStream, streams.Map(llmStream, func(event *llm.Response) *llm.Response {
 			slog.DebugContext(ctx, "LLM stream event", slog.Any("event", event))
 			return event
-		})
+		}))
 	}
 
 	// Check stream start before the handler commits the response. This enforces
@@ -434,9 +463,9 @@ func (p *pipeline) stream(
 		firstEventGuard.stop()
 	}
 
-	llmStream = streams.MapErr(llmStream, func(resp *llm.Response) (*llm.Response, error) {
+	llmStream = preserveStreamCapabilities(llmStream, streams.MapErr(llmStream, func(resp *llm.Response) (*llm.Response, error) {
 		return withTransformerMetadata(request.TransformerMetadata, resp), nil
-	})
+	}))
 	inboundStream, err := p.Inbound.TransformStream(ctx, llmStream)
 	if err != nil {
 		llmStream.Close()
@@ -460,13 +489,13 @@ func (p *pipeline) stream(
 	}
 
 	if slog.Default().Enabled(ctx, slog.LevelDebug) {
-		inboundStream = streams.Map(
+		inboundStream = preserveStreamCapabilities(inboundStream, streams.Map(
 			inboundStream,
 			func(event *httpclient.StreamEvent) *httpclient.StreamEvent {
 				slog.DebugContext(ctx, "Inbound stream event", slog.Any("event", event))
 				return event
 			},
-		)
+		))
 	}
 
 	if firstEventGuard != nil {

@@ -491,6 +491,12 @@ func (processor *TestChannelOrchestrator) handleStreamResponse(
 
 	// Accumulate stream chunks
 	var accumulatedContent string
+	expectedChoices := 0
+	if expected, ok := stream.(interface{ ExpectedStreamChoices() int }); ok {
+		expectedChoices = expected.ExpectedStreamChoices()
+	}
+	terminalTracker := NewStreamTerminalTracker(expectedChoices)
+	terminalSeen := false
 
 	for stream.Next() {
 		select {
@@ -507,6 +513,9 @@ func (processor *TestChannelOrchestrator) handleStreamResponse(
 		event := stream.Current()
 		if event == nil {
 			continue
+		}
+		if !terminalSeen && terminalTracker.Observe(event) {
+			terminalSeen = true
 		}
 
 		// Receiving an event is the closest observable approximation of the
@@ -560,6 +569,16 @@ func (processor *TestChannelOrchestrator) handleStreamResponse(
 		result.Error = lo.ToPtr("No content in stream response")
 
 		return result, nil
+	}
+	if !terminalSeen {
+		result.Success = false
+		result.Message = lo.ToPtr(accumulatedContent)
+		result.Error = lo.ToPtr("Stream ended without terminal event")
+
+		return result, nil
+	}
+	if observer, ok := stream.(streams.DeliveryAcknowledger); ok {
+		observer.AcknowledgeDelivery()
 	}
 
 	result.Success = true
