@@ -84,11 +84,16 @@ func (r *Relay) CreateCall(ctx context.Context, p CallParams) (*CallResult, *Pre
 
 	selection, err := r.Orchestrator.SelectRealtimeCandidates(ctx, inbound.Model, biz.RealtimeModeWebRTC, p.Request.Header)
 	if err != nil {
+		r.recordCallRejected(ctx, p, inbound.Model, err)
+
 		return nil, &PrepareError{Status: 0, Err: err}
 	}
 
 	if selection == nil || len(selection.Candidates) == 0 {
-		return nil, &PrepareError{Status: http.StatusNotFound, Err: fmt.Errorf("%w: %s", biz.ErrInvalidModel, inbound.Model)}
+		err := fmt.Errorf("%w: %s", biz.ErrInvalidModel, inbound.Model)
+		r.recordCallRejected(ctx, p, inbound.Model, err)
+
+		return nil, &PrepareError{Status: http.StatusNotFound, Err: err}
 	}
 
 	var (
@@ -235,10 +240,35 @@ func (r *Relay) CreateCall(ctx context.Context, p CallParams) (*CallResult, *Pre
 	}
 
 	if lastErr == nil {
-		return nil, &PrepareError{Status: http.StatusNotFound, Err: fmt.Errorf("%w: %s", biz.ErrInvalidModel, inbound.Model)}
+		lastErr, lastStatus = fmt.Errorf("%w: %s", biz.ErrInvalidModel, inbound.Model), http.StatusNotFound
 	}
 
+	r.recordCallRejected(ctx, p, selection.RequestedModel, lastErr)
+
 	return nil, &PrepareError{Status: lastStatus, Err: lastErr}
+}
+
+// recordCallRejected leaves a failed request row behind for a call that was never created,
+// like recordRejected does for sessions.
+func (r *Relay) recordCallRejected(ctx context.Context, p CallParams, requestedModel string, cause error) {
+	pctx, pcancel := xcontext.DetachWithTimeout(ctx, recordTimeout)
+	defer pcancel()
+
+	NewAccounting(AccountingParams{
+		RequestService: r.Services.Request,
+		APIKey:         p.APIKey,
+		ProjectID:      p.ProjectID,
+		RequestedModel: requestedModel,
+		ActualModel:    requestedModel,
+		Method:         http.MethodPost,
+		Path:           p.Request.URL.Path,
+		Query:          StoredQuery(p.Request.URL.Query()),
+		Headers:        StoredHeaders(p.Request.Header),
+		ClientIP:       p.ClientIP,
+		UserAgent:      p.UserAgent,
+		Kind:           "call",
+		SessionID:      p.SessionID,
+	}).RecordHandshakeFailure(pctx, cause)
 }
 
 // encodeOptions resolves the User-Agent policy for a channel.

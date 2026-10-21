@@ -298,6 +298,7 @@ func (h *RealtimeHandlers) writePrepareError(c *gin.Context, perr *realtime.Prep
 		}
 
 		httpErr := transformOrchestratorError(ctx, err, h.orch)
+		reportRealtimeError(c, httpErr.StatusCode, perr.Err)
 		writeErrorBody(c, httpErr.StatusCode, httpErr.Body)
 
 		return
@@ -308,7 +309,27 @@ func (h *RealtimeHandlers) writePrepareError(c *gin.Context, perr *realtime.Prep
 		status = http.StatusInternalServerError
 	}
 
-	JSONError(c, status, err)
+	logRealtimeError(c, status, perr.Err)
+	JSONError(c, status, err) // JSONError also records the error on the gin context.
+}
+
+// reportRealtimeError does for the relay what the chat handler does for Process failures:
+// the cause goes to the error log and to gin's error list, which the access log prints. The
+// masked body the client receives may hide the reason (hidden upstream-error mode), so the
+// log keeps the original cause, the path and the requested model.
+func reportRealtimeError(c *gin.Context, status int, err error) {
+	logRealtimeError(c, status, err)
+
+	_ = c.Error(err)
+}
+
+func logRealtimeError(c *gin.Context, status int, err error) {
+	log.Error(c.Request.Context(), "Error processing realtime request",
+		log.String("path", c.Request.URL.Path),
+		log.String("model", c.Request.URL.Query().Get("model")),
+		log.Int("status", status),
+		log.Cause(err),
+	)
 }
 
 // writeErrorBody renders an error body as JSON. Upstreams answer text/plain 500s and HTML

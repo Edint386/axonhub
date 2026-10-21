@@ -175,11 +175,16 @@ func (r *Relay) prepare(ctx context.Context, req SessionRequest) (*Prepared, *Pr
 		Headers: req.Headers,
 	})
 	if err != nil {
+		r.recordRejected(ctx, req, req.Model, err)
+
 		return nil, &PrepareError{Status: 0, Err: err}
 	}
 
 	if selection == nil || len(selection.Candidates) == 0 {
-		return nil, &PrepareError{Status: http.StatusNotFound, Err: fmt.Errorf("%w: %s", biz.ErrInvalidModel, req.Model)}
+		err := fmt.Errorf("%w: %s", biz.ErrInvalidModel, req.Model)
+		r.recordRejected(ctx, req, req.Model, err)
+
+		return nil, &PrepareError{Status: http.StatusNotFound, Err: err}
 	}
 
 	deadline, _ := budgetCtx.Deadline()
@@ -476,28 +481,34 @@ func (a *prepareAttempt) failure() *PrepareError {
 		a.lastStatus = http.StatusTooManyRequests
 	}
 
-	// The client may already have hung up during the connect budget, so persist on a
-	// detached context.
-	pctx, pcancel := xcontext.DetachWithTimeout(a.ctx, persistTimeout)
+	a.relay.recordRejected(a.ctx, a.req, a.selection.RequestedModel, a.lastErr)
+
+	return &PrepareError{Status: a.lastStatus, Err: a.lastErr}
+}
+
+// recordRejected leaves a failed request row behind for a session that never connected, so
+// the requests page shows why (no channel for the model, quota, every upstream rejected it),
+// exactly like a chat request that fails before reaching a channel. The client may already
+// have hung up during the connect budget, so it persists on a detached context.
+func (r *Relay) recordRejected(ctx context.Context, req SessionRequest, requestedModel string, cause error) {
+	pctx, pcancel := xcontext.DetachWithTimeout(ctx, persistTimeout)
 	defer pcancel()
 
 	NewAccounting(AccountingParams{
-		RequestService: a.relay.Services.Request,
-		APIKey:         a.req.APIKey,
-		ProjectID:      a.req.ProjectID,
-		RequestedModel: a.selection.RequestedModel,
-		ActualModel:    a.selection.RequestedModel,
+		RequestService: r.Services.Request,
+		APIKey:         req.APIKey,
+		ProjectID:      req.ProjectID,
+		RequestedModel: requestedModel,
+		ActualModel:    requestedModel,
 		Method:         http.MethodGet,
-		Path:           a.req.Path,
-		Query:          StoredQuery(a.req.Query),
-		Headers:        StoredHeaders(a.req.Headers),
-		ClientIP:       a.req.ClientIP,
-		UserAgent:      a.req.UserAgent,
+		Path:           req.Path,
+		Query:          StoredQuery(req.Query),
+		Headers:        StoredHeaders(req.Headers),
+		ClientIP:       req.ClientIP,
+		UserAgent:      req.UserAgent,
 		Kind:           "session",
-		SessionID:      a.req.SessionID,
-	}).RecordHandshakeFailure(pctx, a.lastErr)
-
-	return &PrepareError{Status: a.lastStatus, Err: a.lastErr}
+		SessionID:      req.SessionID,
+	}).RecordHandshakeFailure(pctx, cause)
 }
 
 // persistTimeout bounds the detached contexts prepare-time persistence runs on.

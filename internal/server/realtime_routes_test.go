@@ -357,12 +357,16 @@ func TestRealtimeRoutes_RejectsBetaUnknownModelAndMissingKey(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	// None of these attempts reaches a channel: the beta and auth rejections stop in the
-	// handler and middleware, and the unknown model fails candidate selection before the relay
-	// writes its handshake-failure row. No request row exists at all.
-	count, err := h.db.Request.Query().Count(h.ctx)
+	// The beta and auth rejections stop in the handler and middleware and leave no row. The
+	// unknown model fails candidate selection, which is recorded like a chat request that
+	// finds no channel: one failed row naming the model and the reason.
+	rows, err := h.db.Request.Query().All(h.ctx)
 	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Len(t, rows, 1)
+	require.Equal(t, request.StatusFailed, rows[0].Status)
+	require.Equal(t, "no-such-model", rows[0].ModelID)
+	require.Equal(t, "openai/realtime", rows[0].Format)
+	require.Contains(t, string(rows[0].ResponseBody), "no-such-model")
 }
 
 func TestRealtimeRoutes_SubprotocolKeyIsLiftedAndEchoed(t *testing.T) {
