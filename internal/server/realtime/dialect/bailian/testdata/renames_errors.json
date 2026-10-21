@@ -1,0 +1,165 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "init": true,
+  "steps": [
+    {
+      "name": "audio delta fast path renames only the type and keeps the base64 untouched",
+      "upstream": {"event_id":"event_up_1","type":"response.audio.delta","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"delta":"UklGRv////8AAAA="},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_1","type":"response.output_audio.delta","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"delta":"UklGRv////8AAAA="}
+        ]
+      }
+    },
+    {
+      "name": "audio done",
+      "upstream": {"event_id":"event_up_2","type":"response.audio.done","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_2","type":"response.output_audio.done","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0}
+        ]
+      }
+    },
+    {
+      "name": "audio transcript delta",
+      "upstream": {"event_id":"event_up_3","type":"response.audio_transcript.delta","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"delta":"有什么"},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_3","type":"response.output_audio_transcript.delta","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"delta":"有什么"}
+        ]
+      }
+    },
+    {
+      "name": "audio transcript done",
+      "upstream": {"event_id":"event_up_4","type":"response.audio_transcript.done","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"transcript":"有什么可以帮你"},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_4","type":"response.output_audio_transcript.done","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"transcript":"有什么可以帮你"}
+        ]
+      }
+    },
+    {
+      "name": "text delta is forwarded unconditionally",
+      "upstream": {"delta":"喂","event_id":"event_up_5","type":"response.text.delta","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0},
+      "expect": {
+        "to_client": [
+          {"delta":"喂","event_id":"event_up_5","type":"response.output_text.delta","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0}
+        ]
+      }
+    },
+    {
+      "name": "text done",
+      "upstream": {"event_id":"event_up_6","type":"response.text.done","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"text":"How can I assist you today?"},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_6","type":"response.output_text.done","response_id":"resp_1","item_id":"item_1","output_index":0,"content_index":0,"text":"How can I assist you today?"}
+        ]
+      }
+    },
+    {
+      "name": "function call arguments and MCP events pass through unchanged",
+      "upstream": {"event_id":"event_up_7","type":"response.function_call_arguments.done","response_id":"resp_1","item_id":"item_2","output_index":0,"name":"get_current_weather","call_id":"call_1","arguments":" {\"location\": \"北京\"}"},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_7","type":"response.function_call_arguments.done","response_id":"resp_1","item_id":"item_2","output_index":0,"name":"get_current_weather","call_id":"call_1","arguments":" {\"location\": \"北京\"}"}
+        ]
+      }
+    },
+    {
+      "name": "error param session.modalities is rewritten to the GA path",
+      "upstream": {"event_id":"event_up_8","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"Invalid modalities","param":"session.modalities"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_8","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"Invalid modalities","param":"session.output_modalities"}}
+        ]
+      }
+    },
+    {
+      "name": "nested turn_detection param keeps its suffix",
+      "upstream": {"event_id":"event_up_9","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad threshold","param":"session.turn_detection.threshold"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_9","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad threshold","param":"session.audio.input.turn_detection.threshold"}}
+        ]
+      }
+    },
+    {
+      "name": "voice param",
+      "upstream": {"event_id":"event_up_10","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad voice","param":"session.voice"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_10","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad voice","param":"session.audio.output.voice"}}
+        ]
+      }
+    },
+    {
+      "name": "an internal adapter event id never leaks to the client",
+      "upstream": {"event_id":"event_up_11","type":"error","error":{"type":"invalid_request_error","code":"unknown","message":"x","event_id":"axh_nothing_9"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_11","type":"error","error":{"type":"invalid_request_error","code":"unknown","message":"x"}}
+        ]
+      }
+    },
+    {
+      "name": "errors without a param pass through unchanged, client event ids included",
+      "upstream": {"event_id":"event_up_12","type":"error","error":{"type":"invalid_request_error","code":"response_cancel_not_active","message":"nothing to cancel","event_id":"cli_7"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_12","type":"error","error":{"type":"invalid_request_error","code":"response_cancel_not_active","message":"nothing to cancel","event_id":"cli_7"}}
+        ]
+      }
+    },
+    {
+      "name": "invalid client JSON gets a GA error",
+      "client_raw": "not json",
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_2","error":{"type":"invalid_request_error","code":"invalid_json","message":"The client event is not a JSON object."}}
+        ]
+      }
+    },
+    {
+      "name": "client event without a type gets a GA error",
+      "client": {"event_id":"c1","audio":"AAAA"},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_3","error":{"type":"invalid_request_error","code":"missing_required_parameter","message":"Missing required parameter: 'type'.","param":"type","event_id":"c1"}}
+        ]
+      }
+    },
+    {
+      "name": "unknown client events pass through",
+      "client": {"event_id":"c2","type":"some.future.event","x":1},
+      "expect": {
+        "to_upstream": [{"event_id":"c2","type":"some.future.event","x":1}]
+      }
+    },
+    {
+      "name": "an error without error.type (Bailian COMMON_ERROR) gets type server_error; code and message are untouched",
+      "upstream": {"event_id":"event_up_13","type":"error","error":{"code":"COMMON_ERROR","message":"<400> InternalError.Algo.InvalidParameter: Voice 'Chelsie' is not supported."}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_13","type":"error","error":{"type":"server_error","code":"COMMON_ERROR","message":"<400> InternalError.Algo.InvalidParameter: Voice 'Chelsie' is not supported."}}
+        ]
+      }
+    },
+    {
+      "name": "client update pending upstream",
+      "client": {"event_id":"c3","type":"session.update","session":{"instructions":"X"}},
+      "expect": {
+        "to_upstream_types": ["session.update"]
+      }
+    },
+    {
+      "name": "a typeless error that rolls back the pending update also gets type server_error, the client event id and the GA param path",
+      "upstream": {"event_id":"event_up_14","type":"error","error":{"code":"COMMON_ERROR","message":"boom","param":"session.voice","event_id":"axh_upd_1"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_14","type":"error","error":{"type":"server_error","code":"COMMON_ERROR","message":"boom","param":"session.audio.output.voice","event_id":"c3"}}
+        ]
+      }
+    }
+  ]
+}

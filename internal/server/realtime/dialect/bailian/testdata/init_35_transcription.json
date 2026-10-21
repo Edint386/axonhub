@@ -1,0 +1,26 @@
+{
+  "model": "qwen3.5-omni-plus-realtime",
+  "requested_model": "my-realtime",
+  "want_transcription": true,
+  "steps": [
+    {
+      "name": "3.5 init sends 24k input, 24k output, the seeded voice and the transcription model",
+      "upstream": {"event_id":"event_up_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","model":"qwen3.5-omni-plus-realtime","modalities":["text","audio"],"voice":"Tina","input_audio_format":"pcm","output_audio_format":"pcm","input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"turn_detection":{"type":"server_vad","threshold":0.5,"prefix_padding_ms":300,"silence_duration_ms":800,"create_response":true,"interrupt_response":true}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"audio":{"input":{"format":{"type":"pcm","sample_rate":24000}},"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "GA session.created echoes the requested model and the transcription model",
+      "upstream": {"event_id":"event_up_2","type":"session.updated","session":{}},
+      "expect": {
+        "open_gate": true,
+        "to_client": [
+          {"event_id":"event_axh_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"my-realtime","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"prefix_padding_ms":300,"silence_duration_ms":800,"create_response":true,"interrupt_response":true},"transcription":{"model":"qwen3-asr-flash-realtime"}},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    }
+  ]
+}

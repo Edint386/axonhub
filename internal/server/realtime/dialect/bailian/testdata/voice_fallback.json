@@ -1,0 +1,88 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "steps": [
+    {
+      "name": "session.created without a voice: the init carries the family default (3.8 cannot speak its own server default)",
+      "upstream": {"event_id":"event_up_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","model":"qwen3.8-omni-flash-realtime","modalities":["text","audio"],"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","input_audio_transcription":null,"audio":{"input":{"format":{"type":"pcm","sample_rate":24000}},"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "GA session.created renders the default voice",
+      "upstream": {"event_id":"event_up_2","type":"session.updated","session":{}},
+      "expect": {
+        "open_gate": true,
+        "to_client": [
+          {"event_id":"event_axh_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "a GA voice the family cannot speak (alloy) is never forwarded: nothing changed, so the update is answered locally with the current voice",
+      "client": {"event_id":"c1","type":"session.update","session":{"audio":{"output":{"voice":"alloy"}}}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_2","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "an unknown voice next to other changes keeps the current voice in the upstream update",
+      "client": {"event_id":"c2","type":"session.update","session":{"instructions":"Hi.","audio":{"output":{"voice":"alloy"}}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","instructions":"Hi.","turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"input_audio_transcription":null,"audio":{"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack renders the kept voice",
+      "upstream": {"event_id":"event_up_3","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_3","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["audio"],"instructions":"Hi.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "a 3.8-only voice is accepted with its canonical spelling",
+      "client": {"event_id":"c3","type":"session.update","session":{"audio":{"output":{"voice":"zane"}}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_2","type":"session.update","session":{"modalities":["text","audio"],"voice":"Zane","instructions":"Hi.","turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"input_audio_transcription":null,"audio":{"output":{"voice":"Zane","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack renders Zane",
+      "upstream": {"event_id":"event_up_4","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_4","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["audio"],"instructions":"Hi.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Zane"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "a voice of another family (3.5-only Ethan) is dropped and the current voice stays",
+      "client": {"event_id":"c4","type":"session.update","session":{"audio":{"output":{"voice":"Ethan"}}}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_5","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["audio"],"instructions":"Hi.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Zane"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "the upstream's own default Chelsie is not usable on 3.8 either",
+      "client": {"event_id":"c5","type":"session.update","session":{"audio":{"output":{"voice":"Chelsie"}}}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_6","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["audio"],"instructions":"Hi.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Zane"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    }
+  ]
+}

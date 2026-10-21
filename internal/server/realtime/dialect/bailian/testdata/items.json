@@ -1,0 +1,227 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "init": true,
+  "steps": [
+    {
+      "name": "user audio item (doc's role typo) → added + done immediately, role forced to user",
+      "upstream": {"event_id":"event_up_10","type":"conversation.item.created","item":{"id":"item_u1","object":"realtime.item","type":"message","status":"in_progress","role":"assistant","content":[{"type":"input_audio"}]}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_2","type":"conversation.item.added","item":{"id":"item_u1","object":"realtime.item","type":"message","status":"in_progress","role":"user","content":[{"type":"input_audio"}]}},
+          {"event_id":"event_axh_3","type":"conversation.item.done","item":{"id":"item_u1","object":"realtime.item","type":"message","status":"completed","role":"user","content":[{"type":"input_audio"}]}}
+        ]
+      }
+    },
+    {
+      "name": "response.output_item.added records provenance",
+      "upstream": {"event_id":"event_up_11","type":"response.output_item.added","response_id":"resp_1","output_index":0,"item":{"id":"item_a1","object":"realtime.item","type":"message","status":"in_progress","role":"assistant","content":[]}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_11","type":"response.output_item.added","response_id":"resp_1","output_index":0,"item":{"id":"item_a1","object":"realtime.item","type":"message","status":"in_progress","role":"assistant","content":[]}}
+        ]
+      }
+    },
+    {
+      "name": "created for a response item → added only",
+      "upstream": {"event_id":"event_up_12","type":"conversation.item.created","item":{"id":"item_a1","object":"realtime.item","type":"message","status":"in_progress","role":"assistant","content":[]}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_4","type":"conversation.item.added","item":{"id":"item_a1","object":"realtime.item","type":"message","status":"in_progress","role":"assistant","content":[]}}
+        ]
+      }
+    },
+    {
+      "name": "content_part.added: text moves to transcript, type stays audio",
+      "upstream": {"event_id":"event_up_13","type":"response.content_part.added","response_id":"resp_1","item_id":"item_a1","output_index":0,"content_index":0,"part":{"type":"audio","text":""}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_13","type":"response.content_part.added","response_id":"resp_1","item_id":"item_a1","output_index":0,"content_index":0,"part":{"type":"audio","transcript":""}}
+        ]
+      }
+    },
+    {
+      "name": "content_part.done",
+      "upstream": {"event_id":"event_up_14","type":"response.content_part.done","response_id":"resp_1","item_id":"item_a1","output_index":0,"content_index":0,"part":{"type":"audio","text":"你好"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_14","type":"response.content_part.done","response_id":"resp_1","item_id":"item_a1","output_index":0,"content_index":0,"part":{"type":"audio","transcript":"你好"}}
+        ]
+      }
+    },
+    {
+      "name": "text content part in a text-only turn is untouched",
+      "upstream": {"event_id":"event_up_14b","type":"response.content_part.done","response_id":"resp_1","item_id":"item_a1","output_index":0,"content_index":1,"part":{"type":"text","text":"plain"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_14b","type":"response.content_part.done","response_id":"resp_1","item_id":"item_a1","output_index":0,"content_index":1,"part":{"type":"text","text":"plain"}}
+        ]
+      }
+    },
+    {
+      "name": "output_item.done: assistant content renamed to output_audio with transcript, then conversation.item.done",
+      "upstream": {"event_id":"event_up_15","type":"response.output_item.done","response_id":"resp_1","output_index":0,"item":{"id":"item_a1","object":"realtime.item","type":"message","status":"completed","role":"assistant","content":[{"type":"audio","text":"你好"},{"type":"text","text":"plain"}]}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_15","type":"response.output_item.done","response_id":"resp_1","output_index":0,"item":{"id":"item_a1","object":"realtime.item","type":"message","status":"completed","role":"assistant","content":[{"type":"output_audio","transcript":"你好"},{"type":"output_text","text":"plain"}]}},
+          {"event_id":"event_axh_5","type":"conversation.item.done","item":{"id":"item_a1","object":"realtime.item","type":"message","status":"completed","role":"assistant","content":[{"type":"output_audio","transcript":"你好"},{"type":"output_text","text":"plain"}]}}
+        ]
+      }
+    },
+    {
+      "name": "retrieve is answered from the cache",
+      "client": {"event_id":"c1","type":"conversation.item.retrieve","item_id":"item_a1"},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_6","type":"conversation.item.retrieved","item":{"id":"item_a1","object":"realtime.item","type":"message","status":"completed","role":"assistant","content":[{"type":"output_audio","transcript":"你好"},{"type":"output_text","text":"plain"}]}}
+        ]
+      }
+    },
+    {
+      "name": "retrieve of an unknown id is item_not_found",
+      "client": {"event_id":"c2","type":"conversation.item.retrieve","item_id":"item_zz"},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_7","error":{"type":"invalid_request_error","code":"item_not_found","message":"Item with id 'item_zz' does not exist.","param":"item_id","event_id":"c2"}}
+        ]
+      }
+    },
+    {
+      "name": "truncate is synthesised and not forwarded",
+      "client": {"event_id":"c3","type":"conversation.item.truncate","item_id":"item_a1","content_index":0,"audio_end_ms":1500},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_8","type":"conversation.item.truncated","item_id":"item_a1","content_index":0,"audio_end_ms":1500}
+        ]
+      }
+    },
+    {
+      "name": "delete is forwarded under an adapter event id",
+      "client": {"event_id":"c4","type":"conversation.item.delete","item_id":"item_u1"},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_del_1","type":"conversation.item.delete","item_id":"item_u1"}
+        ]
+      }
+    },
+    {
+      "name": "upstream rejection of the delete is turned into conversation.item.deleted",
+      "upstream": {"event_id":"event_up_16","type":"error","error":{"type":"invalid_request_error","code":"unknown_event","message":"unsupported","event_id":"axh_del_1"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_9","type":"conversation.item.deleted","item_id":"item_u1"}
+        ]
+      }
+    },
+    {
+      "name": "the deleted item is gone from the cache",
+      "client": {"event_id":"c5","type":"conversation.item.retrieve","item_id":"item_u1"},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_10","error":{"type":"invalid_request_error","code":"item_not_found","message":"Item with id 'item_u1' does not exist.","param":"item_id","event_id":"c5"}}
+        ]
+      }
+    },
+    {
+      "name": "function_call created in_progress without a prior output_item.added is still response provenance → added only",
+      "upstream": {"event_id":"event_up_20","type":"conversation.item.created","item":{"id":"item_f1","object":"realtime.item","type":"function_call","status":"in_progress","call_id":"call_1","name":"get_weather","arguments":""}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_11","type":"conversation.item.added","item":{"id":"item_f1","object":"realtime.item","type":"function_call","status":"in_progress","call_id":"call_1","name":"get_weather","arguments":""}}
+        ]
+      }
+    },
+    {
+      "name": "function_call output_item.done emits conversation.item.done once",
+      "upstream": {"event_id":"event_up_21","type":"response.output_item.done","response_id":"resp_2","output_index":0,"item":{"id":"item_f1","object":"realtime.item","type":"function_call","status":"completed","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"杭州\"}"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_21","type":"response.output_item.done","response_id":"resp_2","output_index":0,"item":{"id":"item_f1","object":"realtime.item","type":"function_call","status":"completed","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"杭州\"}"}},
+          {"event_id":"event_axh_12","type":"conversation.item.done","item":{"id":"item_f1","object":"realtime.item","type":"function_call","status":"completed","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"杭州\"}"}}
+        ]
+      }
+    },
+    {
+      "name": "mcp_approval_request drops Bailian's previous_item_id (it names the approved mcp_call, not the predecessor) and is complete immediately",
+      "upstream": {"event_id":"event_up_22","type":"conversation.item.created","response_id":"resp_3","item_id":"appr_1","previous_item_id":"item_m1","item":{"id":"appr_1","type":"mcp_approval_request","server_label":"amap","name":"maps_weather","arguments":"{}","call_id":"call_2"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_13","type":"conversation.item.added","item":{"id":"appr_1","type":"mcp_approval_request","server_label":"amap","name":"maps_weather","arguments":"{}","call_id":"call_2"}},
+          {"event_id":"event_axh_14","type":"conversation.item.done","item":{"id":"appr_1","type":"mcp_approval_request","server_label":"amap","name":"maps_weather","arguments":"{}","call_id":"call_2"}}
+        ]
+      }
+    },
+    {
+      "name": "client function_call_output loses previous_item_id",
+      "client": {"event_id":"c6","type":"conversation.item.create","previous_item_id":"item_f1","item":{"type":"function_call_output","call_id":"call_1","output":"sunny"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"c6","type":"conversation.item.create","item":{"type":"function_call_output","call_id":"call_1","output":"sunny"}}
+        ]
+      }
+    },
+    {
+      "name": "client mcp_approval_response loses reason",
+      "client": {"type":"conversation.item.create","item":{"type":"mcp_approval_response","approval_request_id":"appr_1","approve":true,"reason":"ok"}},
+      "expect": {
+        "to_upstream": [
+          {"type":"conversation.item.create","item":{"type":"mcp_approval_response","approval_request_id":"appr_1","approve":true}}
+        ]
+      }
+    },
+    {
+      "name": "client assistant history item is converted to text/audio without audio bytes",
+      "client": {"type":"conversation.item.create","item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"},{"type":"output_audio","audio":"AAAA","transcript":"hello"}]}},
+      "expect": {
+        "to_upstream": [
+          {"type":"conversation.item.create","item":{"type":"message","role":"assistant","content":[{"type":"text","text":"hi"},{"type":"audio","text":"hello"}]}}
+        ]
+      }
+    },
+    {
+      "name": "client input_audio item in VAD mode is rejected",
+      "client": {"event_id":"c7","type":"conversation.item.create","item":{"type":"message","role":"user","content":[{"type":"input_audio","audio":"AAAA"}]}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_15","error":{"type":"invalid_request_error","code":"unsupported_on_upstream","message":"input_audio content items require turn_detection to be null (manual mode) on the upstream model; stream audio with input_audio_buffer.append instead.","param":"item.content[0]","event_id":"c7"}}
+        ]
+      }
+    },
+    {
+      "name": "client user text item passes through",
+      "client": {"type":"conversation.item.create","item":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}},
+      "expect": {
+        "to_upstream": [
+          {"type":"conversation.item.create","item":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
+        ]
+      }
+    },
+    {
+      "name": "client system item passes through",
+      "client": {"type":"conversation.item.create","item":{"type":"message","role":"system","content":[{"type":"input_text","text":"rules"}]}},
+      "expect": {
+        "to_upstream": [
+          {"type":"conversation.item.create","item":{"type":"message","role":"system","content":[{"type":"input_text","text":"rules"}]}}
+        ]
+      }
+    },
+    {
+      "name": "item.create without item is rejected",
+      "client": {"event_id":"c8","type":"conversation.item.create"},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_16","error":{"type":"invalid_request_error","code":"missing_required_parameter","message":"Missing required parameter: 'item'.","param":"item","event_id":"c8"}}
+        ]
+      }
+    },
+    {
+      "name": "upstream conversation.item.deleted passes through",
+      "upstream": {"event_id":"event_up_30","type":"conversation.item.deleted","item_id":"item_a1"},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_30","type":"conversation.item.deleted","item_id":"item_a1"}
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "steps": [
+    {
+      "name": "session.created sends init 1",
+      "upstream": {"event_id":"event_up_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","model":"qwen3.8-omni-flash-realtime","modalities":["text","audio"],"voice":"Tina"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","input_audio_transcription":null,"audio":{"input":{"format":{"type":"pcm","sample_rate":24000}},"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "first failure retries with the minimal update (output format dropped, input format and voice kept)",
+      "upstream": {"event_id":"event_up_2","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad1","param":"session.audio","event_id":"axh_init_1"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_2","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","input_audio_transcription":null,"audio":{"input":{"format":{"type":"pcm","sample_rate":24000}},"output":{"voice":"Tina"}}}}
+        ]
+      }
+    },
+    {
+      "name": "second failure (matched by session. param without event_id) gives up with 1011",
+      "upstream": {"event_id":"event_up_3","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad2","param":"session.modalities"}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_1","error":{"type":"server_error","code":"upstream_init_failed","message":"Upstream session initialisation failed: bad2"}}
+        ],
+        "close": {"code": 1011}
+      }
+    }
+  ]
+}

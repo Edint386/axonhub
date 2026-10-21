@@ -1,0 +1,32 @@
+{
+  "model": "qwen3-omni-flash-realtime-2025-09-15",
+  "want_transcription": false,
+  "init": true,
+  "steps": [
+    {
+      "name": "legacy model rewrites semantic_vad to server_vad, drops idle_timeout, accepts Cherry, keeps flat formats and top-level voice only",
+      "client": {"event_id":"c1","type":"session.update","session":{"audio":{"output":{"voice":"Cherry"},"input":{"turn_detection":{"type":"semantic_vad","eagerness":"low","create_response":false,"idle_timeout_ms":9000}}}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Cherry","turn_detection":{"type":"server_vad","create_response":false},"input_audio_transcription":null,"input_audio_format":"pcm","output_audio_format":"pcm"}}
+        ]
+      }
+    },
+    {
+      "name": "voice object with id is dropped and nothing else changed → local session.updated",
+      "upstream": {"event_id":"event_up_10","type":"session.updated","session":{}},
+      "expect": {
+        "to_client_types": ["session.updated"]
+      }
+    },
+    {
+      "name": "custom voice object is dropped; update answered locally",
+      "client": {"event_id":"c2","type":"session.update","session":{"audio":{"output":{"voice":{"id":"voice_123"}}}}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_3","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3-omni-flash-realtime-2025-09-15","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","create_response":false},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Cherry"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    }
+  ]
+}

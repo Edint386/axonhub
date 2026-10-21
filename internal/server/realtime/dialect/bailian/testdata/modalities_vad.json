@@ -1,0 +1,53 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "init": true,
+  "steps": [
+    {
+      "name": "['text'] stays ['text']; semantic_vad kept on 3.8 with eagerness dropped; idle_timeout only applies to server_vad; 3.8 sends 24 kHz formats both ways",
+      "client": {"event_id":"c1","type":"session.update","session":{"output_modalities":["text"],"audio":{"input":{"turn_detection":{"type":"semantic_vad","eagerness":"high","create_response":false,"interrupt_response":true,"idle_timeout_ms":9000}}},"temperature":0.3}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_1","type":"session.update","session":{"modalities":["text"],"voice":"Tina","turn_detection":{"type":"semantic_vad","create_response":false,"interrupt_response":true},"input_audio_transcription":null,"temperature":0.3,"audio":{"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack renders output_modalities ['text'] and the semantic_vad object",
+      "upstream": {"event_id":"event_up_10","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_2","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["text"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"semantic_vad","create_response":false,"interrupt_response":true},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "response.created in a text-only session reports output_modalities ['text']",
+      "upstream": {"event_id":"event_up_11","type":"response.created","response":{"id":"resp_t","object":"realtime.response","conversation_id":"conv_1","status":"in_progress","modalities":["text"],"voice":"Tina","output_audio_format":"pcm","output":[]}},
+      "expect": {
+        "response_in_progress": true,
+        "to_client": [
+          {"event_id":"event_up_11","type":"response.created","response":{"id":"resp_t","object":"realtime.response","conversation_id":"conv_1","status":"in_progress","output":[],"output_modalities":["text"],"audio":{"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"Tina"}},"max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "server_vad idle_timeout_ms is honoured on 3.8 and forwarded",
+      "client": {"event_id":"c2","type":"session.update","session":{"audio":{"input":{"turn_detection":{"type":"server_vad","silence_duration_ms":500,"idle_timeout_ms":8000}}}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_2","type":"session.update","session":{"modalities":["text"],"voice":"Tina","turn_detection":{"type":"server_vad","silence_duration_ms":500,"idle_timeout_ms":8000},"input_audio_transcription":null,"temperature":0.3,"audio":{"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack renders idle_timeout_ms in the GA turn_detection",
+      "upstream": {"event_id":"event_up_12","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_3","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["text"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","silence_duration_ms":500,"idle_timeout_ms":8000},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    }
+  ]
+}

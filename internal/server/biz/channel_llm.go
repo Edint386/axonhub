@@ -460,6 +460,8 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 		return nil, fmt.Errorf("websocket transport only supports api_format %q", llm.APIFormatOpenAIResponse.String())
 	}
 	switch ep.APIFormat {
+	case llm.APIFormatOpenAIRealtime.String(): // fork: see channel_endpoint_realtime.go
+		return newRealtimeEndpointOutbound(), nil
 	case llm.APIFormatOpenAIChatCompletion.String():
 		if c.Type == channel.TypeCline {
 			return cline.NewOutboundTransformerWithConfig(&cline.Config{

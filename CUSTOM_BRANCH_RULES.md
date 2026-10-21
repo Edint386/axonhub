@@ -45,6 +45,7 @@
    - 前端单元测试：`cd frontend && node --test "src/**/*.test.mjs"`。
    - 前端类型检查必须用 `./node_modules/.bin/tsc -p tsconfig.app.json --noEmit --pretty false`。根目录的 `tsconfig.json` 是 `"files": []`，直接跑什么都不检查。上游本身就有一批类型错误，所以判断标准是"这次合并有没有新增错误"：把错误去掉行号列号后，和合并前的 custom 逐条（按多重集合）对比。不要拿 custom 和上游按原文对比：custom 的渠道表单多一个 `priority` 字段，上游已有的同一个错误在 custom 里文字会不一样（比如 "21 more" 对 "20 more"），会被误判成 custom 独有。已知的老错误：`quota-badges.tsx` 的 `ProviderQuotaLimit`/`QuotaLimit` 不匹配（上游潜在问题，运行无影响，按规则 4 不改）。
    - 合并后再做一次语义复核：测试通过不代表 custom 功能和上游新逻辑配合正确，需要逐项检查 custom 功能有没有被新代码路径绕过。
+   - 实时语音（realtime）复制了几份上游逻辑，上游改了要同步：`internal/server/orchestrator/realtime_candidates.go` 里构造 `PersistenceState` 和 inbound 中间件顺序，对照 `orchestrator.go` 的 `Process`；同文件的 `RealtimeRPMAdmit`，对照 `rate_limit_admission.go` 的 `withRateLimitAdmission`；`internal/server/realtime_routes.go` 里手写的 `/v1` 中间件列表，对照 `routes.go` 的 `apiMiddlewares`；同文件 `/codex` 镜像的中间件列表，对照 `codex_routes.go` 的 `common`。Codex 的 User-Agent 不用同步：`internal/server/realtime/calls_glue.go` 通过 custom 文件 `llm/transformer/openai/codex/live.go` 的 `codex.DefaultUserAgent()` 直接读上游的 `codexDefaultUserAgent`，上游改版本号会自动跟上，没有副本。
 5. **汇报 → 等所有者同意 → 推送。**
 
 ## 4. 项目约束（来自 AGENTS.md，再次强调）
@@ -64,7 +65,14 @@
 | `internal/server/orchestrator/pass_through.go` `responsesTransportAdaptationEnabled` | `PassThroughBodyBlocked` 时返回 false | `TestResponsesTransportAdaptationHonoursPassThroughBodyBlocked` |
 | `internal/server/biz/channel_llm.go` `buildChannel` | `ch.setModelPriceMultiplier(c.ModelPriceMultiplier)`（渠道价格倍率，倍率 0 = 免费） | `TestUsageCost_ZeroChannelMultiplierSurvivesChannelBuild` |
 | `internal/server/biz/usage_log.go` 模型库价格兜底 | 兜底计费也乘渠道倍率 | `TestUsageCost_ModelLibraryFallbackAppliesChannelMultiplier` |
+| `internal/server/routes.go` `SetupRoutes` | `registerRealtimeRoutes(server, handlers, services)`（实时语音路由，`// fork:`） | `TestSetupRoutes_RegistersRealtimeRoutes`（`internal/server/realtime_routes_fork_test.go`） |
+| `internal/server/biz/channel_llm.go` `buildNonDefaultEndpointOutbound` switch 开头 | `case llm.APIFormatOpenAIRealtime.String(): return newRealtimeEndpointOutbound(), nil`（没有它带 `openai/realtime` 端点的渠道会整个被丢弃） | `TestRealtimeEndpoint_ForkHookInBuildNonDefaultEndpointOutbound` |
+| `frontend/src/features/channels/data/schema.ts` `configurableChannelEndpointApiFormats` | `'openai/realtime'`（端点对话框能选它） | `frontend/src/features/realtime/realtime-endpoint.test.mjs` |
+| `internal/server/server.go` `Shutdown` | `defer drainRealtimeSessions(ctx) // fork: see realtime_shutdown.go`（让被劫持的实时会话先收尾、落库用量，再让 fx 关数据库） | `TestServerShutdown_DrainsRealtimeSessions`（`internal/server/realtime_shutdown_fork_test.go`） |
+| `docs/{en,zh}/index.md` API 参考表 | Realtime API 那一行 | —（没有守护测试，手工检查） |
 | `CLAUDE.md`、`AGENTS.md` | 指向本文件的引用行 | — |
+
+实时语音功能的其余代码全是 custom 新文件：`llm/realtime.go`、`llm/transformer/openai/codex/live*.go`、`internal/server/biz/channel_endpoint_realtime*.go`、`internal/server/orchestrator/realtime_candidates*.go`、`internal/server/middleware/realtime_subprotocol*.go`、`internal/server/realtime/**`、`internal/server/api/realtime.go`、`internal/server/realtime_routes*.go`、`internal/server/realtime_shutdown*.go`、`frontend/src/locales/{en,zh-CN}/realtime.json`、`frontend/src/features/realtime/`、`docs/{en,zh}/api-reference/realtime.md`。
 
 ## 6. 有意覆盖上游的地方（规则 4 的例外）
 

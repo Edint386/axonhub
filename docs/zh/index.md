@@ -45,6 +45,7 @@
 | [嵌入 API](api-reference/embedding-api.md) | 向量嵌入接口文档 |
 | [重排序 API](api-reference/rerank-api.md) | 重排序接口文档 |
 | [System One API](api-reference/systemone-api.md) | 原生决策推理接口文档 |
+| [Realtime API](api-reference/realtime.md) | 实时语音中继（OpenAI 正式版、Codex 语音、百炼 Qwen-Omni）— custom 分支 |
 
 ### 🛠️ 开发文档
 

@@ -1,0 +1,41 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": true,
+  "steps": [
+    {
+      "name": "session.created sends init 1",
+      "upstream": {"event_id":"event_up_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","model":"qwen3.8-omni-flash-realtime","modalities":["text","audio"],"voice":"Tina","turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"audio":{"input":{"format":{"type":"pcm","sample_rate":24000}},"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "an unrelated upstream error during init is forwarded at once (errors are never held) and is not an init failure",
+      "upstream": {"event_id":"event_up_2","type":"error","error":{"type":"server_error","code":"busy","message":"try later"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_2","type":"error","error":{"type":"server_error","code":"busy","message":"try later"}}
+        ]
+      }
+    },
+    {
+      "name": "error tagged with axh_init_1 triggers the minimal retry: the output format is dropped, the 24 kHz input format stays (3.8 audio is not resampled) and so does the voice (the upstream default is unusable)",
+      "upstream": {"event_id":"event_up_3","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad","param":"session.audio.output.format","event_id":"axh_init_1"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_2","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"audio":{"input":{"format":{"type":"pcm","sample_rate":24000}},"output":{"voice":"Tina"}}}}
+        ]
+      }
+    },
+    {
+      "name": "retry ack opens the gate and renders session.created (the earlier error was already forwarded)",
+      "upstream": {"event_id":"event_up_4","type":"session.updated","session":{}},
+      "expect": {
+        "open_gate": true,
+        "to_client_types": ["session.created"]
+      }
+    }
+  ]
+}

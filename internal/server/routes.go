@@ -185,6 +185,7 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 	}
 
 	registerCodexRoutes(server, handlers, services)
+	registerRealtimeRoutes(server, handlers, services) // fork: see realtime_routes.go
 
 	apiMiddlewares := []gin.HandlerFunc{
 		middleware.WithIPBlocklist(services.SystemService),

@@ -1,0 +1,34 @@
+{
+  "model": "qwen-omni-turbo-realtime",
+  "want_transcription": false,
+  "steps": [
+    {
+      "name": "legacy init uses the flat format strings, the flat voice and no nested audio object",
+      "upstream": {"event_id":"event_up_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","model":"qwen-omni-turbo-realtime","modalities":["text","audio"],"voice":"Cherry","input_audio_format":"pcm","output_audio_format":"pcm","turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Cherry","input_audio_transcription":null,"input_audio_format":"pcm","output_audio_format":"pcm"}}
+        ]
+      }
+    },
+    {
+      "name": "rejected init retries with the minimal update (formats dropped, voice kept)",
+      "upstream": {"event_id":"event_up_2","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad format","param":"session.input_audio_format","event_id":"axh_init_1"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_2","type":"session.update","session":{"modalities":["text","audio"],"voice":"Cherry","input_audio_transcription":null}}
+        ]
+      }
+    },
+    {
+      "name": "retry ack renders the GA session.created with the legacy default voice",
+      "upstream": {"event_id":"event_up_3","type":"session.updated","session":{}},
+      "expect": {
+        "open_gate": true,
+        "to_client": [
+          {"event_id":"event_axh_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen-omni-turbo-realtime","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"silence_duration_ms":800},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Cherry"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    }
+  ]
+}

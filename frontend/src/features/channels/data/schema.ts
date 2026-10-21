@@ -50,6 +50,7 @@ export const configurableChannelEndpointApiFormats = [
   'jina/rerank',
   'jina/embeddings',
   'typesafe/systemone',
+  'openai/realtime', // fork: realtime relay endpoint, see docs/en/api-reference/realtime.md
 ] as const;
 
 export const configurableChannelEndpointApiFormatSchema = z.enum(configurableChannelEndpointApiFormats);

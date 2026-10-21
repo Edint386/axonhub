@@ -1,0 +1,41 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "steps": [
+    {
+      "name": "upstream session.created (real 3.8 defaults: Chelsie, pcm16 in, pcm24 out) seeds config and sends init with 24 kHz both ways and a usable voice",
+      "upstream": {"event_id":"event_up_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","model":"qwen3.8-omni-flash-realtime","modalities":["text","audio"],"voice":"Chelsie","input_audio_format":"pcm16","output_audio_format":"pcm24","input_audio_transcription":{"model":"gummy-realtime-v1"},"turn_detection":{"type":"server_vad","threshold":0.5,"prefix_padding_ms":300,"silence_duration_ms":800,"create_response":true,"interrupt_response":true}}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_init_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","input_audio_transcription":null,"audio":{"input":{"format":{"type":"pcm","sample_rate":24000}},"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "frames arriving while the init is pending are held",
+      "upstream": {"event_id":"event_up_2","type":"mcp_list_tools.in_progress","item_id":"mcp_1"},
+      "expect": {}
+    },
+    {
+      "name": "init ack is suppressed and replaced by exactly one GA session.created (voice Tina, not the unusable Chelsie), then held frames",
+      "upstream": {"event_id":"event_up_3","type":"session.updated","session":{"modalities":["text","audio"]}},
+      "expect": {
+        "open_gate": true,
+        "to_client": [
+          {"event_id":"event_axh_1","type":"session.created","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.8-omni-flash-realtime","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.5,"prefix_padding_ms":300,"silence_duration_ms":800,"create_response":true,"interrupt_response":true},"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}},
+          {"event_id":"event_up_2","type":"mcp_list_tools.in_progress","item_id":"mcp_1"}
+        ]
+      }
+    },
+    {
+      "name": "unsolicited session.updated is dropped",
+      "upstream": {"event_id":"event_up_4","type":"session.updated","session":{}},
+      "expect": {}
+    },
+    {
+      "name": "repeated session.created is dropped",
+      "upstream": {"event_id":"event_up_5","type":"session.created","session":{"id":"sess_2"}},
+      "expect": {}
+    }
+  ]
+}

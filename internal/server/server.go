@@ -101,6 +101,7 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	if srv.lifetime != nil {
 		srv.lifetime.Shutdown(context.Cause(ctx))
 	}
+	defer drainRealtimeSessions(ctx) // fork: see realtime_shutdown.go
 	if srv.server == nil {
 		return nil
 	}

@@ -1,0 +1,36 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "init": true,
+  "steps": [
+    {
+      "name": "a non-24k pcm rate is rejected without closing",
+      "client": {"event_id":"c0","type":"session.update","session":{"audio":{"input":{"format":{"type":"audio/pcm","rate":16000}}}}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_2","error":{"type":"invalid_request_error","code":"invalid_value","message":"Only a 24000 Hz sample rate is supported for audio/pcm, got 16000.","param":"session.audio.input.format.rate","event_id":"c0"}}
+        ]
+      }
+    },
+    {
+      "name": "G.711 input format is rejected and the session closes with 1003",
+      "client": {"event_id":"c1","type":"session.update","session":{"audio":{"input":{"format":{"type":"audio/pcmu"}},"output":{"format":{"type":"audio/pcmu"}}}}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_3","error":{"type":"invalid_request_error","code":"unsupported_audio_format","message":"audio/pcmu is not supported by the upstream model; use audio/pcm at 24000 Hz.","param":"session.audio.input.format.type","event_id":"c1"}}
+        ],
+        "close": {"code": 1003}
+      }
+    },
+    {
+      "name": "G.711 output format alone is also rejected",
+      "client": {"event_id":"c2","type":"session.update","session":{"audio":{"output":{"format":{"type":"audio/pcma"}}}}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_4","error":{"type":"invalid_request_error","code":"unsupported_audio_format","message":"audio/pcma is not supported by the upstream model; use audio/pcm at 24000 Hz.","param":"session.audio.output.format.type","event_id":"c2"}}
+        ],
+        "close": {"code": 1003}
+      }
+    }
+  ]
+}

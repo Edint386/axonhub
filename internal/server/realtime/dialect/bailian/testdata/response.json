@@ -1,0 +1,104 @@
+{
+  "model": "qwen3.8-omni-flash-realtime",
+  "want_transcription": false,
+  "init": true,
+  "steps": [
+    {
+      "name": "response.create keeps only instructions and mapped modalities; metadata is remembered",
+      "client": {"event_id":"r1","type":"response.create","response":{"instructions":"Say hi","output_modalities":["audio"],"metadata":{"turn":"1"},"tools":[{"type":"function","name":"x"}],"max_output_tokens":100,"tool_choice":"auto"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"r1","type":"response.create","response":{"instructions":"Say hi","modalities":["text","audio"]}}
+        ]
+      }
+    },
+    {
+      "name": "conversation none is rejected",
+      "client": {"event_id":"r2","type":"response.create","response":{"conversation":"none","instructions":"x"}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_2","error":{"type":"invalid_request_error","code":"unsupported_on_upstream","message":"Out-of-band responses (conversation: \"none\") are not supported by the upstream model.","param":"response.conversation","event_id":"r2"}}
+        ]
+      }
+    },
+    {
+      "name": "response.input is rejected",
+      "client": {"event_id":"r3","type":"response.create","response":{"input":[]}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_3","error":{"type":"invalid_request_error","code":"unsupported_on_upstream","message":"response.input is not supported by the upstream model.","param":"response.input","event_id":"r3"}}
+        ]
+      }
+    },
+    {
+      "name": "bare response.create omits the response object",
+      "client": {"type":"response.create"},
+      "expect": {
+        "to_upstream": [{"type":"response.create"}]
+      }
+    },
+    {
+      "name": "text-only override",
+      "client": {"type":"response.create","response":{"output_modalities":["text"],"conversation":"auto"}},
+      "expect": {
+        "to_upstream": [{"type":"response.create","response":{"modalities":["text"]}}]
+      }
+    },
+    {
+      "name": "response.cancel passes through",
+      "client": {"event_id":"x","type":"response.cancel"},
+      "expect": {
+        "to_upstream": [{"event_id":"x","type":"response.cancel"}]
+      }
+    },
+    {
+      "name": "output_audio_buffer.clear is dropped",
+      "client": {"type":"output_audio_buffer.clear"},
+      "expect": {}
+    },
+    {
+      "name": "input_audio_buffer.commit passes through",
+      "client": {"event_id":"k","type":"input_audio_buffer.commit"},
+      "expect": {
+        "to_upstream": [{"event_id":"k","type":"input_audio_buffer.commit"}]
+      }
+    },
+    {
+      "name": "response.created is reshaped, marks in progress and carries the remembered metadata",
+      "upstream": {"event_id":"event_up_3","type":"response.created","response":{"id":"resp_1","object":"realtime.response","conversation_id":"conv_1","status":"in_progress","modalities":["text","audio"],"voice":"Tina","output_audio_format":"pcm","output":[]}},
+      "expect": {
+        "response_in_progress": true,
+        "to_client": [
+          {"event_id":"event_up_3","type":"response.created","response":{"id":"resp_1","object":"realtime.response","conversation_id":"conv_1","status":"in_progress","output":[],"output_modalities":["audio"],"audio":{"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"Tina"}},"max_output_tokens":"inf","metadata":{"turn":"1"}}}
+        ]
+      }
+    },
+    {
+      "name": "response.done is reshaped with singular usage details, normalised output and a usage record whose summary has no audio",
+      "upstream": {"event_id":"event_up_4","type":"response.done","response":{"id":"resp_1","object":"realtime.response","conversation_id":"conv_1","status":"completed","modalities":["text","audio"],"voice":"Tina","output_audio_format":"pcm","output":[{"id":"item_a1","object":"realtime.item","type":"message","status":"completed","role":"assistant","content":[{"type":"audio","transcript":"你好呀！有什么我可以帮你的吗？","audio":"AAAAAAAA"}]}],"usage":{"total_tokens":377,"input_tokens":336,"output_tokens":41,"input_tokens_details":{"text_tokens":228,"audio_tokens":108},"output_tokens_details":{"text_tokens":9,"audio_tokens":32},"plugins":{"search":{"count":1,"strategy":"agent"}}}}},
+      "expect": {
+        "response_in_progress": false,
+        "to_client": [
+          {"event_id":"event_up_4","type":"response.done","response":{"id":"resp_1","object":"realtime.response","conversation_id":"conv_1","status":"completed","output":[{"id":"item_a1","object":"realtime.item","type":"message","status":"completed","role":"assistant","content":[{"type":"output_audio","transcript":"你好呀！有什么我可以帮你的吗？"}]}],"usage":{"input_tokens":336,"output_tokens":41,"total_tokens":377,"input_token_details":{"text_tokens":228,"audio_tokens":108,"image_tokens":0,"cached_tokens":0,"cached_tokens_details":{"text_tokens":0,"audio_tokens":0,"image_tokens":0}},"output_token_details":{"text_tokens":9,"audio_tokens":32}},"output_modalities":["audio"],"audio":{"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"Tina"}},"max_output_tokens":"inf","metadata":{"turn":"1"}}}
+        ],
+        "usage": [
+          {"kind":"response","response_id":"resp_1","prompt_tokens":336,"completion_tokens":41,"total_tokens":377,"prompt_audio_tokens":108,"completion_audio_tokens":32,
+           "summary": {"id":"resp_1","object":"realtime.response","conversation_id":"conv_1","status":"completed","output":[{"id":"item_a1","object":"realtime.item","type":"message","status":"completed","role":"assistant","content":[{"type":"output_audio","transcript":"你好呀！有什么我可以帮你的吗？"}]}],"usage":{"input_tokens":336,"output_tokens":41,"total_tokens":377,"input_token_details":{"text_tokens":228,"audio_tokens":108,"image_tokens":0,"cached_tokens":0,"cached_tokens_details":{"text_tokens":0,"audio_tokens":0,"image_tokens":0}},"output_token_details":{"text_tokens":9,"audio_tokens":32}},"output_modalities":["audio"],"audio":{"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"Tina"}},"max_output_tokens":"inf","metadata":{"turn":"1"}}}
+        ]
+      }
+    },
+    {
+      "name": "the next response has no metadata and a function_call output passes untouched",
+      "upstream": {"event_id":"event_up_5","type":"response.done","response":{"id":"resp_2","object":"realtime.response","conversation_id":"conv_1","status":"completed","modalities":["text","audio"],"voice":"Ethan","output_audio_format":"pcm","output":[{"id":"item_f1","object":"realtime.item","type":"function_call","status":"completed","call_id":"call_1","name":"get_current_weather","arguments":" {\"location\": \"杭州\"}"}],"usage":{"total_tokens":567,"input_tokens":524,"output_tokens":43,"input_tokens_details":{"text_tokens":487,"audio_tokens":37},"output_tokens_details":{"text_tokens":43}}}},
+      "expect": {
+        "response_in_progress": false,
+        "to_client": [
+          {"event_id":"event_up_5","type":"response.done","response":{"id":"resp_2","object":"realtime.response","conversation_id":"conv_1","status":"completed","output":[{"id":"item_f1","object":"realtime.item","type":"function_call","status":"completed","call_id":"call_1","name":"get_current_weather","arguments":" {\"location\": \"杭州\"}"}],"usage":{"input_tokens":524,"output_tokens":43,"total_tokens":567,"input_token_details":{"text_tokens":487,"audio_tokens":37,"image_tokens":0,"cached_tokens":0,"cached_tokens_details":{"text_tokens":0,"audio_tokens":0,"image_tokens":0}},"output_token_details":{"text_tokens":43,"audio_tokens":0}},"output_modalities":["audio"],"audio":{"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"Ethan"}},"max_output_tokens":"inf"}}
+        ],
+        "usage": [
+          {"kind":"response","response_id":"resp_2","prompt_tokens":524,"completion_tokens":43,"total_tokens":567,"prompt_audio_tokens":37}
+        ]
+      }
+    }
+  ]
+}

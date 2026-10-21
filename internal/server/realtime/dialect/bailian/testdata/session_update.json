@@ -1,0 +1,151 @@
+{
+  "model": "qwen3.5-omni-plus-realtime",
+  "want_transcription": false,
+  "init": true,
+  "steps": [
+    {
+      "name": "audio formats stripped, unknown voice dropped, ['audio'] mapped, turn_detection null sent",
+      "client": {"event_id":"c1","type":"session.update","session":{"type":"realtime","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"turn_detection":null,"noise_reduction":{"type":"near_field"}},"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"ash","speed":1.2}},"tracing":"auto"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_1","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","turn_detection":null,"input_audio_transcription":null,"audio":{"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack renders GA session.updated with turn_detection null",
+      "upstream": {"event_id":"event_up_10","type":"session.updated","session":{"modalities":["text","audio"],"voice":"Tina","turn_detection":null}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_2","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.5-omni-plus-realtime","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":null,"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "instructions-only update sends the full config and preserves turn_detection null",
+      "client": {"event_id":"c2","type":"session.update","session":{"instructions":"Be brief."}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_2","type":"session.update","session":{"modalities":["text","audio"],"voice":"Tina","instructions":"Be brief.","turn_detection":null,"input_audio_transcription":null,"audio":{"output":{"voice":"Tina","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack 2",
+      "upstream": {"event_id":"event_up_11","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_3","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.5-omni-plus-realtime","output_modalities":["audio"],"instructions":"Be brief.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":null,"transcription":null},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Tina"}},"tools":[],"tool_choice":"auto","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "known voice (case-insensitive) in both fields, max_output_tokens→max_tokens, tools nested, MCP mapped, VAD clamped, idle_timeout kept on 3.5",
+      "client": {"event_id":"c3","type":"session.update","session":{"audio":{"output":{"voice":"cindy"},"input":{"transcription":{"model":"gpt-4o-transcribe","language":"en"},"turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":100,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000}}},"max_output_tokens":2048,"tool_choice":"auto","tools":[{"type":"function","name":"get_weather","description":"Weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},{"type":"mcp","server_label":"amap","server_url":"https://mcp.example.com/sse","authorization":"Bearer x","headers":{"X-A":"1"},"allowed_tools":{"tool_names":["maps_weather","maps_geo"],"read_only":true},"require_approval":{"never":{"tool_names":["maps_weather","maps_geo"]}}}]}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_3","type":"session.update","session":{"modalities":["text","audio"],"voice":"Cindy","instructions":"Be brief.","turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"tools":[{"type":"function","function":{"name":"get_weather","description":"Weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}},{"type":"mcp","server_label":"amap","server_url":"https://mcp.example.com/sse","authorization":"Bearer x","headers":{"X-A":"1"},"allowed_tools":["maps_weather","maps_geo"],"require_approval":"never"}],"max_tokens":2048,"audio":{"output":{"voice":"Cindy","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack 3 renders flat GA tools, the effective voice and max_output_tokens",
+      "upstream": {"event_id":"event_up_12","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_4","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.5-omni-plus-realtime","output_modalities":["audio"],"instructions":"Be brief.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"transcription":{"model":"qwen3-asr-flash-realtime"}},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Cindy"}},"tools":[{"type":"function","name":"get_weather","description":"Weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},{"type":"mcp","server_label":"amap","server_url":"https://mcp.example.com/sse","authorization":"Bearer x","headers":{"X-A":"1"},"allowed_tools":{"tool_names":["maps_weather","maps_geo"],"read_only":true},"require_approval":{"never":{"tool_names":["maps_weather","maps_geo"]}}}],"tool_choice":"auto","max_output_tokens":2048}}
+        ]
+      }
+    },
+    {
+      "name": "tool_choice none sends tools [] upstream",
+      "client": {"event_id":"c4","type":"session.update","session":{"tool_choice":"none"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_4","type":"session.update","session":{"modalities":["text","audio"],"voice":"Cindy","instructions":"Be brief.","turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"tools":[],"max_tokens":2048,"audio":{"output":{"voice":"Cindy","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack 4 still renders the client's tools with tool_choice none",
+      "upstream": {"event_id":"event_up_13","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_5","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.5-omni-plus-realtime","output_modalities":["audio"],"instructions":"Be brief.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"transcription":{"model":"qwen3-asr-flash-realtime"}},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Cindy"}},"tools":[{"type":"function","name":"get_weather","description":"Weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},{"type":"mcp","server_label":"amap","server_url":"https://mcp.example.com/sse","authorization":"Bearer x","headers":{"X-A":"1"},"allowed_tools":{"tool_names":["maps_weather","maps_geo"],"read_only":true},"require_approval":{"never":{"tool_names":["maps_weather","maps_geo"]}}}],"tool_choice":"none","max_output_tokens":2048}}
+        ]
+      }
+    },
+    {
+      "name": "prompt is rejected with a GA error carrying the client event id",
+      "client": {"event_id":"c5","type":"session.update","session":{"prompt":{"id":"pmpt_1"}}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_6","error":{"type":"invalid_request_error","code":"unsupported_on_upstream","message":"session.prompt is not supported by the upstream model; send instructions instead.","param":"session.prompt","event_id":"c5"}}
+        ]
+      }
+    },
+    {
+      "name": "formats-only update is answered locally without an upstream round trip",
+      "client": {"event_id":"c6","type":"session.update","session":{"type":"realtime","audio":{"input":{"format":{"type":"audio/pcm","rate":24000}},"output":{"format":{"type":"audio/pcm","rate":24000}}}}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_7","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.5-omni-plus-realtime","output_modalities":["audio"],"instructions":"Be brief.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"transcription":{"model":"qwen3-asr-flash-realtime"}},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Cindy"}},"tools":[{"type":"function","name":"get_weather","description":"Weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},{"type":"mcp","server_label":"amap","server_url":"https://mcp.example.com/sse","authorization":"Bearer x","headers":{"X-A":"1"},"allowed_tools":{"tool_names":["maps_weather","maps_geo"],"read_only":true},"require_approval":{"never":{"tool_names":["maps_weather","maps_geo"]}}}],"tool_choice":"none","max_output_tokens":2048}}
+        ]
+      }
+    },
+    {
+      "name": "MCP connector_id is rejected",
+      "client": {"event_id":"c7","type":"session.update","session":{"tools":[{"type":"mcp","server_label":"gm","connector_id":"connector_gmail"}]}},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_8","error":{"type":"invalid_request_error","code":"unsupported_on_upstream","message":"MCP connector_id is not supported by the upstream model; provide server_url.","param":"session.tools[0].connector_id","event_id":"c7"}}
+        ]
+      }
+    },
+    {
+      "name": "a rejected client update is rolled back: error forwarded with the client event id",
+      "client": {"event_id":"c8","type":"session.update","session":{"instructions":"X"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_5","type":"session.update","session":{"modalities":["text","audio"],"voice":"Cindy","instructions":"X","turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"tools":[],"max_tokens":2048,"audio":{"output":{"voice":"Cindy","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "upstream rejection of axh_upd_5",
+      "upstream": {"event_id":"event_up_14","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad instructions","param":"session.instructions","event_id":"axh_upd_5"}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_up_14","type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad instructions","param":"session.instructions","event_id":"c8"}}
+        ]
+      }
+    },
+    {
+      "name": "next update is based on the committed config (instructions still 'Be brief.'), inf drops max_tokens",
+      "client": {"event_id":"c9","type":"session.update","session":{"max_output_tokens":"inf"}},
+      "expect": {
+        "to_upstream": [
+          {"event_id":"axh_upd_6","type":"session.update","session":{"modalities":["text","audio"],"voice":"Cindy","instructions":"Be brief.","turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"input_audio_transcription":{"model":"qwen3-asr-flash-realtime"},"tools":[],"audio":{"output":{"voice":"Cindy","format":{"type":"pcm","sample_rate":24000}},"input":{"format":{"type":"pcm","sample_rate":24000}}}}}
+        ]
+      }
+    },
+    {
+      "name": "ack 6 renders max_output_tokens inf",
+      "upstream": {"event_id":"event_up_15","type":"session.updated","session":{}},
+      "expect": {
+        "to_client": [
+          {"event_id":"event_axh_9","type":"session.updated","session":{"id":"sess_1","object":"realtime.session","type":"realtime","model":"qwen3.5-omni-plus-realtime","output_modalities":["audio"],"instructions":"Be brief.","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":null,"turn_detection":{"type":"server_vad","threshold":0.6,"silence_duration_ms":200,"prefix_padding_ms":200,"create_response":false,"interrupt_response":true,"idle_timeout_ms":8000},"transcription":{"model":"qwen3-asr-flash-realtime"}},"output":{"format":{"type":"audio/pcm","rate":24000},"speed":1,"voice":"Cindy"}},"tools":[{"type":"function","name":"get_weather","description":"Weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},{"type":"mcp","server_label":"amap","server_url":"https://mcp.example.com/sse","authorization":"Bearer x","headers":{"X-A":"1"},"allowed_tools":{"tool_names":["maps_weather","maps_geo"],"read_only":true},"require_approval":{"never":{"tool_names":["maps_weather","maps_geo"]}}}],"tool_choice":"none","max_output_tokens":"inf"}}
+        ]
+      }
+    },
+    {
+      "name": "session.update without a session object is rejected",
+      "client": {"event_id":"c10","type":"session.update"},
+      "expect": {
+        "to_client": [
+          {"type":"error","event_id":"event_axh_10","error":{"type":"invalid_request_error","code":"missing_required_parameter","message":"Missing required parameter: 'session'.","param":"session","event_id":"c10"}}
+        ]
+      }
+    }
+  ]
+}

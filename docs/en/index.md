@@ -46,6 +46,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 | [Embedding API](api-reference/embedding-api.md) | Vector embedding interface documentation |
 | [Rerank API](api-reference/rerank-api.md) | Reranking interface documentation |
 | [System One API](api-reference/systemone-api.md) | Native decision inference interface documentation |
+| [Realtime API](api-reference/realtime.md) | Realtime voice relay (OpenAI GA, Codex voice, Bailian Qwen-Omni) — custom branch |
 
 ### 🛠️ Development
 
