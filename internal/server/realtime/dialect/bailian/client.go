@@ -144,11 +144,6 @@ func (d *Dialect) clientAppend(ev gjson.Result, frame []byte, clientEventID stri
 	if !d.caps.Resample {
 		// Fast path: forward unchanged while the chunk is at most one upstream chunk long;
 		// larger appends are split so the upstream never sees multi-second frames.
-		rawLen := int64(len(audioRaw.Raw))
-		if rawLen >= 2 {
-			rawLen -= 2 // strip the JSON quotes
-		}
-
 		decoded := base64DecodedLenRaw(audioRaw.Raw)
 		if decoded <= 0 {
 			return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", "audio", clientEventID)}}, nil
@@ -163,7 +158,7 @@ func (d *Dialect) clientAppend(ev gjson.Result, frame []byte, clientEventID stri
 
 		pcm, err := base64.StdEncoding.DecodeString(audioRaw.String())
 		if err != nil {
-			return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", "audio", clientEventID)}}, nil
+			return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", "audio", clientEventID)}}, nil //nolint:nilerr // a bad client frame becomes a GA error event, not a relay failure
 		}
 
 		d.appendedBytes += int64(len(pcm))
@@ -174,7 +169,7 @@ func (d *Dialect) clientAppend(ev gjson.Result, frame []byte, clientEventID stri
 
 	pcm, err := base64.StdEncoding.DecodeString(audioRaw.String())
 	if err != nil || len(pcm) == 0 {
-		return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", "audio", clientEventID)}}, nil
+		return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", "audio", clientEventID)}}, nil //nolint:nilerr // a bad client frame becomes a GA error event, not a relay failure
 	}
 
 	d.appendedBytes += int64(len(pcm))
@@ -316,7 +311,7 @@ func (d *Dialect) clientUserMessageItem(item gjson.Result, frame []byte, parts [
 
 			pcm, err := base64.StdEncoding.DecodeString(p.Get("audio").String())
 			if err != nil || len(pcm) == 0 {
-				return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", fmt.Sprintf("item.content[%d].audio", i), clientEventID)}}, nil
+				return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", fmt.Sprintf("item.content[%d].audio", i), clientEventID)}}, nil //nolint:nilerr // a bad client frame becomes a GA error event, not a relay failure
 			}
 
 			d.appendedBytes += int64(len(pcm))
@@ -339,7 +334,7 @@ func (d *Dialect) clientUserMessageItem(item gjson.Result, frame []byte, parts [
 			}
 
 			if res.err != nil {
-				return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", res.err.Error(), fmt.Sprintf("item.content[%d].image_url", i), clientEventID)}}, nil
+				return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", res.err.Error(), fmt.Sprintf("item.content[%d].image_url", i), clientEventID)}}, nil //nolint:nilerr // a bad client frame becomes a GA error event, not a relay failure
 			}
 
 			b, _ := json.Marshal(map[string]any{"type": "input_image_buffer.append", "image": res.b64})

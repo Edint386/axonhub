@@ -76,16 +76,16 @@ func convertImage(dataURI string) (string, error) {
 	payload := dataURI
 
 	if strings.HasPrefix(dataURI, "data:") {
-		comma := strings.IndexByte(dataURI, ',')
-		if comma < 0 {
+		header, rest, found := strings.Cut(dataURI, ",")
+		if !found {
 			return "", fmt.Errorf("bailian: malformed image data URI")
 		}
 
-		if !strings.Contains(dataURI[:comma], ";base64") {
+		if !strings.Contains(header, ";base64") {
 			return "", fmt.Errorf("bailian: image data URI must be base64 encoded")
 		}
 
-		payload = dataURI[comma+1:]
+		payload = rest
 	}
 
 	if base64.StdEncoding.DecodedLen(len(payload)) > maxImageRaw {

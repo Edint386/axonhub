@@ -131,11 +131,11 @@ func websocketHandshakeError(r *http.Request) error {
 		return errors.New("websocket upgrade required")
 	}
 
-	if version := r.Header.Get("Sec-Websocket-Version"); version != "13" {
+	if version := r.Header.Get("Sec-WebSocket-Version"); version != "13" {
 		return fmt.Errorf("unsupported Sec-WebSocket-Version %q; 13 is required", version)
 	}
 
-	key := r.Header.Get("Sec-Websocket-Key")
+	key := r.Header.Get("Sec-WebSocket-Key")
 	if key == "" {
 		return errors.New("missing Sec-WebSocket-Key")
 	}

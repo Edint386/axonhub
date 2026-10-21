@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -199,13 +200,7 @@ func sanitizeDialHeaders(headers http.Header) http.Header {
 }
 
 func isHopByHop(canonical string) bool {
-	for _, h := range hopByHopHeaders {
-		if canonical == h {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(hopByHopHeaders, canonical)
 }
 
 // handshakeError converts a rejected handshake response into *httpclient.Error.

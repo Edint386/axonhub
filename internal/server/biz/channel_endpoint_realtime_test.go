@@ -553,7 +553,7 @@ func TestChannel_RealtimeHeaderOverrides(t *testing.T) {
 
 	ch.RealtimeHeaderOverrides(headers)
 
-	require.Equal(t, "ws-123", headers.Get("X-DashScope-WorkSpace"))
+	require.Equal(t, "ws-123", headers.Get("X-Dashscope-Workspace"))
 	require.Empty(t, headers.Get("X-Templated"), "templated values are skipped outside the pipeline")
 	require.Empty(t, headers.Get("X-Remove"))
 

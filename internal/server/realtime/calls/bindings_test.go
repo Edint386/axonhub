@@ -267,11 +267,7 @@ func TestBinding_MarkResponseSeenConcurrent(t *testing.T) {
 	)
 
 	for range 32 {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for i := range 100 {
 				if b.MarkResponseSeen(fmt.Sprintf("resp_%d", i)) {
 					mu.Lock()
@@ -279,7 +275,7 @@ func TestBinding_MarkResponseSeenConcurrent(t *testing.T) {
 					mu.Unlock()
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

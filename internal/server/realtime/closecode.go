@@ -61,8 +61,7 @@ func truncateReason(reason string) string {
 // closeInfo extracts the close code and reason from a read error. ok is false when the
 // error was not a close frame (network error, read limit, timeout).
 func closeInfo(err error) (code int, reason string, ok bool) {
-	var closeErr *websocket.CloseError
-	if errors.As(err, &closeErr) {
+	if closeErr, ok := errors.AsType[*websocket.CloseError](err); ok {
 		if closeErr.Code == websocket.CloseAbnormalClosure {
 			return closeErr.Code, closeErr.Text, false
 		}

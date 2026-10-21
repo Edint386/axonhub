@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -100,7 +101,7 @@ func newFakeRealtimeUpstream(t *testing.T) *fakeRealtimeUpstream {
 
 			w.Header().Set("Content-Type", "application/sdp")
 			w.Header().Set("Location", location)
-			w.Header().Set("X-Request-Id", "req_fake")
+			w.Header().Set("X-Request-ID", "req_fake")
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte("v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\n"))
 		}
@@ -162,6 +163,7 @@ func (f *fakeRealtimeUpstream) lastCall(t *testing.T) capturedRequest {
 
 type realtimeRouteHarness struct {
 	*codexRouteHarness
+
 	upstream *fakeRealtimeUpstream
 	gateway  *httptest.Server
 	otherKey string
@@ -242,9 +244,7 @@ func (h *realtimeRouteHarness) dial(t *testing.T, path, key string, extra http.H
 		header.Set("Authorization", "Bearer "+key)
 	}
 
-	for k, v := range extra {
-		header[k] = v
-	}
+	maps.Copy(header, extra)
 
 	return websocket.DefaultDialer.Dial(h.wsURL(path), header)
 }
@@ -304,7 +304,7 @@ func TestRealtimeRoutes_SessionRelayAndAccounting(t *testing.T) {
 	upstreamReq := h.upstream.lastSessionRequest(t)
 	require.Equal(t, "Bearer sk-upstream", upstreamReq.Header.Get("Authorization"))
 	require.Equal(t, "gpt-realtime", upstreamReq.URL.Query().Get("model"))
-	require.Empty(t, upstreamReq.Header.Get("Sec-Websocket-Protocol"))
+	require.Empty(t, upstreamReq.Header.Get("Sec-WebSocket-Protocol"))
 
 	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.create"}`)))
 
@@ -369,17 +369,17 @@ func TestRealtimeRoutes_SubprotocolKeyIsLiftedAndEchoed(t *testing.T) {
 	h := newRealtimeRouteHarness(t)
 
 	conn, resp, err := h.dial(t, "/v1/realtime?model=gpt-realtime", "", http.Header{
-		"Sec-Websocket-Protocol": []string{"realtime, openai-insecure-api-key." + h.key.Key},
+		"Sec-WebSocket-Protocol": []string{"realtime, openai-insecure-api-key." + h.key.Key},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "realtime", resp.Header.Get("Sec-Websocket-Protocol"))
+	require.Equal(t, "realtime", resp.Header.Get("Sec-WebSocket-Protocol"))
 
 	defer conn.Close()
 
 	require.Equal(t, "session.created", gjson.Get(readWS(t, conn), "type").String())
 
 	upstreamReq := h.upstream.lastSessionRequest(t)
-	require.NotContains(t, upstreamReq.Header.Get("Sec-Websocket-Protocol"), "openai-insecure-api-key")
+	require.NotContains(t, upstreamReq.Header.Get("Sec-WebSocket-Protocol"), "openai-insecure-api-key")
 	require.Equal(t, "Bearer sk-upstream", upstreamReq.Header.Get("Authorization"))
 }
 
@@ -492,9 +492,9 @@ func TestRealtimeRoutes_CodexLiveCallCreate(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+h.key.Key)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("openai-alpha", "quicksilver=v2")
-	req.Header.Set("x-session-id", "sess-123")
-	req.Header.Set("originator", "Codex Desktop")
+	req.Header.Set("Openai-Alpha", "quicksilver=v2")
+	req.Header.Set("X-Session-Id", "sess-123")
+	req.Header.Set("Originator", "Codex Desktop")
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)

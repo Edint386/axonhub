@@ -122,8 +122,7 @@ func newFakeUpstream(t *testing.T) *fakeUpstream {
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
-				var ce *websocket.CloseError
-				if errors.As(err, &ce) {
+				if ce, ok := errors.AsType[*websocket.CloseError](err); ok {
 					f.closed <- ce
 				} else {
 					f.closed <- &websocket.CloseError{Code: websocket.CloseAbnormalClosure, Text: err.Error()}

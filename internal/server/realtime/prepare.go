@@ -168,14 +168,6 @@ func (r *Relay) prepare(ctx context.Context, req SessionRequest) (*Prepared, *Pr
 	budgetCtx, cancel := context.WithTimeout(ctx, r.Config.ConnectBudget)
 	defer cancel()
 
-	deadline, _ := budgetCtx.Deadline()
-
-	// budgetSpent reports that the connect budget is gone; nothing may be admitted or dialed
-	// once it is, so no RPM unit is burnt on a candidate that can never reach upstream.
-	budgetSpent := func() bool {
-		return budgetCtx.Err() != nil || time.Until(deadline) <= 0
-	}
-
 	selection, err := r.Orchestrator.SelectRealtime(budgetCtx, orchestrator.RealtimeSelectionRequest{
 		Model:   req.Model,
 		Mode:    biz.RealtimeModeWebSocket,
@@ -190,255 +182,322 @@ func (r *Relay) prepare(ctx context.Context, req SessionRequest) (*Prepared, *Pr
 		return nil, &PrepareError{Status: http.StatusNotFound, Err: fmt.Errorf("%w: %s", biz.ErrInvalidModel, req.Model)}
 	}
 
-	var (
-		lastErr    error
-		lastStatus int
-		// tried counts the candidates the loop examined; busy those rejected by their
-		// concurrency or RPM limit. When every tried candidate was busy the answer is 429.
-		tried int
-		busy  int
-	)
+	deadline, _ := budgetCtx.Deadline()
+	attempt := &prepareAttempt{relay: r, ctx: ctx, budgetCtx: budgetCtx, deadline: deadline, req: req, selection: selection}
 
 	for _, candidate := range selection.Candidates {
 		if candidate == nil || candidate.Channel == nil {
 			continue
 		}
 
-		if budgetSpent() {
-			// Keep a busy answer when every candidate so far was busy; otherwise the budget
-			// itself is the reason the session never connected.
-			if lastErr == nil || busy != tried {
-				lastErr, lastStatus = ErrDialTimeout, http.StatusGatewayTimeout
-			}
-
+		// Nothing may be admitted or dialed once the connect budget is gone, so no RPM unit
+		// is burnt on a candidate that can never reach upstream.
+		if attempt.budgetSpent() {
+			attempt.failBudget()
 			break
 		}
 
-		tried++
-
-		ch := candidate.Channel
-		actual := orchestrator.RealtimeActualModel(candidate, selection.RequestedModel)
-
-		target, err := ch.RealtimeTarget(biz.RealtimeModeWebSocket)
-		if err != nil {
-			lastErr, lastStatus = err, http.StatusBadGateway
-			continue
+		prepared, stop := attempt.try(candidate)
+		if prepared != nil {
+			return prepared, nil
 		}
 
-		// The selector already drops these; re-checked so a stale candidate cannot be dialed.
-		if target.Dialect == biz.RealtimeDialectBailian {
-			if req.Intent == "transcription" {
-				lastErr, lastStatus = fmt.Errorf("%w: Bailian channels do not support transcription sessions", ErrUnsupportedModel), http.StatusBadRequest
-				continue
-			}
-
-			if !bailian.Supported(actual) {
-				lastErr, lastStatus = fmt.Errorf("%w: %s is not a Qwen-Omni realtime model", ErrUnsupportedModel, actual), http.StatusBadRequest
-				continue
-			}
-		} else if req.Intent == "quicksilver" && target.Dialect != biz.RealtimeDialectGA {
-			lastErr, lastStatus = fmt.Errorf("%w: intent=quicksilver requires an OpenAI channel", ErrUnsupportedModel), http.StatusBadRequest
-			continue
-		}
-
-		cred, err := ch.RealtimeCredential(ctx)
-		if err != nil {
-			lastErr, lastStatus = err, http.StatusBadGateway
-			continue
-		}
-
-		// Execution rows read the channel key from the request container (like the chat
-		// path's key provider does); record the one this dial uses.
-		if !cred.OAuth {
-			contexts.WithChannelAPIKey(ctx, cred.Bearer)
-		}
-
-		releaseSlot := func() {}
-
-		if mgr := r.Orchestrator.RealtimeLimiter(); mgr != nil {
-			if lim := mgr.GetOrCreate(ch); lim != nil {
-				if err := lim.Acquire(budgetCtx); err != nil {
-					busy++
-					lastErr, lastStatus = err, http.StatusTooManyRequests
-
-					continue
-				}
-
-				releaseSlot = func() { lim.Release() }
-			}
-		}
-
-		if err := r.Orchestrator.RealtimeRPMAdmit(ctx, ch); err != nil {
-			releaseSlot()
-
-			busy++
-			lastErr, lastStatus = err, http.StatusTooManyRequests
-
-			continue
-		}
-
-		wsURL := buildSessionURL(target.WSURL, req, actual)
-		headers := http.Header{}
-		headers.Set("Authorization", "Bearer "+cred.Bearer)
-		headers.Set("User-Agent", userAgent)
-
-		if cred.AccountID != "" {
-			headers.Set("Chatgpt-Account-Id", cred.AccountID)
-		}
-
-		ch.RealtimeHeaderOverrides(headers)
-
-		handshake := r.Config.HandshakeTimeout
-		if remaining := time.Until(deadline); remaining < handshake {
-			handshake = remaining
-		}
-
-		if handshake <= 0 {
-			releaseSlot()
-
-			lastErr, lastStatus = ErrDialTimeout, http.StatusGatewayTimeout
-
+		if stop {
 			break
 		}
+	}
 
-		upstreamKey := UpstreamKeyForHealth(cred.Bearer, cred.OAuth)
+	return nil, attempt.failure()
+}
 
-		// The performance record starts here so its first-frame latency covers the handshake.
-		dialStart := time.Now()
+// prepareAttempt walks the selected candidates for one session request and remembers why
+// each one was skipped, so the final answer (429 busy, 502/504, 422) reflects the whole run.
+type prepareAttempt struct {
+	relay     *Relay
+	ctx       context.Context
+	budgetCtx context.Context
+	deadline  time.Time
+	req       SessionRequest
+	selection *orchestrator.RealtimeSelection
 
-		conn, _, err := DialUpstream(budgetCtx, ch.HTTPClient, wsURL, headers, handshake)
-		if err != nil {
-			releaseSlot()
+	lastErr    error
+	lastStatus int
+	// tried counts the candidates examined; busy those rejected by their concurrency or RPM
+	// limit. When every tried candidate was busy the answer is 429.
+	tried int
+	busy  int
+}
 
-			// status answers the client; upstreamStatus (0 for transport failures) feeds the
-			// health record.
-			status := http.StatusBadGateway
-			upstreamStatus := 0
+func (a *prepareAttempt) budgetSpent() bool {
+	return a.budgetCtx.Err() != nil || time.Until(a.deadline) <= 0
+}
 
-			var herr *httpclient.Error
-			if errors.As(err, &herr) {
-				status, upstreamStatus = herr.StatusCode, herr.StatusCode
-			} else if errors.Is(err, ErrDialTimeout) {
-				status = http.StatusGatewayTimeout
-			}
+func (a *prepareAttempt) fail(err error, status int) {
+	a.lastErr, a.lastStatus = err, status
+}
 
-			if target.RecordHealth {
-				pctx, pcancel := xcontext.DetachWithTimeout(ctx, persistTimeout)
-				RecordDialFailure(pctx, r.Services.Channel, ch, upstreamKey, upstreamStatus, err, true)
-				pcancel()
-			}
+func (a *prepareAttempt) failBusy(err error) {
+	a.busy++
+	a.fail(err, http.StatusTooManyRequests)
+}
 
-			log.Warn(ctx, "realtime: upstream dial failed",
-				log.Int("channel_id", ch.ID),
-				log.String("channel", ch.Name),
-				log.String("url", redactQuery(wsURL)),
-				log.Int("status", status),
-				log.Cause(err),
-			)
+// failBudget records that the connect budget ran out. A busy answer is kept when every
+// candidate so far was busy; otherwise the budget itself is why the session never connected.
+func (a *prepareAttempt) failBudget() {
+	if a.lastErr == nil || a.busy != a.tried {
+		a.fail(ErrDialTimeout, http.StatusGatewayTimeout)
+	}
+}
 
-			lastErr, lastStatus = UpstreamFailure(err, status), status
+// try dials one candidate. It returns the prepared session, or stop=true when no further
+// candidate should be tried (the budget is gone).
+func (a *prepareAttempt) try(candidate *orchestrator.ChannelModelsCandidate) (*Prepared, bool) {
+	a.tried++
 
-			continue
+	ch := candidate.Channel
+	actual := orchestrator.RealtimeActualModel(candidate, a.selection.RequestedModel)
+
+	target, err := ch.RealtimeTarget(biz.RealtimeModeWebSocket)
+	if err != nil {
+		a.fail(err, http.StatusBadGateway)
+		return nil, false
+	}
+
+	if err := a.checkTarget(target, actual); err != nil {
+		a.fail(err, http.StatusBadRequest)
+		return nil, false
+	}
+
+	cred, err := ch.RealtimeCredential(a.ctx)
+	if err != nil {
+		a.fail(err, http.StatusBadGateway)
+		return nil, false
+	}
+
+	// Execution rows read the channel key from the request container (like the chat path's
+	// key provider does); record the one this dial uses.
+	if !cred.OAuth {
+		contexts.WithChannelAPIKey(a.ctx, cred.Bearer)
+	}
+
+	releaseSlot, ok := a.admit(ch)
+	if !ok {
+		return nil, false
+	}
+
+	handshake := min(a.relay.Config.HandshakeTimeout, time.Until(a.deadline))
+	if handshake <= 0 {
+		releaseSlot()
+		a.fail(ErrDialTimeout, http.StatusGatewayTimeout)
+
+		return nil, true
+	}
+
+	wsURL := buildSessionURL(target.WSURL, a.req, actual)
+	upstreamKey := UpstreamKeyForHealth(cred.Bearer, cred.OAuth)
+
+	// The performance record starts here so its first-frame latency covers the handshake.
+	dialStart := time.Now()
+
+	conn, _, err := DialUpstream(a.budgetCtx, ch.HTTPClient, wsURL, a.dialHeaders(ch, cred), handshake)
+	if err != nil {
+		releaseSlot()
+		a.dialFailed(ch, target, wsURL, upstreamKey, err)
+
+		return nil, false
+	}
+
+	ids := &dialect.EventIDs{}
+
+	d, err := a.relay.newDialect(target, a.selection.RequestedModel, actual, ids, a.req)
+	if err != nil {
+		releaseSlot()
+		_ = conn.Close()
+		a.fail(err, http.StatusBadRequest)
+
+		return nil, false
+	}
+
+	accounting := NewAccounting(AccountingParams{
+		RequestService:  a.relay.Services.Request,
+		UsageLogService: a.relay.Services.Usage,
+		QuotaService:    a.relay.Services.Quota,
+		ChannelService:  a.relay.Services.Channel,
+		AuthService:     a.relay.Services.Auth,
+		Channel:         ch,
+		APIKey:          a.req.APIKey,
+		ProjectID:       a.req.ProjectID,
+		RequestedModel:  a.selection.RequestedModel,
+		ActualModel:     actual,
+		Format:          llm.APIFormatOpenAIRealtime,
+		UpstreamKey:     upstreamKey,
+		UpstreamURL:     redactQuery(wsURL),
+		Method:          http.MethodGet,
+		Path:            a.req.Path,
+		Query:           StoredQuery(a.req.Query),
+		Headers:         StoredHeaders(a.req.Headers),
+		ClientIP:        a.req.ClientIP,
+		UserAgent:       a.req.UserAgent,
+		StartedAt:       dialStart,
+		Kind:            "session",
+		SessionID:       a.req.SessionID,
+		Dialect:         d.Name(),
+		Stream:          true,
+	})
+
+	session := NewSession(a.ctx, SessionParams{
+		Config:   a.relay.Config,
+		Dialect:  d,
+		Upstream: conn,
+		Hooks:    accounting,
+		IDs:      ids,
+		Name:     a.req.SessionID,
+	})
+
+	log.Info(a.ctx, "realtime: upstream connected",
+		log.String("session", a.req.SessionID),
+		log.Int("channel_id", ch.ID),
+		log.String("channel", ch.Name),
+		log.String("model", a.selection.RequestedModel),
+		log.String("actual_model", actual),
+		log.String("dialect", d.Name()),
+	)
+
+	return &Prepared{
+		Session:   session,
+		Channel:   ch,
+		Target:    target,
+		Actual:    actual,
+		Requested: a.selection.RequestedModel,
+		release:   releaseSlot,
+	}, false
+}
+
+// checkTarget re-checks what the selector already drops, so a stale candidate cannot be
+// dialed with an intent or model its dialect cannot serve.
+func (a *prepareAttempt) checkTarget(target biz.RealtimeTarget, actual string) error {
+	if target.Dialect == biz.RealtimeDialectBailian {
+		if a.req.Intent == "transcription" {
+			return fmt.Errorf("%w: Bailian channels do not support transcription sessions", ErrUnsupportedModel)
 		}
 
-		ids := &dialect.EventIDs{}
-
-		d, err := r.newDialect(target, selection.RequestedModel, actual, ids, req)
-		if err != nil {
-			releaseSlot()
-			_ = conn.Close()
-
-			lastErr, lastStatus = err, http.StatusBadRequest
-
-			continue
+		if !bailian.Supported(actual) {
+			return fmt.Errorf("%w: %s is not a Qwen-Omni realtime model", ErrUnsupportedModel, actual)
 		}
 
-		accounting := NewAccounting(AccountingParams{
-			RequestService:  r.Services.Request,
-			UsageLogService: r.Services.Usage,
-			QuotaService:    r.Services.Quota,
-			ChannelService:  r.Services.Channel,
-			AuthService:     r.Services.Auth,
-			Channel:         ch,
-			APIKey:          req.APIKey,
-			ProjectID:       req.ProjectID,
-			RequestedModel:  selection.RequestedModel,
-			ActualModel:     actual,
-			Format:          llm.APIFormatOpenAIRealtime,
-			UpstreamKey:     upstreamKey,
-			UpstreamURL:     redactQuery(wsURL),
-			Method:          http.MethodGet,
-			Path:            req.Path,
-			Query:           StoredQuery(req.Query),
-			Headers:         StoredHeaders(req.Headers),
-			ClientIP:        req.ClientIP,
-			UserAgent:       req.UserAgent,
-			StartedAt:       dialStart,
-			Kind:            "session",
-			SessionID:       req.SessionID,
-			Dialect:         d.Name(),
-			Stream:          true,
-		})
-
-		session := NewSession(ctx, SessionParams{
-			Config:   r.Config,
-			Dialect:  d,
-			Upstream: conn,
-			Hooks:    accounting,
-			IDs:      ids,
-			Name:     req.SessionID,
-		})
-
-		log.Info(ctx, "realtime: upstream connected",
-			log.String("session", req.SessionID),
-			log.Int("channel_id", ch.ID),
-			log.String("channel", ch.Name),
-			log.String("model", selection.RequestedModel),
-			log.String("actual_model", actual),
-			log.String("dialect", d.Name()),
-		)
-
-		return &Prepared{
-			Session:   session,
-			Channel:   ch,
-			Target:    target,
-			Actual:    actual,
-			Requested: selection.RequestedModel,
-			release:   releaseSlot,
-		}, nil
+		return nil
 	}
 
-	if lastErr == nil {
-		return nil, &PrepareError{Status: http.StatusNotFound, Err: fmt.Errorf("%w: %s", biz.ErrInvalidModel, req.Model)}
+	if a.req.Intent == "quicksilver" && target.Dialect != biz.RealtimeDialectGA {
+		return fmt.Errorf("%w: intent=quicksilver requires an OpenAI channel", ErrUnsupportedModel)
 	}
 
-	if tried > 0 && busy == tried {
-		lastErr = fmt.Errorf("%w: %w", ErrChannelBusy, lastErr)
-		lastStatus = http.StatusTooManyRequests
+	return nil
+}
+
+// admit takes the channel's concurrency slot and an RPM unit, in the chat pipeline's order
+// (a queued-out candidate never spends RPM). ok is false when the candidate is busy.
+func (a *prepareAttempt) admit(ch *biz.Channel) (release func(), ok bool) {
+	release = func() {}
+
+	if mgr := a.relay.Orchestrator.RealtimeLimiter(); mgr != nil {
+		if lim := mgr.GetOrCreate(ch); lim != nil {
+			if err := lim.Acquire(a.budgetCtx); err != nil {
+				a.failBusy(err)
+				return nil, false
+			}
+
+			release = func() { lim.Release() }
+		}
 	}
 
-	// Leave a failed row behind so admins can see why the session never started. The client
-	// may already have hung up during the connect budget, so persist on a detached context.
-	pctx, pcancel := xcontext.DetachWithTimeout(ctx, persistTimeout)
+	if err := a.relay.Orchestrator.RealtimeRPMAdmit(a.ctx, ch); err != nil {
+		release()
+		a.failBusy(err)
+
+		return nil, false
+	}
+
+	return release, true
+}
+
+func (a *prepareAttempt) dialHeaders(ch *biz.Channel, cred biz.RealtimeCredential) http.Header {
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer "+cred.Bearer)
+	headers.Set("User-Agent", userAgent)
+
+	if cred.AccountID != "" {
+		headers.Set("Chatgpt-Account-Id", cred.AccountID)
+	}
+
+	ch.RealtimeHeaderOverrides(headers)
+
+	return headers
+}
+
+// dialFailed records a failed upstream handshake: status answers the client, upstreamStatus
+// (0 for transport failures) feeds the health record.
+func (a *prepareAttempt) dialFailed(ch *biz.Channel, target biz.RealtimeTarget, wsURL, upstreamKey string, err error) {
+	status := http.StatusBadGateway
+	upstreamStatus := 0
+
+	if herr, ok := errors.AsType[*httpclient.Error](err); ok {
+		status, upstreamStatus = herr.StatusCode, herr.StatusCode
+	} else if errors.Is(err, ErrDialTimeout) {
+		status = http.StatusGatewayTimeout
+	}
+
+	if target.RecordHealth {
+		pctx, pcancel := xcontext.DetachWithTimeout(a.ctx, persistTimeout)
+		RecordDialFailure(pctx, a.relay.Services.Channel, ch, upstreamKey, upstreamStatus, err, true)
+		pcancel()
+	}
+
+	log.Warn(a.ctx, "realtime: upstream dial failed",
+		log.Int("channel_id", ch.ID),
+		log.String("channel", ch.Name),
+		log.String("url", redactQuery(wsURL)),
+		log.Int("status", status),
+		log.Cause(err),
+	)
+
+	a.fail(UpstreamFailure(err, status), status)
+}
+
+// failure builds the answer once every candidate was tried, leaving a failed row behind so
+// admins can see why the session never started.
+func (a *prepareAttempt) failure() *PrepareError {
+	if a.lastErr == nil {
+		return &PrepareError{Status: http.StatusNotFound, Err: fmt.Errorf("%w: %s", biz.ErrInvalidModel, a.req.Model)}
+	}
+
+	if a.tried > 0 && a.busy == a.tried {
+		a.lastErr = fmt.Errorf("%w: %w", ErrChannelBusy, a.lastErr)
+		a.lastStatus = http.StatusTooManyRequests
+	}
+
+	// The client may already have hung up during the connect budget, so persist on a
+	// detached context.
+	pctx, pcancel := xcontext.DetachWithTimeout(a.ctx, persistTimeout)
 	defer pcancel()
 
 	NewAccounting(AccountingParams{
-		RequestService: r.Services.Request,
-		APIKey:         req.APIKey,
-		ProjectID:      req.ProjectID,
-		RequestedModel: selection.RequestedModel,
-		ActualModel:    selection.RequestedModel,
+		RequestService: a.relay.Services.Request,
+		APIKey:         a.req.APIKey,
+		ProjectID:      a.req.ProjectID,
+		RequestedModel: a.selection.RequestedModel,
+		ActualModel:    a.selection.RequestedModel,
 		Method:         http.MethodGet,
-		Path:           req.Path,
-		Query:          StoredQuery(req.Query),
-		Headers:        StoredHeaders(req.Headers),
-		ClientIP:       req.ClientIP,
-		UserAgent:      req.UserAgent,
+		Path:           a.req.Path,
+		Query:          StoredQuery(a.req.Query),
+		Headers:        StoredHeaders(a.req.Headers),
+		ClientIP:       a.req.ClientIP,
+		UserAgent:      a.req.UserAgent,
 		Kind:           "session",
-		SessionID:      req.SessionID,
-	}).RecordHandshakeFailure(pctx, lastErr)
+		SessionID:      a.req.SessionID,
+	}).RecordHandshakeFailure(pctx, a.lastErr)
 
-	return nil, &PrepareError{Status: lastStatus, Err: lastErr}
+	return &PrepareError{Status: a.lastStatus, Err: a.lastErr}
 }
 
 // persistTimeout bounds the detached contexts prepare-time persistence runs on.
@@ -499,11 +558,10 @@ func UpstreamFailure(err error, status int) error {
 		return err
 	}
 
-	var herr *httpclient.Error
-	if errors.As(err, &herr) {
+	if herr, ok := errors.AsType[*httpclient.Error](err); ok {
 		return pipeline.WrapUpstreamError(&llm.ResponseError{
 			StatusCode: herr.StatusCode,
-			Cause:      &upstreamAnswer{answer: herr},
+			Cause:      &upstreamAnswerError{answer: herr},
 			Detail:     upstreamErrorDetail(herr),
 		})
 	}
@@ -522,27 +580,25 @@ func UpstreamFailure(err error, status int) error {
 	})
 }
 
-// upstreamAnswer carries the upstream's rejected-handshake answer behind the ResponseError
+// upstreamAnswerError carries the upstream's rejected-handshake answer behind the ResponseError
 // that UpstreamFailure builds. It deliberately has no Unwrap: were the *httpclient.Error
 // reachable through the error chain, the inbound error transformer would render its raw body
 // even after the upstream error policy masked the message.
-type upstreamAnswer struct {
+type upstreamAnswerError struct {
 	answer *httpclient.Error
 }
 
-func (a *upstreamAnswer) Error() string { return a.answer.Error() }
+func (a *upstreamAnswerError) Error() string { return a.answer.Error() }
 
 // UpstreamAnswer returns the upstream HTTP answer behind an error (one marked by
 // UpstreamFailure or a raw *httpclient.Error), for the response headers the api layer
 // forwards to the client.
 func UpstreamAnswer(err error) (*httpclient.Error, bool) {
-	var held *upstreamAnswer
-	if errors.As(err, &held) {
+	if held, ok := errors.AsType[*upstreamAnswerError](err); ok {
 		return held.answer, true
 	}
 
-	var herr *httpclient.Error
-	if errors.As(err, &herr) {
+	if herr, ok := errors.AsType[*httpclient.Error](err); ok {
 		return herr, true
 	}
 

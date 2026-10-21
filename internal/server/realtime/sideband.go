@@ -34,6 +34,7 @@ type SidebandRequest struct {
 // dedupHooks drops response usage the call already recorded (monitor + sideband).
 type dedupHooks struct {
 	Hooks
+
 	binding *calls.Binding
 }
 
@@ -83,8 +84,7 @@ func (r *Relay) PrepareSideband(ctx context.Context, req SidebandRequest) (*Prep
 
 		status := http.StatusBadGateway
 
-		var herr *httpclient.Error
-		if errors.As(err, &herr) {
+		if herr, ok := errors.AsType[*httpclient.Error](err); ok {
 			status = herr.StatusCode
 		} else if errors.Is(err, ErrDialTimeout) {
 			status = http.StatusGatewayTimeout

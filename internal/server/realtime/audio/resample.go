@@ -188,10 +188,7 @@ func (r *Resampler) Process(pcm []byte) []byte {
 
 	keepFrom := nextBase - int64(r.histLen)
 	if keepFrom > r.bufStart {
-		drop := keepFrom - r.bufStart
-		if drop > int64(len(r.buf)) {
-			drop = int64(len(r.buf))
-		}
+		drop := min(keepFrom-r.bufStart, int64(len(r.buf)))
 
 		r.buf = append(r.buf[:0], r.buf[drop:]...)
 		r.bufStart += drop

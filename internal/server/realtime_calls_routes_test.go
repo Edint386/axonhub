@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -192,6 +193,7 @@ func (f *fakeCallsUpstream) wait(t *testing.T, list *[]*http.Request, n int) []*
 
 type callsRouteHarness struct {
 	*codexRouteHarness
+
 	upstream *fakeCallsUpstream
 	gateway  *httptest.Server
 }
@@ -259,9 +261,7 @@ func (h *callsRouteHarness) createCall(t *testing.T, extra http.Header) (int, ht
 	req.Header.Set("Authorization", "Bearer "+h.key.Key)
 	req.Header.Set("Content-Type", "application/sdp")
 
-	for k, v := range extra {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, extra)
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)

@@ -241,12 +241,12 @@ func (a *Accounting) OnUsage(ctx context.Context, rec dialect.UsageRecord) {
 	}
 
 	if exec != nil {
-		if err := a.p.RequestService.UpdateRequestExecutionFinalized(ctx, exec.ID, requestexecution.StatusCompleted, "", externalID, json.RawMessage(summary), nil, model); err != nil {
+		if err := a.p.RequestService.UpdateRequestExecutionFinalized(ctx, exec.ID, requestexecution.StatusCompleted, "", externalID, summary, nil, model); err != nil {
 			log.Debug(ctx, "realtime: failed to finalize usage execution", log.Cause(err))
 		}
 	}
 
-	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req.ID, request.StatusCompleted, externalID, json.RawMessage(summary), nil); err != nil {
+	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req.ID, request.StatusCompleted, externalID, summary, nil); err != nil {
 		log.Debug(ctx, "realtime: failed to finalize usage request", log.Cause(err))
 	}
 

@@ -99,13 +99,11 @@ var (
 // error is not a request error. An http.MaxBytesError from the caller's own body limit maps
 // to 413.
 func StatusCode(err error) int {
-	var re *RequestError
-	if errors.As(err, &re) {
+	if re, ok := errors.AsType[*RequestError](err); ok {
 		return re.Status
 	}
 
-	var mbe *http.MaxBytesError
-	if errors.As(err, &mbe) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		return http.StatusRequestEntityTooLarge
 	}
 
@@ -389,8 +387,7 @@ func readLimited(rd io.Reader, maxBytes int64) ([]byte, error) {
 
 // wrapReadError maps body read failures to request errors.
 func wrapReadError(err error) error {
-	var mbe *http.MaxBytesError
-	if errors.As(err, &mbe) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		return fmt.Errorf("%w: %w", ErrBodyTooLarge, err)
 	}
 

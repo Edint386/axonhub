@@ -406,8 +406,8 @@ func pngDataURI(t *testing.T, w, h int) string {
 	t.Helper()
 
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: uint8(x ^ y), A: 255})
 		}
 	}
@@ -600,7 +600,7 @@ func TestTranscriptTracker(t *testing.T) {
 func TestItemCache(t *testing.T) {
 	c := newItemCache()
 
-	for i := 0; i < maxCachedItems+5; i++ {
+	for i := range maxCachedItems + 5 {
 		c.put("item_"+strconv.Itoa(i), json.RawMessage(`{"id":"x"}`))
 	}
 
@@ -733,7 +733,7 @@ func TestConcurrentFrames(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		for i := 0; i < rounds; i++ {
+		for i := range rounds {
 			_, err := d.ClientFrame(appendFrame)
 			require.NoError(t, err)
 
@@ -750,7 +750,7 @@ func TestConcurrentFrames(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		for i := 0; i < rounds; i++ {
+		for i := range rounds {
 			_, err := d.UpstreamFrame([]byte(`{"event_id":"e","type":"response.audio.delta","response_id":"r","item_id":"item_a","output_index":0,"content_index":0,"delta":"AAAA"}`))
 			require.NoError(t, err)
 
@@ -764,7 +764,7 @@ func TestConcurrentFrames(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		for i := 0; i < rounds; i++ {
+		for i := range rounds {
 			id := "item_" + strconv.Itoa(i)
 
 			_, err := d.UpstreamFrame([]byte(`{"type":"conversation.item.created","item":{"id":"` + id + `","type":"message","status":"in_progress","role":"user","content":[{"type":"input_audio"}]}}`))

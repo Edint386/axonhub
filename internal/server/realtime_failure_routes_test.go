@@ -394,11 +394,11 @@ func TestRealtimeFailureRoutes_MalformedHandshakeNeverDialsUpstream(t *testing.T
 			req.Header.Set("Upgrade", "websocket")
 
 			if tt.version != "" {
-				req.Header.Set("Sec-Websocket-Version", tt.version)
+				req.Header.Set("Sec-WebSocket-Version", tt.version)
 			}
 
 			if tt.key != "" {
-				req.Header.Set("Sec-Websocket-Key", tt.key)
+				req.Header.Set("Sec-WebSocket-Key", tt.key)
 			}
 
 			resp, err := http.DefaultClient.Do(req)
@@ -436,7 +436,7 @@ func TestRealtimeFailureRoutes_UpstreamErrorPolicy(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
 		require.Equal(t, "7", resp.Header.Get("Retry-After"))
-		require.Equal(t, "req_upstream_1", resp.Header.Get("X-Request-Id"))
+		require.Equal(t, "req_upstream_1", resp.Header.Get("X-Request-ID"))
 
 		body := readErrorBody(t, resp)
 		require.Equal(t, "rate_limit_exceeded", gjson.Get(body, "error.code").String())

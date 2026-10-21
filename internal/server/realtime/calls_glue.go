@@ -150,8 +150,7 @@ func (r *Relay) CreateCall(ctx context.Context, p CallParams) (*CallResult, *Pre
 				// not the client-facing 502/504, so auto-disable rules match what upstream said.
 				healthStatus := 0
 
-				var herr *httpclient.Error
-				if errors.As(err, &herr) {
+				if herr, ok := errors.AsType[*httpclient.Error](err); ok {
 					healthStatus = herr.StatusCode
 				}
 
@@ -273,8 +272,7 @@ func (r *Relay) encodeOptions(ctx context.Context, ch *biz.Channel, actual strin
 // forwardStatus maps a forward() error to the status answered to the client: the upstream
 // status for rejected requests, 504 for deadlines and network timeouts, 502 otherwise.
 func forwardStatus(err error) int {
-	var herr *httpclient.Error
-	if errors.As(err, &herr) {
+	if herr, ok := errors.AsType[*httpclient.Error](err); ok {
 		return herr.StatusCode
 	}
 

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -171,11 +172,8 @@ func (p *probeConn) recvUntil(timeout time.Duration, each func(frame string), wa
 				each(frame)
 			}
 
-			typ := gjson.Get(frame, "type").String()
-			for _, w := range want {
-				if typ == w {
-					return frame, consumed
-				}
+			if slices.Contains(want, gjson.Get(frame, "type").String()) {
+				return frame, consumed
 			}
 		case <-p.done:
 			// Drain what the reader left before giving up.
@@ -187,11 +185,8 @@ func (p *probeConn) recvUntil(timeout time.Duration, each func(frame string), wa
 					each(frame)
 				}
 
-				typ := gjson.Get(frame, "type").String()
-				for _, w := range want {
-					if typ == w {
-						return frame, consumed
-					}
+				if slices.Contains(want, gjson.Get(frame, "type").String()) {
+					return frame, consumed
 				}
 			default:
 				return "", consumed

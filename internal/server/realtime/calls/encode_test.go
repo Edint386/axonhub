@@ -3,6 +3,7 @@ package calls
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -38,7 +39,7 @@ func decodeMultipart(t *testing.T, contentType string, body []byte) map[string][
 
 	for {
 		part, err := mr.NextPart()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 
@@ -70,7 +71,7 @@ func codexHeaders() http.Header {
 	h.Set("Authorization", "Bearer client-key")
 	h.Set("Openai-Beta", "realtime=v1")
 	h.Set("Cookie", "secret=1")
-	h.Set("Sec-Websocket-Key", "abc")
+	h.Set("Sec-WebSocket-Key", "abc")
 
 	return h
 }
@@ -168,7 +169,7 @@ func TestEncodeUpstream_Matrix(t *testing.T) {
 			require.Equal(t, "Bearer tok", up.Header.Get("Authorization"))
 			require.Empty(t, up.Header.Get("Openai-Beta"))
 			require.Empty(t, up.Header.Get("Cookie"))
-			require.Empty(t, up.Header.Get("Sec-Websocket-Key"))
+			require.Empty(t, up.Header.Get("Sec-WebSocket-Key"))
 			require.Empty(t, up.Header.Get("Chatgpt-Account-Id"))
 
 			if tt.wantJSON {
@@ -313,7 +314,7 @@ func TestEncodeUpstream_Headers(t *testing.T) {
 		require.Equal(t, "codex_cli_rs/0.1", up.Header.Get("User-Agent"))
 		require.Empty(t, up.Header.Get("Openai-Beta"))
 		require.Empty(t, up.Header.Get("Cookie"))
-		require.Empty(t, up.Header.Get("Sec-Websocket-Key"))
+		require.Empty(t, up.Header.Get("Sec-WebSocket-Key"))
 	})
 
 	t.Run("attestation dropped when flag off", func(t *testing.T) {
@@ -490,7 +491,7 @@ func TestForwardedResponseHeaders(t *testing.T) {
 	upstream.Set("Content-Type", "application/sdp")
 	upstream.Set("Location", "/v1/realtime/calls/rtc_1")
 	upstream.Set("Retry-After", "3")
-	upstream.Set("X-Request-Id", "req-1")
+	upstream.Set("X-Request-ID", "req-1")
 	upstream.Set("Openai-Request-Id", "oai-1")
 	upstream.Set("Set-Cookie", "a=b")
 	upstream.Set("Cf-Ray", "ray")
@@ -500,7 +501,7 @@ func TestForwardedResponseHeaders(t *testing.T) {
 	require.Equal(t, "application/sdp", got.Get("Content-Type"))
 	require.Equal(t, "/v1/realtime/calls/rtc_1", got.Get("Location"))
 	require.Equal(t, "3", got.Get("Retry-After"))
-	require.Equal(t, "req-1", got.Get("X-Request-Id"))
+	require.Equal(t, "req-1", got.Get("X-Request-ID"))
 	require.Equal(t, "oai-1", got.Get("Openai-Request-Id"))
 	require.Equal(t, "Location", got.Get("Access-Control-Expose-Headers"))
 	require.Empty(t, got.Get("Set-Cookie"))
@@ -586,7 +587,7 @@ func TestSidebandHeaders(t *testing.T) {
 		require.Equal(t, "user-hash-1", h.Get("Openai-Safety-Identifier"))
 		require.Equal(t, "codex_cli_rs/0.1", h.Get("User-Agent"))
 		require.Empty(t, h.Get("X-Oai-Attestation"))
-		require.Empty(t, h.Get("Sec-Websocket-Key"))
+		require.Empty(t, h.Get("Sec-WebSocket-Key"))
 		require.Empty(t, h.Get("Cookie"))
 		require.Empty(t, h.Get("Openai-Beta"))
 	})
