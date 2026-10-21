@@ -62,6 +62,7 @@
 |---|---|---|
 | `llm/pipeline/pipeline.go`、`stream.go`；`internal/server/orchestrator/orchestrator.go`（`state.AliasFailoverEnabled`）、`state.go`、`rate_limit_tracking.go` | 多目标别名的"同渠道免费切换"挂接点（标有 `// fork:`） | `cd llm && go test ./pipeline/ -run Alias`；`go test ./internal/server/orchestrator/ -run 'Alias\|RateLimitTracking'` |
 | `internal/server/orchestrator/orchestrator.go` PersistenceState | `QuotaService: processor.QuotaService`（渠道额度） | `TestChatCompletionOrchestrator_Process_SkipsChannelOverQuota` |
+| `internal/server/biz/channel_settings.go` `UpdateChannelSettingsInput` / `Apply`；`internal/server/gql/axonhub.graphql` `input UpdateChannelSettingsInput` | 上游的"只改部分设置"接口（#2699）带上 custom 的 `quota`、`quotaTimezone`、`healthProbe`（标有 `// custom:`）。少了它们，带这些设置的 patch 会被 GraphQL 当成未知字段拒绝，或把这些设置丢掉。目前 UI 的弹窗都带渠道字段、仍走完整的 `updateChannel`，这个接口主要给直接调 GraphQL 的调用方，以及上游以后改成走它的弹窗 | `TestUpdateChannelSettingsInput_Apply_CustomFields`、`TestChannelService_UpdateChannelSettings_KeepsCustomFields`、`TestUpdateChannelSettingsInputSchemaHasCustomFields` |
 | `internal/server/orchestrator/pass_through.go` `responsesTransportAdaptationEnabled` | `PassThroughBodyBlocked` 时返回 false | `TestResponsesTransportAdaptationHonoursPassThroughBodyBlocked` |
 | `internal/server/biz/channel_llm.go` `buildChannel` | `ch.setModelPriceMultiplier(c.ModelPriceMultiplier)`（渠道价格倍率，倍率 0 = 免费） | `TestUsageCost_ZeroChannelMultiplierSurvivesChannelBuild` |
 | `internal/server/biz/usage_log.go` 模型库价格兜底 | 兜底计费也乘渠道倍率 | `TestUsageCost_ModelLibraryFallbackAppliesChannelMultiplier` |
