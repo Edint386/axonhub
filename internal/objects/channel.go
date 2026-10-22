@@ -252,6 +252,11 @@ type ChannelSettings struct {
 	// case-sensitive substring of the error text.
 	RetryableErrorPatterns []RetryableErrorPattern `json:"retryableErrorPatterns,omitempty"`
 
+	// MaxSingleChannelRetries overrides the global "max single channel retries"
+	// for this channel. When nil, the channel inherits the global retry policy.
+	// Pointer so GQL emits null instead of 0 for channels that never set it.
+	MaxSingleChannelRetries *int `json:"maxSingleChannelRetries,omitempty"`
+
 	// ProviderQuota holds provider-specific quota collection credentials and
 	// options. Fields are sensitive (e.g. auth cookies) and only exposed to
 	// operators holding channel write permission.
@@ -264,7 +269,6 @@ type ChannelSettings struct {
 
 	// ModelProtocols restricts outbound API formats for selected models.
 	ModelProtocols []ModelProtocol `json:"modelProtocols,omitempty"`
-
 }
 
 // ChannelHealthProbeSettings holds the per-channel part of the active-probe

@@ -132,6 +132,7 @@ export function mergeChannelSettingsForUpdate(
     quotaTimezone: pick('quotaTimezone', existing?.quotaTimezone),
     retryableStatusCodes: pick('retryableStatusCodes', existing?.retryableStatusCodes ?? []),
     retryableErrorPatterns: pick('retryableErrorPatterns', existing?.retryableErrorPatterns ?? []),
+    maxSingleChannelRetries: pick('maxSingleChannelRetries', existing?.maxSingleChannelRetries ?? null),
     modelProtocols: pick('modelProtocols', existing?.modelProtocols ?? []),
     providerQuota: pick('providerQuota', existing?.providerQuota ?? null),
     healthProbe: pick('healthProbe', existing?.healthProbe ?? null),

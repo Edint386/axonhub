@@ -233,6 +233,7 @@ type ChannelSettings {
   quotaTimezone: String
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
+  maxSingleChannelRetries: Int
   modelProtocols: [ModelProtocol!]
   providerQuota: ChannelProviderQuotaSettings @goField(forceResolver: true)
   healthProbe: ChannelHealthProbeSettings
@@ -320,6 +321,7 @@ input ChannelSettingsInput {
   quotaTimezone: String
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
+  maxSingleChannelRetries: Int
   modelProtocols: [ModelProtocolInput!]
   providerQuota: ChannelProviderQuotaSettingsInput
   healthProbe: ChannelHealthProbeSettingsInput
