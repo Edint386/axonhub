@@ -172,6 +172,8 @@ const CREATE_CHANNEL_MUTATION = `
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
+        apiKeyStrategy
+        apiKeyRoundRobinSwitchAfter
         retryableErrorPatterns {
           pattern
           regex
@@ -269,6 +271,8 @@ const DUPLICATE_CHANNEL_MUTATION = `
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
+        apiKeyStrategy
+        apiKeyRoundRobinSwitchAfter
         retryableErrorPatterns {
           pattern
           regex
@@ -366,6 +370,8 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
+        apiKeyStrategy
+        apiKeyRoundRobinSwitchAfter
         retryableErrorPatterns {
           pattern
           regex
@@ -462,6 +468,8 @@ const CHANNEL_FIELDS_FRAGMENT = `
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
         retryableStatusCodes
+        apiKeyStrategy
+        apiKeyRoundRobinSwitchAfter
         retryableErrorPatterns {
           pattern
           regex
@@ -713,6 +721,8 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
           retryableStatusCodes
+          apiKeyStrategy
+          apiKeyRoundRobinSwitchAfter
           retryableErrorPatterns {
             pattern
             regex
@@ -958,6 +968,8 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
           retryableStatusCodes
+          apiKeyStrategy
+          apiKeyRoundRobinSwitchAfter
           retryableErrorPatterns {
             pattern
             regex
@@ -1223,6 +1235,8 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
             ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
             retryableStatusCodes
+            apiKeyStrategy
+            apiKeyRoundRobinSwitchAfter
             retryableErrorPatterns {
               pattern
               regex

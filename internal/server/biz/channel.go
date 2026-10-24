@@ -120,6 +120,11 @@ type Channel struct {
 	// apiKeyOverride, if non-empty, forces all outbound transformers to use this key
 	// instead of the channel's normal key selection. Used by the channel key test flow.
 	apiKeyOverride string
+
+	// apiKeyState holds the selection state shared with ChannelService for the
+	// strategies that remember which key is in use (fixed, round_robin_success).
+	// Nil for every other strategy.
+	apiKeyState *apiKeySelectionState
 }
 
 type ChannelServiceParams struct {
@@ -222,6 +227,12 @@ type ChannelService struct {
 	apiKeyRuleActionsInFlight map[int]map[string]bool
 	apiKeyErrorCountsLock     sync.Mutex
 	apiKeyOpsLock             sync.Mutex
+
+	// apiKeyStates holds the per-channel key-selection state of the strategies
+	// that must remember their selection across channel snapshots (fixed,
+	// round_robin_success). Guarded by apiKeyStatesLock.
+	apiKeyStates     map[int]*apiKeySelectionState
+	apiKeyStatesLock sync.Mutex
 
 	modelSyncMu            sync.Mutex
 	codexCatalogSF         singleflight.Group
@@ -329,6 +340,10 @@ func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []
 
 		// Preload model prices
 		svc.preloadModelPrices(ctx, channel)
+
+		// This build feeds the serving set, so let the success report read its
+		// key array from now on.
+		svc.publishAPIKeySelectionSnapshot(channel)
 
 		channels = append(channels, channel)
 	}
@@ -1415,13 +1430,15 @@ func (svc *ChannelService) reloadChannelsAfterCommit(ctx context.Context) {
 	})
 }
 
-// forgetLimitersAndReloadAfterCommit keeps process-local limiter eviction and
-// cross-instance cache invalidation aligned with the database transaction. If
-// the mutation rolls back, both side effects must be skipped.
+// forgetLimitersAndReloadAfterCommit keeps process-local limiter and API key
+// selection state eviction and cross-instance cache invalidation aligned with
+// the database transaction. If the mutation rolls back, all side effects must
+// be skipped. Used by the channel delete paths, where upstream forgets both.
 func (svc *ChannelService) forgetLimitersAndReloadAfterCommit(ctx context.Context, channelIDs ...int) {
 	runAfterCommit(ctx, func(context.Context) {
 		for _, channelID := range channelIDs {
 			svc.forgetLimiter(channelID)
+			svc.forgetAPIKeySelectionState(channelID)
 		}
 		svc.asyncReloadChannels()
 	})

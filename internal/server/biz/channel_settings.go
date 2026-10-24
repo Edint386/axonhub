@@ -27,24 +27,26 @@ import (
 // (mergeChannelSettingsForUpdate) and makes those semantics available to
 // direct GraphQL callers.
 type UpdateChannelSettingsInput struct {
-	ExtraModelPrefix         *string                               `json:"extraModelPrefix"`
-	ModelMappings            []objects.ModelMapping                `json:"modelMappings"`
-	AutoTrimedModelPrefixes  []string                              `json:"autoTrimedModelPrefixes"`
-	HideOriginalModels       *bool                                 `json:"hideOriginalModels"`
-	HideMappedModels         *bool                                 `json:"hideMappedModels"`
-	LowercaseModelID         *bool                                 `json:"lowercaseModelId"`
-	Proxy                    *httpclient.ProxyConfig               `json:"proxy"`
-	TransformOptions         *objects.TransformOptions             `json:"transformOptions"`
-	HeaderOverrideOperations []objects.OverrideOperation           `json:"headerOverrideOperations"`
-	BodyOverrideOperations   []objects.OverrideOperation           `json:"bodyOverrideOperations"`
-	PassThroughUserAgent     *bool                                 `json:"passThroughUserAgent"`
-	PassThroughBody          *bool                                 `json:"passThroughBody"`
-	RateLimit                *objects.ChannelRateLimit             `json:"rateLimit"`
-	RetryableStatusCodes     []int                                 `json:"retryableStatusCodes"`
-	RetryableErrorPatterns   []objects.RetryableErrorPattern       `json:"retryableErrorPatterns"`
-	ModelProtocols           []objects.ModelProtocol               `json:"modelProtocols"`
-	ProviderQuota            *objects.ChannelProviderQuotaSettings `json:"providerQuota"`
-	QuotaRoutingMode         *objects.QuotaRoutingMode             `json:"quotaRoutingMode"`
+	ExtraModelPrefix            *string                               `json:"extraModelPrefix"`
+	ModelMappings               []objects.ModelMapping                `json:"modelMappings"`
+	AutoTrimedModelPrefixes     []string                              `json:"autoTrimedModelPrefixes"`
+	HideOriginalModels          *bool                                 `json:"hideOriginalModels"`
+	HideMappedModels            *bool                                 `json:"hideMappedModels"`
+	LowercaseModelID            *bool                                 `json:"lowercaseModelId"`
+	Proxy                       *httpclient.ProxyConfig               `json:"proxy"`
+	TransformOptions            *objects.TransformOptions             `json:"transformOptions"`
+	HeaderOverrideOperations    []objects.OverrideOperation           `json:"headerOverrideOperations"`
+	BodyOverrideOperations      []objects.OverrideOperation           `json:"bodyOverrideOperations"`
+	PassThroughUserAgent        *bool                                 `json:"passThroughUserAgent"`
+	PassThroughBody             *bool                                 `json:"passThroughBody"`
+	RateLimit                   *objects.ChannelRateLimit             `json:"rateLimit"`
+	RetryableStatusCodes        []int                                 `json:"retryableStatusCodes"`
+	RetryableErrorPatterns      []objects.RetryableErrorPattern       `json:"retryableErrorPatterns"`
+	ModelProtocols              []objects.ModelProtocol               `json:"modelProtocols"`
+	APIKeyStrategy              *string                               `json:"apiKeyStrategy"`
+	APIKeyRoundRobinSwitchAfter *int                                  `json:"apiKeyRoundRobinSwitchAfter"`
+	ProviderQuota               *objects.ChannelProviderQuotaSettings `json:"providerQuota"`
+	QuotaRoutingMode            *objects.QuotaRoutingMode             `json:"quotaRoutingMode"`
 	// custom: channel quota, its timezone and health probe settings live in the
 	// same settings blob, so a patch must be able to carry them too.
 	Quota         *objects.APIKeyQuota                `json:"quota"`
@@ -112,6 +114,12 @@ func (i *UpdateChannelSettingsInput) Apply(base *objects.ChannelSettings) object
 	}
 	if i.ModelProtocols != nil {
 		merged.ModelProtocols = i.ModelProtocols
+	}
+	if i.APIKeyStrategy != nil {
+		merged.APIKeyStrategy = i.APIKeyStrategy
+	}
+	if i.APIKeyRoundRobinSwitchAfter != nil {
+		merged.APIKeyRoundRobinSwitchAfter = i.APIKeyRoundRobinSwitchAfter
 	}
 	if i.ProviderQuota != nil {
 		merged.ProviderQuota = i.ProviderQuota
