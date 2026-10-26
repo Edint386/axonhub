@@ -26,7 +26,9 @@ test('local quota channels are not collapsed into provider-level rows', () => {
   const quotaBadges = read('components/quota-badges.tsx');
 
   assert.match(quotaBadges, /if \(channel\.localQuota\) \{\s*acc\.push\(channel\);\s*return acc;/);
-  // Local-only quota channels are listed last: since upstream grouped the
-  // popover by category they form their own section after every provider.
-  assert.match(quotaBadges, /key: 'local_quota', label: t\('quota\.label\.local_quota'\), order: 100/);
+  // Local-only quota channels are listed last: they form their own category
+  // and sortQuotaChannels keeps them after every provider channel (behaviour
+  // is exercised in components/quota-badges-local-category.test.mjs).
+  assert.match(quotaBadges, /key: 'local_quota', label: t\('quota\.label\.local_quota'\)/);
+  assert.match(quotaBadges, /Number\(localOnly\(a\)\) - Number\(localOnly\(b\)\) \|\| compare\(a, b\)/);
 });

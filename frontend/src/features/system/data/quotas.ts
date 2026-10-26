@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { graphqlRequest } from '@/gql/graphql';
 import { channelQuotaUsageSchema } from '@/features/channels/data/schema';
@@ -24,6 +25,7 @@ const PROVIDER_QUOTA_STATUSES_QUERY = `
           id
           name
           type
+          orderingWeight
           settings {
             quotaRoutingMode
           }
@@ -294,7 +296,6 @@ export type ProviderOpenCodeGoQuotaData = ProviderQuotaDataCommon & {
   };
 };
 
-
 export type KimiCodeUsageRow = {
   label: string;
   used: number;
@@ -475,10 +476,7 @@ type ProviderClineErrorQuotaData = ProviderQuotaDataCommon & {
 };
 
 export type ProviderClineQuotaData =
-  | ProviderClinePassQuotaData
-  | ProviderClineUnavailablePassQuotaData
-  | ProviderClineDirectQuotaData
-  | ProviderClineErrorQuotaData;
+  ProviderClinePassQuotaData | ProviderClineUnavailablePassQuotaData | ProviderClineDirectQuotaData | ProviderClineErrorQuotaData;
 
 export function isClineActivePassQuotaData(qd: ProviderClineQuotaData): qd is ProviderClinePassQuotaData {
   return qd.pool === 'cline_pass' && qd.windows != null;
@@ -686,6 +684,10 @@ function parseClaudeQuotaData(quotaData: unknown, limits: ProviderQuotaLimit[]):
 export type ProviderQuotaChannel = {
   id: string;
   name: string;
+  // Display-sort rank set via the channels page "Order channels" dialog; the
+  // load balancer treats higher weight as higher priority, so the quota
+  // popover mirrors that order in its 'preferred' sort mode.
+  orderingWeight: number;
   // Account identity shared by channels drawing from the same provider account
   // (e.g. the same ZenMux management key). Undefined means the channel has its
   // own quota account.
@@ -846,6 +848,7 @@ type QueryChannelNode = {
   id: string;
   name: string;
   type: string;
+  orderingWeight: number;
   settings: {
     quotaRoutingMode: ChannelQuotaRoutingMode;
     quota?: ChannelQuota | null;
@@ -876,6 +879,7 @@ function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel
   const base = {
     id: node.id,
     name: node.name,
+    orderingWeight: node.orderingWeight,
     quotaRoutingMode: node.settings?.quotaRoutingMode ?? 'INHERIT',
     accountKey: optionalString(quotaStatus.accountKey),
     quotaStatus: {
@@ -1043,6 +1047,16 @@ function parseChannelNode(node: QueryChannelNodeWithQuota): ProviderQuotaChannel
   } as ProviderQuotaChannel;
 }
 
+type LocalQuotaUsageResult = { data: ChannelQuotaUsage | null | undefined; isLoading: boolean };
+
+// custom: reduce each channel-quota usage query to the two fields the popover
+// reads; as a useQueries combine it makes the result structurally shared.
+function combineLocalQuotaUsage(
+  results: Array<{ data: ChannelQuotaUsage | null | undefined; isLoading: boolean; isFetching: boolean }>
+): LocalQuotaUsageResult[] {
+  return results.map((result) => ({ data: result.data, isLoading: result.isLoading || result.isFetching }));
+}
+
 export function useProviderQuotaStatuses() {
   const query = useQuery({
     queryKey: ['provider-quotas'],
@@ -1058,20 +1072,29 @@ export function useProviderQuotaStatuses() {
     refetchIntervalInBackground: true,
   });
 
-  const quotaChannels = (query.data?.queryChannels?.edges ?? [])
-    .map((edge) => edge?.node ?? null)
-    .filter(hasQuotaStatusOrLocalQuota)
-    .filter((channel) => {
-      if (channel.settings?.quota != null) return true;
-      // Skip channels that have no credentials configured, since they cannot be
-      // checked and only add noise to the quota popover. Other failures remain
-      // available with their generic status for administrators to inspect.
-      const quotaData = channel.providerQuotaStatus?.quotaData as { error?: string; error_code?: string } | undefined;
-      return quotaData?.error_code !== 'missing_credentials' && quotaData?.error !== 'channel has no credentials';
-    });
-
-  const localQuotaChannels = quotaChannels.filter((channel) => channel.settings?.quota != null);
+  // Memoized like upstream's provider-only list; custom adds the channels that
+  // only carry a local AxonHub quota and the per-channel local usage queries.
+  const edges = query.data?.queryChannels?.edges;
+  const quotaChannels = useMemo(
+    () =>
+      (edges ?? [])
+        .map((edge) => edge?.node ?? null)
+        .filter(hasQuotaStatusOrLocalQuota)
+        .filter((channel) => {
+          if (channel.settings?.quota != null) return true;
+          // Skip channels that have no credentials configured, since they cannot be
+          // checked and only add noise to the quota popover. Other failures remain
+          // available with their generic status for administrators to inspect.
+          const quotaData = channel.providerQuotaStatus?.quotaData as { error?: string; error_code?: string } | undefined;
+          return quotaData?.error_code !== 'missing_credentials' && quotaData?.error !== 'channel has no credentials';
+        }),
+    [edges]
+  );
+  const localQuotaChannels = useMemo(() => quotaChannels.filter((channel) => channel.settings?.quota != null), [quotaChannels]);
   const localQuotaUsageQueries = useQueries({
+    // combine keeps the result referentially stable across renders, so the
+    // memoized channel list below (and upstream's derived memos) can hit.
+    combine: combineLocalQuotaUsage,
     queries: localQuotaChannels.map((channel) => ({
       queryKey: ['channelQuotaUsage', channel.id],
       queryFn: async () => {
@@ -1085,42 +1108,39 @@ export function useProviderQuotaStatuses() {
       refetchIntervalInBackground: true,
     })),
   });
-
-  const localQuotaUsageByChannelID = new Map<string, { data: ChannelQuotaUsage | null | undefined; isLoading: boolean }>(
-    localQuotaChannels.map((channel, index) => [
-      channel.id,
-      {
-        data: localQuotaUsageQueries[index]?.data,
-        isLoading: localQuotaUsageQueries[index]?.isLoading || localQuotaUsageQueries[index]?.isFetching,
-      },
-    ] as [string, { data: ChannelQuotaUsage | null | undefined; isLoading: boolean }])
-  );
-
-  const channels = quotaChannels.map((channel): ProviderQuotaChannel => {
-    const providerQuotaStatus = channel.providerQuotaStatus;
-    const localQuotaUsage = localQuotaUsageByChannelID.get(channel.id);
-    const parsedProviderChannel = providerQuotaStatus ? parseChannelNode({ ...channel, providerQuotaStatus }) : undefined;
-    const baseChannel = parsedProviderChannel ?? ({
-      id: channel.id,
-      name: channel.name,
-      type: channel.type,
-      quotaRoutingMode: 'INHERIT',
-      quotaStatus: {
-        status: 'unknown',
-        nextResetAt: null,
-        ready: false,
-        limits: [],
-        quotaData: {},
-      },
-    } as ProviderQuotaChannel);
-
-    return {
-      ...baseChannel,
-      localQuota: channel.settings?.quota ?? null,
-      localQuotaUsage: localQuotaUsage?.data,
-      localQuotaUsageLoading: localQuotaUsage?.isLoading ?? false,
-    };
-  });
+  const channels = useMemo(() => {
+    const localQuotaUsageByChannelID = new Map<string, LocalQuotaUsageResult>(
+      localQuotaChannels.map((channel, index) => [
+        channel.id,
+        localQuotaUsageQueries[index] ?? { data: undefined, isLoading: false },
+      ] as [string, LocalQuotaUsageResult])
+    );
+    return quotaChannels.map((channel): ProviderQuotaChannel => {
+      const providerQuotaStatus = channel.providerQuotaStatus;
+      const localQuotaUsage = localQuotaUsageByChannelID.get(channel.id);
+      const parsedProviderChannel = providerQuotaStatus ? parseChannelNode({ ...channel, providerQuotaStatus }) : undefined;
+      const baseChannel = parsedProviderChannel ?? ({
+        id: channel.id,
+        name: channel.name,
+        orderingWeight: channel.orderingWeight,
+        type: channel.type,
+        quotaRoutingMode: 'INHERIT',
+        quotaStatus: {
+          status: 'unknown',
+          nextResetAt: null,
+          ready: false,
+          limits: [],
+          quotaData: {},
+        },
+      } as ProviderQuotaChannel);
+      return {
+        ...baseChannel,
+        localQuota: channel.settings?.quota ?? null,
+        localQuotaUsage: localQuotaUsage?.data,
+        localQuotaUsageLoading: localQuotaUsage?.isLoading ?? false,
+      };
+    });
+  }, [quotaChannels, localQuotaChannels, localQuotaUsageQueries]);
 
   return {
     channels,
