@@ -120,7 +120,7 @@ Everything else:
 - Response timeouts (stream first-event and non-stream timeouts) do not switch targets; they move to the next channel.
 - Local queueing, local RPM limits and the model circuit breaker apply to the whole channel or alias and never trigger a switch.
 - Targets are not switched when the retry policy is disabled.
-- After every target has been tried, the remaining single-channel retries go to the last target; a 429 on the last target moves to the next channel.
+- After every target has been tried, the remaining single-channel retries go to the last target; a 429 on the last target moves to the next channel. If the channel lists 429 in Retry Status Codes, a 429 on the last target uses the remaining single-channel retries on that target first.
 
 **Tip**: every target switch counts as a channel failure. If the channel has an auto-disable rule on 429, or the model circuit breaker load-balancing strategy is used, several rate-limited targets in a row can trip the rule or the breaker sooner. While another target is left, a 429 with Retry-After on one target does not put the channel into the load balancer's rate-limit cooldown; only a 429 on the last target does.
 

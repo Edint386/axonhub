@@ -39,6 +39,7 @@
    - 合并完核对 `git diff $SIM HEAD` 为空，即真合并的结果和逐个模拟的结果完全一样。不一样就撤销（`git reset --hard <合并前编号>`），查清原因再说。
 3. **重新生成**（规则 3）：
    - GraphQL / ent：`cd internal/server/gql && go generate`。之后删除 gqlgen 留在 `*.resolvers.go` 末尾的 `!!! WARNING !!!` 注释块；`TestNoUnimplementedResolverStubs` 会拦截残留的 `not implemented` 占位函数（上游自带的 `Nodes` 除外）。
+   - 上游自己在 `dashboard.resolvers.go` 里写了 `dailyRequestStats` 等小写辅助方法（#2755 起）。`go generate` 会把它们挪进 `!!! WARNING !!!` 注释块，导致编译失败，纯上游也一样。遇到时用 `git checkout -- internal/server/gql/dashboard.resolvers.go`（以及同样被改动的 `ent.resolvers.go`）恢复合并后的版本，只保留 `generated.go`、`models_gen.go` 的生成结果，再 `go build ./...` 确认能编译。
    - 前端路由树 `frontend/src/routeTree.gen.ts` 用 `@tanstack/router-plugin` 的生成器重新生成，不手改。
 4. **验证**：
    - 后端：`go test ./...`；`llm/` 是独立 Go 模块，要在 `llm/` 目录里跑 `go test ./...`。
@@ -66,6 +67,7 @@
 | `internal/server/biz/channel.go` `forgetLimitersAndReloadAfterCommit`（custom 的"提交后清理"函数，删渠道和批量删渠道用） | 同时调用上游的 `forgetAPIKeySelectionState`（#2548 每渠道 Key 选择状态）。上游在删除路径里直接调用，custom 把它并进这个函数 | `TestChannelDelete_ForgetsAPIKeySelectionState` |
 | `frontend/src/features/channels/components/channels-table.tsx` | `keepVisible`：优先级列和操作列一样不被裁切（文件其余部分跟随上游） | `channels-table-priority.test.mjs` |
 | `frontend/src/components/quota-badges.tsx` `getChannelCategory` 开头 | 只有本地额度的渠道归到 `local_quota` 分组；`sortQuotaChannels` 里 custom 的一行让它们在三种排序方式下都排在最后；本地额度渠道在去重时保留成单独一行（NanoGPT、OpenAI 兼容、ZenMux 共享账号三条去重规则都跳过它们） | `quota-badges-local-category.test.mjs`（直接运行上游的排序和分组函数）、`features/system/data/channel-quota-badge.test.mjs` |
+| `internal/server/gql/analytics.resolvers.go` `AnalyticsMetadata`、`AnalyticsDailyStats` | `AnalyticsMetadata` 开头的 `authz.WithScopeDecision(ctx, scopes.ScopeReadDashboard)`（只有看板权限的用户也能用"使用以来"）；`AnalyticsDailyStats` 里紧跟 `buildAnalyticsWhere` 的 `applyAnalyticsDailyStatsDateBounds`（没选时间范围时，趋势图只查图上显示的 30 天，避免扫全表） | `TestAnalyticsMetadataAllowsDashboardScope`、`TestAnalyticsDailyStatsResolverAppliesDefaultDateBounds`、`TestAnalyticsDailyStatsAddsDefaultDateBounds` |
 | `internal/server/orchestrator/pass_through.go` `responsesTransportAdaptationEnabled` | `PassThroughBodyBlocked` 时返回 false | `TestResponsesTransportAdaptationHonoursPassThroughBodyBlocked` |
 | `internal/server/biz/channel_llm.go` `buildChannel` | `ch.setModelPriceMultiplier(c.ModelPriceMultiplier)`（渠道价格倍率，倍率 0 = 免费） | `TestUsageCost_ZeroChannelMultiplierSurvivesChannelBuild` |
 | `internal/server/biz/usage_log.go` 模型库价格兜底 | 兜底计费也乘渠道倍率 | `TestUsageCost_ModelLibraryFallbackAppliesChannelMultiplier` |

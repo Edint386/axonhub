@@ -2,6 +2,9 @@ package gql
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"testing"
 	"time"
 
@@ -50,4 +53,32 @@ func TestAnalyticsDailyStatsAddsDefaultDateBounds(t *testing.T) {
 	require.Len(t, args, 2)
 	require.Equal(t, startDay.UTC(), args[0])
 	require.Equal(t, endDay.AddDate(0, 0, 1).UTC(), args[1])
+}
+
+// A merge that rewrites the Modify block can drop this call while every other
+// test still passes, so check the resolver itself.
+func TestAnalyticsDailyStatsResolverAppliesDefaultDateBounds(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "analytics.resolvers.go", nil, 0)
+	require.NoError(t, err)
+
+	called := false
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "AnalyticsDailyStats" {
+			continue
+		}
+
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "applyAnalyticsDailyStatsDateBounds" {
+				called = true
+			}
+			return true
+		})
+	}
+
+	require.True(t, called, "AnalyticsDailyStats must call applyAnalyticsDailyStatsDateBounds")
 }
