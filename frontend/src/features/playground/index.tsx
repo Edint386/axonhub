@@ -38,6 +38,7 @@ import { Response as UIResponse } from '@/components/ai-elements/response';
 import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { useAllChannelSummarys } from '@/features/channels/data/channels';
 import { useQueryModels } from '@/features/models/data/models';
+import { ModelTracePanel, PlaygroundModeSwitch, type PlaygroundMode } from './model-trace/model-trace-panel';
 import { readSelection, resolveSelection, writeSelection, type PlaygroundModelSource } from './selection';
 
 function PlaygroundImageButton() {
@@ -110,6 +111,7 @@ export default function Playground() {
   const [sendTemperature, setSendTemperature] = useState(true);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [systemPrompt, setSystemPrompt] = useState(t('playground.settings.defaultSystemPrompt'));
+  const [playgroundMode, setPlaygroundMode] = useState<PlaygroundMode>('chat'); // custom: ModelTrace check view
 
   // useRef hooks for direct access to current values
   const modelRef = useRef(model);
@@ -434,6 +436,7 @@ export default function Playground() {
           <div className='border-b p-4'>
             <h1 className='text-xl font-bold tracking-tight'>{t('playground.title')}</h1>
             <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>{t('playground.description')}</p>
+            <PlaygroundModeSwitch value={playgroundMode} onValueChange={setPlaygroundMode} />
           </div>
 
           <ScrollArea className='min-h-0 flex-1 p-4'>
@@ -554,7 +557,7 @@ export default function Playground() {
             </div>
           </ScrollArea>
 
-          <div className='space-y-2 border-t p-4'>
+          <div className={cn('space-y-2 border-t p-4', playgroundMode === 'trace' && 'hidden')}>
             <Button
               onClick={handleRetry}
               variant='outline'
@@ -580,7 +583,12 @@ export default function Playground() {
 
         {/* Chat Area */}
         <div className='flex min-h-[50vh] min-w-0 flex-1 flex-col p-4 lg:min-h-0'>
-          <div className='shadow-soft border-border bg-card flex h-full min-h-0 flex-col rounded-2xl border p-6'>
+          <div
+            className={cn(
+              'shadow-soft border-border bg-card flex h-full min-h-0 flex-col rounded-2xl border p-6',
+              playgroundMode === 'trace' && 'hidden'
+            )}
+          >
             <Conversation className='max-h-[50vh] min-h-0 flex-1 lg:max-h-none'>
               <ConversationContent>
                 {messages.length === 0 ? (
@@ -683,6 +691,7 @@ export default function Playground() {
               <PlaygroundSubmit input={input} status={status} onStop={stop} />
             </PromptInput>
           </div>
+          <ModelTracePanel hidden={playgroundMode !== 'trace'} modelSource={modelSource} channelId={selectedChannel} model={model} />
         </div>
       </div>
     </TooltipProvider>
