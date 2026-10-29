@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 import { PLAYGROUND_CHAT_API, readTextStream, sendPlaygroundProbe } from './transport.ts';
 
@@ -31,6 +33,17 @@ test('handles CRLF framing and a final event without a trailing blank line', asy
     streamOf('data: {"type":"text-delta","id":"t","delta":"7"}\r\n\r\n', 'data: {"type":"text-delta","id":"t","delta":"8"}\r\n\r\n', 'data: {"type":"finish"}')
   );
   assert.equal(text, '78');
+});
+
+test('reads the backend playground stream to the end', async () => {
+  // The backend's golden AI SDK output (llm/transformer/aisdk tests), also replayed by upstream's playground transport test.
+  const fixture = readFileSync(join(import.meta.dirname, '../../../../../llm/transformer/aisdk/testdata/aisdk-strop.stream.jsonl'), 'utf8');
+  const events = fixture.trim().split('\n').map((line) => JSON.parse(line).Data);
+  const expected = events.filter((event) => event !== '[DONE]').map((event) => JSON.parse(event))
+    .filter((event) => event.type === 'text-delta').map((event) => event.delta).join('');
+  assert.ok(expected.length > 0);
+  const answer = await readTextStream(streamOf(...events.map((event) => `data: ${event}\n\n`)));
+  assert.deepEqual(answer, { text: expected, finished: true });
 });
 
 test('reports a stream that ends without the finish event', async () => {

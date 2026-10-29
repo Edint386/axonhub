@@ -43,9 +43,10 @@ test('checks still send requests the way playground chat does', () => {
   assert.match(page, /headers\['X-Channel-ID'\] = selectedChannelRef\.current/, sync);
   assert.match(page, /const token = await ensureFreshAccessToken\(\);/, sync);
   assert.match(page, /new DefaultChatTransport\(/, sync);
-  // The SSE events transport.ts parses (text-delta, finish, error) are the AI SDK v5 UI message stream.
+  // The SSE events transport.ts parses (text-delta, finish, error) are the AI SDK UI message stream
+  // (protocol v1, unchanged from ai 5 to 7). transport.test.mjs replays the backend's own stream fixture.
   const pkg = JSON.parse(readFileSync(join(srcRoot, '..', 'package.json'), 'utf8'));
-  assert.match(pkg.dependencies.ai, /^\^5\./, sync);
+  assert.match(pkg.dependencies.ai, /^\^7\./, sync);
 });
 
 test('both locales define the same ModelTrace labels', () => {

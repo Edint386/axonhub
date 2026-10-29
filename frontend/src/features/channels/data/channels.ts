@@ -168,6 +168,11 @@ const CREATE_CHANNEL_MUTATION = `
         }
         passThroughUserAgent
         passThroughBody
+        responseTimeout {
+          mode
+          streamFirstEventTimeoutSeconds
+          nonStreamResponseTimeoutSeconds
+        }
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
@@ -267,6 +272,11 @@ const DUPLICATE_CHANNEL_MUTATION = `
         }
         passThroughUserAgent
         passThroughBody
+        responseTimeout {
+          mode
+          streamFirstEventTimeoutSeconds
+          nonStreamResponseTimeoutSeconds
+        }
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
@@ -366,6 +376,11 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         }
         passThroughUserAgent
         passThroughBody
+        responseTimeout {
+          mode
+          streamFirstEventTimeoutSeconds
+          nonStreamResponseTimeoutSeconds
+        }
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
@@ -464,6 +479,11 @@ const CHANNEL_FIELDS_FRAGMENT = `
         }
         passThroughUserAgent
         passThroughBody
+        responseTimeout {
+          mode
+          streamFirstEventTimeoutSeconds
+          nonStreamResponseTimeoutSeconds
+        }
         ${CHANNEL_RATE_LIMIT_FIELDS}
         ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
@@ -717,6 +737,11 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
+          responseTimeout {
+            mode
+            streamFirstEventTimeoutSeconds
+            nonStreamResponseTimeoutSeconds
+          }
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
@@ -964,6 +989,11 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           }
           passThroughUserAgent
           passThroughBody
+          responseTimeout {
+            mode
+            streamFirstEventTimeoutSeconds
+            nonStreamResponseTimeoutSeconds
+          }
           ${CHANNEL_RATE_LIMIT_FIELDS}
           ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}
@@ -1231,6 +1261,11 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
             }
             passThroughUserAgent
             passThroughBody
+            responseTimeout {
+              mode
+              streamFirstEventTimeoutSeconds
+              nonStreamResponseTimeoutSeconds
+            }
             ${CHANNEL_RATE_LIMIT_FIELDS}
             ${CHANNEL_QUOTA_FIELDS}
         ${CHANNEL_HEALTH_PROBE_FIELDS}

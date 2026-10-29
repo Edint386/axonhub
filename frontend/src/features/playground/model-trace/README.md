@@ -15,7 +15,8 @@ Source: [xqy2006/ModelTrace](https://github.com/xqy2006/ModelTrace) at `6cd4a8f`
 
 The only lines in upstream-owned code are in `../index.tsx`; `playground-hook.test.mjs` guards them.
 `transport.ts` copies how the playground chat calls the backend (endpoint, `X-Project-ID` /
-`X-Channel-ID`, token refresh, AI SDK v5 stream events); the same test pins those parts.
+`X-Channel-ID`, token refresh, AI SDK UI message stream events); the same test pins those parts, and
+`transport.test.mjs` replays the backend's stream fixture.
 
 Differences from ModelTrace's own API tester:
 
