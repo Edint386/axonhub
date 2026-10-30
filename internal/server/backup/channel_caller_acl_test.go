@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -56,7 +57,7 @@ func TestBackupService_ChannelCallerACLRoundTripRemapsSourceIDs(t *testing.T) {
 	_ = createBackupTestChannel(t, targetClient, targetCtx, "Seed Channel", channel.TypeOpenai)
 	_ = createBackupTestAPIKey(t, targetClient, targetCtx, targetUser, seedProject, "Seed Key", "sk-seed")
 
-	err = targetService.Restore(targetCtx, data, RestoreOptions{
+	err = targetService.Restore(targetCtx, bytes.NewReader(data), RestoreOptions{
 		IncludeProjects:         true,
 		IncludeChannels:         true,
 		IncludeAPIKeys:          true,
@@ -105,7 +106,7 @@ func TestBackupService_RestoreChannelsOnlyNonPublicNewChannelFailsClosed(t *test
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:         true,
 		ChannelConflictStrategy: ConflictStrategyOverwrite,
 	})
@@ -179,7 +180,7 @@ func TestBackupService_RestorePartialChannelCallerACLPreservesTargetPolicy(t *te
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, legacyData, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(legacyData), RestoreOptions{
 		IncludeChannels:         true,
 		ChannelConflictStrategy: ConflictStrategySkip,
 	})
@@ -192,7 +193,7 @@ func TestBackupService_RestorePartialChannelCallerACLPreservesTargetPolicy(t *te
 	require.NoError(t, err)
 	require.Equal(t, 1, memberCount)
 
-	err = service.Restore(ctx, legacyData, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(legacyData), RestoreOptions{
 		IncludeChannels:         true,
 		ChannelConflictStrategy: ConflictStrategyOverwrite,
 	})
