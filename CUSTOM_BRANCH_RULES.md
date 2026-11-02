@@ -39,7 +39,7 @@
    - 合并完核对 `git diff $SIM HEAD` 为空，即真合并的结果和逐个模拟的结果完全一样。不一样就撤销（`git reset --hard <合并前编号>`），查清原因再说。
 3. **重新生成**（规则 3）：
    - GraphQL / ent：`cd internal/server/gql && go generate`。之后删除 gqlgen 留在 `*.resolvers.go` 末尾的 `!!! WARNING !!!` 注释块；`TestNoUnimplementedResolverStubs` 会拦截残留的 `not implemented` 占位函数（上游自带的 `Nodes` 除外）。
-   - 上游自己在 `dashboard.resolvers.go` 里写了 `dailyRequestStats` 等小写辅助方法（#2755 起）。`go generate` 会把它们挪进 `!!! WARNING !!!` 注释块，导致编译失败，纯上游也一样。遇到时用 `git checkout -- internal/server/gql/dashboard.resolvers.go`（以及同样被改动的 `ent.resolvers.go`）恢复合并后的版本，只保留 `generated.go`、`models_gen.go` 的生成结果，再 `go build ./...` 确认能编译。
+   - 上游 #2830 起，`dailyRequestStats` 等小写辅助方法都在 `dashboard_helpers.go`，`go generate` 不会再把它们挪进 `!!! WARNING !!!` 块，也不会编译失败。现在 `go generate` 只会调整 `dashboard.resolvers.go` 的 import 顺序（纯上游也一样，行为无变化）；这个文件 custom 没改过，用 `git checkout -- internal/server/gql/dashboard.resolvers.go` 还原，保持和上游一致。`test.yml` 在测试前也会跑 `make generate`，所以 custom 的小写辅助方法不能写进 `*.resolvers.go`，要放进 `*_helpers.go` 这类文件，否则生成步骤会报错、CI 失败。
    - 前端路由树 `frontend/src/routeTree.gen.ts` 用 `@tanstack/router-plugin` 的生成器重新生成，不手改。
 4. **验证**：
    - 后端：`go test ./...`；`llm/` 是独立 Go 模块，要在 `llm/` 目录里跑 `go test ./...`。

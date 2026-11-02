@@ -75,8 +75,9 @@ const ChannelOrderingItemComponent = memo(function ChannelOrderingItemComponent(
   const [localWeight, setLocalWeight] = useState(orderingWeight.toString());
   const [localPriority, setLocalPriority] = useState(priority.toString());
 
-  // Re-sync both drafts on every mode switch too, so an edit left uncommitted
-  // when the user switches tabs is discarded instead of resurfacing later.
+  // Re-sync both drafts on every mode switch too. Radix Tabs focuses the trigger
+  // before changing the value, so a valid edit is already committed on blur,
+  // same as clicking anywhere else in the dialog.
   useEffect(() => {
     setLocalWeight(orderingWeight.toString());
     setLocalPriority(priority.toString());
