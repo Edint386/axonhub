@@ -147,12 +147,16 @@ type Session struct {
 	respMu   sync.Mutex
 	respDone chan struct{}
 
-	gateMu     sync.Mutex
-	gated      bool
-	gateStart  time.Time
-	gateQueue  [][]byte
-	gateBytes  int64
-	gateOpened chan struct{}
+	// upstreamFinished is closed once the dialect reports the upstream acknowledged its
+	// goodbye frames (Output.UpstreamFinished).
+	upstreamFinished     chan struct{}
+	upstreamFinishedOnce sync.Once
+
+	gateMu    sync.Mutex
+	gated     bool
+	gateStart time.Time
+	gateQueue [][]byte
+	gateBytes int64
 
 	upstreamPong atomic.Bool
 	// upstreamDeadlineMu serialises the liveness deadline between the upstream pump (refresh),
@@ -176,6 +180,20 @@ type Session struct {
 type gateTimeoutHinter interface {
 	GateTimeout() time.Duration
 }
+
+// finishDrainer is an optional Dialect extension: a dialect whose goodbye frames make the
+// upstream flush pending work (Bailian ASR transcribes the utterance in progress on
+// session.finish and only then answers session.finished). Teardown then waits, up to
+// ResponseDrain, for the dialect to report Output.UpstreamFinished before closing.
+type finishDrainer interface {
+	FinishDrain() bool
+}
+
+// gateQueueFrames caps the client frames queued while the gate is closed. The byte budget
+// (twice MaxMessageSize) is the real bound; the frame cap only limits per-frame overhead and is
+// high enough for a client that dumps many seconds of 20 ms audio frames while a mid-session
+// gate waits one upstream round trip.
+const gateQueueFrames = 8192
 
 // closeGraceHinter is an optional Dialect extension: a dialect-specific bound for the close
 // handshake at teardown.
@@ -224,7 +242,7 @@ func NewSession(ctx context.Context, p SessionParams) *Session {
 		sideband:         p.Sideband,
 		upstream:         p.Upstream,
 		baseCtx:          ctx,
-		gateOpened:       make(chan struct{}),
+		upstreamFinished: make(chan struct{}),
 		upstreamPumpDone: make(chan struct{}),
 		clientPumpDone:   make(chan struct{}),
 		checkNow:         make(chan struct{}, 1),
@@ -727,6 +745,17 @@ func (s *Session) apply(ctx context.Context, out dialect.Output) bool {
 		s.setResponseInProgress(*out.ResponseInProgress)
 	}
 
+	if out.UpstreamFinished {
+		s.upstreamFinishedOnce.Do(func() { close(s.upstreamFinished) })
+	}
+
+	// Close the gate before writing the frame whose acknowledgement opens it again: an ack read
+	// by the upstream pump in between would otherwise find the gate still open, do nothing, and
+	// leave the gate closed for good once this pump closes it.
+	if out.CloseGate {
+		s.closeGate()
+	}
+
 	// Once the session is ending, client input is not forwarded any more: teardown owns the
 	// upstream writer (response.cancel, dialect goodbye, close frame).
 	if !s.ending() {
@@ -824,7 +853,7 @@ func (s *Session) queueIfGated(ctx context.Context, data []byte) bool {
 	}
 
 	limit := s.cfg.MaxMessageSize * 2
-	if s.gateBytes+int64(len(data)) > limit || len(s.gateQueue) >= 512 {
+	if s.gateBytes+int64(len(data)) > limit || len(s.gateQueue) >= gateQueueFrames {
 		log.Warn(ctx, "realtime gate queue overflow", log.String("session", s.name))
 		s.sendClientError("server_error", "upstream_init_overflow", "too many frames were sent before the upstream session was ready", "")
 		s.finish(CauseGateTimeout, errors.New("gate overflow"), websocket.CloseInternalServerErr, "upstream session initialisation overflow")
@@ -853,25 +882,48 @@ func (s *Session) openGate(ctx context.Context) bool {
 	s.gateQueue = nil
 	s.gateBytes = 0
 
-	defer close(s.gateOpened)
-
-	for _, frame := range queued {
+	for i, frame := range queued {
 		out, err := s.dialect.ClientFrame(frame)
 		if err != nil {
 			s.sendClientError("invalid_request_error", "invalid_event", err.Error(), "")
 			continue
 		}
 
-		if out.OpenGate {
-			out.OpenGate = false
-		}
+		// gateMu is held here, so the gate flags are handled in place rather than by apply.
+		out.OpenGate = false
+		reclose := out.CloseGate
+		out.CloseGate = false
 
 		if !s.apply(ctx, out) {
 			return false
 		}
+
+		if reclose {
+			// The dialect closed the gate again: the rest stays queued, in order.
+			s.gated = true
+			s.gateStart = time.Now()
+			s.gateQueue = append([][]byte(nil), queued[i+1:]...)
+
+			for _, rest := range s.gateQueue {
+				s.gateBytes += int64(len(rest))
+			}
+
+			return true
+		}
 	}
 
 	return true
+}
+
+// closeGate holds later client frames until the dialect reports OpenGate.
+func (s *Session) closeGate() {
+	s.gateMu.Lock()
+	defer s.gateMu.Unlock()
+
+	if !s.gated {
+		s.gated = true
+		s.gateStart = time.Now()
+	}
 }
 
 // teardown closes both sides in the order required to keep usage and close codes intact.
@@ -923,10 +975,31 @@ func (s *Session) teardown(ctx context.Context) {
 		}
 	}
 
-	// 2. Dialect-specific goodbye frames (e.g. Bailian session.finish).
+	// 2. Dialect-specific goodbye frames (e.g. Bailian session.finish). A dialect that flushes
+	// work on goodbye is given ResponseDrain to report the upstream's acknowledgement, so the
+	// usage of the last utterance is still read and recorded. The wait also applies when the
+	// dialect sends nothing because the client already sent the goodbye itself (a beta client's
+	// session.finish); it ends at once if the acknowledgement was already relayed, and is
+	// skipped when the goodbye could not be written at all.
 	if upstreamAlive {
+		sent := true
+
 		for _, frame := range s.dialect.CloseUpstream() {
-			_ = s.uw.enqueue(ioCtx, websocket.TextMessage, frame)
+			if err := s.uw.enqueue(ioCtx, websocket.TextMessage, frame); err != nil {
+				sent = false
+				break
+			}
+		}
+
+		if fd, ok := s.dialect.(finishDrainer); ok && fd.FinishDrain() && sent {
+			drain := time.NewTimer(s.cfg.ResponseDrain)
+			select {
+			case <-s.upstreamFinished:
+			case <-s.upstreamPumpDone:
+			case <-drain.C:
+			}
+
+			drain.Stop()
 		}
 	}
 

@@ -209,7 +209,7 @@ func (c Config) SessionDuration(dialectName string) time.Duration {
 		return c.MaxSessionDuration
 	}
 
-	if dialectName == "bailian" {
+	if strings.HasPrefix(dialectName, "bailian") {
 		return DefaultBailianSessionDuration
 	}
 

@@ -610,7 +610,7 @@ func newRealtimeBailianFixture(t *testing.T) (context.Context, *ChatCompletionOr
 		SetName("bailian-realtime").
 		SetBaseURL("https://dashscope.aliyuncs.com/compatible-mode/v1").
 		SetCredentials(objects.ChannelCredentials{APIKey: "sk-bailian"}).
-		SetSupportedModels([]string{"qwen3-omni-flash-realtime", "gpt-realtime"}).
+		SetSupportedModels([]string{"qwen3-omni-flash-realtime", "qwen3-asr-flash-realtime", "gpt-realtime"}).
 		SetDefaultTestModel("qwen3-omni-flash-realtime").
 		SetOrderingWeight(100).
 		SetStatus(channel.StatusEnabled).
@@ -672,6 +672,38 @@ func TestSelectRealtime_BailianIntentAndModelFilter(t *testing.T) {
 		selection, err := orch.SelectRealtimeCandidates(ctx, "qwen3-omni-flash-realtime", biz.RealtimeModeWebSocket, nil)
 		require.NoError(t, err)
 		require.Equal(t, []int{bailianChannel.ID}, realtimeCandidateChannelIDs(selection.Candidates))
+	})
+
+	t.Run("asr model is a transcription session with or without the intent", func(t *testing.T) {
+		for _, intent := range []string{"", realtimeIntentTranscription} {
+			selection, err := orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: "qwen3-asr-flash-realtime", Mode: biz.RealtimeModeWebSocket, Intent: intent})
+			require.NoError(t, err, intent)
+			require.Equal(t, []int{bailianChannel.ID}, realtimeCandidateChannelIDs(selection.Candidates), intent)
+		}
+	})
+
+	t.Run("asr model rejects quicksilver and webrtc", func(t *testing.T) {
+		_, err := orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: "qwen3-asr-flash-realtime", Mode: biz.RealtimeModeWebSocket, Intent: realtimeIntentQuicksilver})
+		require.ErrorIs(t, err, biz.ErrInvalidModel)
+
+		_, err = orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: "qwen3-asr-flash-realtime", Mode: biz.RealtimeModeWebRTC})
+		require.ErrorIs(t, err, biz.ErrInvalidModel)
+	})
+
+	t.Run("legacy clients only reach bailian asr models", func(t *testing.T) {
+		selection, err := orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: "qwen3-asr-flash-realtime", Mode: biz.RealtimeModeWebSocket, Legacy: true})
+		require.NoError(t, err)
+		require.Equal(t, []int{bailianChannel.ID}, realtimeCandidateChannelIDs(selection.Candidates))
+
+		for _, model := range []string{"qwen3-omni-flash-realtime", "gpt-realtime"} {
+			_, err := orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: model, Mode: biz.RealtimeModeWebSocket, Legacy: true})
+			require.ErrorIs(t, err, ErrRealtimeLegacyOnly, model)
+		}
+
+		// A model nobody serves is still "model not found", not a protocol problem.
+		_, err = orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: "no-such-model", Mode: biz.RealtimeModeWebSocket, Legacy: true})
+		require.ErrorIs(t, err, biz.ErrInvalidModel)
+		require.NotErrorIs(t, err, ErrRealtimeLegacyOnly)
 	})
 
 	t.Run("selection records no channel api key", func(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/server/lifecycle"
 	"github.com/looplj/axonhub/internal/server/realtime/dialect"
+	"github.com/looplj/axonhub/internal/server/realtime/dialect/bailian"
 )
 
 // passDialect forwards frames unchanged and reports response state transitions.
@@ -695,4 +696,173 @@ func TestEndSummary_FailedAndClientFault(t *testing.T) {
 	require.True(t, EndSummary{Cause: CauseUpstreamClosed, Code: "1011"}.Failed())
 	require.True(t, EndSummary{Cause: CauseWriteFailed}.Failed())
 	require.False(t, EndSummary{Cause: CauseWriteFailed}.ClientFault())
+}
+
+// finishDialect is passDialect for an upstream that flushes on its goodbye frame: it reports
+// usage from transcription completions and UpstreamFinished on session.finished.
+type finishDialect struct{ passDialect }
+
+func (d *finishDialect) FinishDrain() bool { return true }
+
+func (d *finishDialect) UpstreamFrame(frame []byte) (dialect.Output, error) {
+	switch dialect.EventType(frame) {
+	case "conversation.item.input_audio_transcription.completed":
+		return dialect.Output{
+			ToClient: [][]byte{frame},
+			Usage:    []dialect.UsageRecord{{Kind: "transcription", ItemID: gjson.GetBytes(frame, "item_id").String()}},
+		}, nil
+	case "session.finished":
+		return dialect.Output{UpstreamFinished: true}, nil
+	default:
+		return d.passDialect.UpstreamFrame(frame)
+	}
+}
+
+func TestSession_FinishDrainRecordsTheLastUtterance(t *testing.T) {
+	hooks := newRecordingHooks()
+	cfg := testConfig()
+	cfg.ResponseDrain = 3 * time.Second
+
+	h := newHarness(t, cfg, &finishDialect{}, hooks)
+
+	// The upstream transcribes the utterance in progress when it gets session.finish, and only
+	// then acknowledges it.
+	go func() {
+		got := h.upstream.waitFor(t, 1)
+		if len(got) > 0 && strings.Contains(got[len(got)-1], "session.finish") {
+			h.upstream.send(t, `{"type":"conversation.item.input_audio_transcription.completed","item_id":"item_last","transcript":"bye"}`)
+			h.upstream.send(t, `{"type":"session.finished"}`)
+		}
+	}()
+
+	start := time.Now()
+	require.NoError(t, h.client.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second)))
+
+	summary := h.wait(t)
+	require.Equal(t, CauseClientClosed, summary.Cause)
+	require.Less(t, time.Since(start), cfg.ResponseDrain, "the drain ends on session.finished, not on its timer")
+
+	<-hooks.ended
+	require.Len(t, hooks.usage, 1)
+	require.Equal(t, "item_last", hooks.usage[0].ItemID)
+}
+
+func TestSession_FinishDrainIsBoundedWhenTheUpstreamNeverAcknowledges(t *testing.T) {
+	hooks := newRecordingHooks()
+	cfg := testConfig()
+	cfg.ResponseDrain = 300 * time.Millisecond
+
+	h := newHarness(t, cfg, &finishDialect{}, hooks)
+
+	start := time.Now()
+	require.NoError(t, h.client.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second)))
+
+	h.wait(t)
+	require.GreaterOrEqual(t, time.Since(start), cfg.ResponseDrain)
+	require.Less(t, time.Since(start), cfg.ResponseDrain+cfg.CloseGrace+time.Second)
+}
+
+// regateDialect closes the session gate on every client frame starting with "hold": it sends
+// "init:<frame>" upstream, keeps the frame and releases it when the upstream answers "ack".
+type regateDialect struct {
+	passDialect
+
+	mu   sync.Mutex
+	held [][]byte
+}
+
+func (d *regateDialect) ClientFrame(frame []byte) (dialect.Output, error) {
+	if !strings.HasPrefix(string(frame), "hold") {
+		return dialect.Output{ToUpstream: [][]byte{frame}}, nil
+	}
+
+	d.mu.Lock()
+	d.held = append(d.held, frame)
+	d.mu.Unlock()
+
+	return dialect.Output{ToUpstream: [][]byte{[]byte("init:" + string(frame))}, CloseGate: true}, nil
+}
+
+func (d *regateDialect) UpstreamFrame(frame []byte) (dialect.Output, error) {
+	if string(frame) != "ack" {
+		return dialect.Output{ToClient: [][]byte{frame}}, nil
+	}
+
+	d.mu.Lock()
+	held := d.held[0]
+	d.held = d.held[1:]
+	d.mu.Unlock()
+
+	return dialect.Output{ToUpstream: [][]byte{held}, OpenGate: true}, nil
+}
+
+func TestSession_DialectCanCloseTheGateMidSessionAndFIFOHolds(t *testing.T) {
+	hooks := newRecordingHooks()
+	h := newHarness(t, testConfig(), &regateDialect{}, hooks)
+
+	for _, frame := range []string{"a", "hold1", "b", "hold2", "c"} {
+		require.NoError(t, h.client.WriteMessage(websocket.TextMessage, []byte(frame)))
+	}
+
+	// Only what preceded the first hold, and its init, may reach the upstream before the ack.
+	got := h.upstream.waitFor(t, 2)
+	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, []string{"a", "init:hold1"}, h.upstream.got())
+
+	h.upstream.send(t, "ack")
+
+	// The flush replays b, then hold2 closes the gate again inside the flush.
+	got = h.upstream.waitFor(t, 5)
+	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, []string{"a", "init:hold1", "hold1", "b", "init:hold2"}, h.upstream.got())
+
+	h.upstream.send(t, "ack")
+
+	got = h.upstream.waitFor(t, 7)
+	require.Equal(t, []string{"a", "init:hold1", "hold1", "b", "init:hold2", "hold2", "c"}, got)
+
+	require.NoError(t, h.client.Close())
+	h.wait(t)
+}
+
+// A beta client that sends session.finish itself and hangs up at once must still be billed for
+// the utterance Bailian flushes: the gateway sends no second finish but still waits for
+// session.finished before closing the upstream.
+func TestSession_LegacyClientFinishThenCloseIsStillBilled(t *testing.T) {
+	hooks := newRecordingHooks()
+	cfg := testConfig()
+	cfg.ResponseDrain = 3 * time.Second
+
+	h := newHarness(t, cfg, bailian.NewASRPassthrough(bailian.ASROptions{RequestedModel: "asr", ActualModel: "qwen3-asr-flash-realtime"}), hooks)
+
+	go func() {
+		got := h.upstream.waitFor(t, 1)
+		if len(got) > 0 && strings.Contains(got[0], "session.finish") {
+			time.Sleep(250 * time.Millisecond)
+			h.upstream.send(t, `{"type":"conversation.item.input_audio_transcription.completed","item_id":"item_last","transcript":"bye","usage":{"duration":2,"total_tokens":30,"input_tokens":20,"output_tokens":10}}`)
+			h.upstream.send(t, `{"type":"session.finished"}`)
+		}
+	}()
+
+	require.NoError(t, h.client.WriteMessage(websocket.TextMessage, []byte(`{"type":"session.finish"}`)))
+	h.upstream.waitFor(t, 1)
+	require.NoError(t, h.client.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second)))
+
+	start := time.Now()
+	h.wait(t)
+	require.Less(t, time.Since(start), cfg.ResponseDrain, "the drain ends on session.finished")
+
+	<-hooks.ended
+	require.Len(t, hooks.usage, 1)
+	require.EqualValues(t, 30, hooks.usage[0].Usage.TotalTokens)
+
+	finishes := 0
+
+	for _, frame := range h.upstream.got() {
+		if strings.Contains(frame, "session.finish") {
+			finishes++
+		}
+	}
+
+	require.Equal(t, 1, finishes, "no second session.finish")
 }

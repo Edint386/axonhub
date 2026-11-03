@@ -80,7 +80,7 @@
 | `docs/{en,zh}/index.md` API 参考表 | Realtime API 那一行 | —（没有守护测试，手工检查） |
 | `CLAUDE.md`、`AGENTS.md` | 指向本文件的引用行 | — |
 
-实时语音功能的其余代码全是 custom 新文件：`llm/realtime.go`、`llm/transformer/openai/codex/live*.go`、`internal/server/biz/channel_endpoint_realtime*.go`、`internal/server/orchestrator/realtime_candidates*.go`、`internal/server/middleware/realtime_subprotocol*.go`、`internal/server/realtime/**`、`internal/server/api/realtime.go`、`internal/server/realtime_routes*.go`、`internal/server/realtime_shutdown*.go`、`frontend/src/locales/{en,zh-CN}/realtime.json`、`frontend/src/features/realtime/`、`docs/{en,zh}/api-reference/realtime.md`。
+实时语音功能的其余代码全是 custom 新文件：`llm/realtime.go`、`llm/transformer/openai/codex/live*.go`、`internal/server/biz/channel_endpoint_realtime*.go`、`internal/server/orchestrator/realtime_candidates*.go`、`internal/server/middleware/realtime_subprotocol*.go`、`internal/server/realtime/**`、`internal/server/api/realtime*.go`、`internal/server/realtime_*.go`（路由、关机、ASR 和各类路由测试）、`frontend/src/locales/{en,zh-CN}/realtime.json`、`frontend/src/features/realtime/`、`docs/{en,zh}/api-reference/realtime.md`。
 
 模型检测（ModelTrace）的其余代码全是 custom 新文件：`frontend/src/features/playground/model-trace/`（算法从 [xqy2006/ModelTrace](https://github.com/xqy2006/ModelTrace) 移植，MIT，许可证在同目录 `LICENSE`；更新指纹库的方法见同目录 `README.md`）、`frontend/src/locales/{en,zh-CN}/modelTrace.json`。只走上游已有的 `/admin/playground/chat` 接口，后端没有改动。
 

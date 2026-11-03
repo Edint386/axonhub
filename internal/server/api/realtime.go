@@ -53,15 +53,20 @@ func (h *RealtimeHandlers) Session(prefix string) gin.HandlerFunc {
 			return
 		}
 
-		if middleware.IsRealtimeBetaRequest(c.Request) {
-			JSONError(c, http.StatusBadRequest, errors.New("the Realtime API beta protocol (OpenAI-Beta: realtime=v1) was removed by OpenAI on 2026-05-12; remove the header and use the GA protocol"))
-			return
-		}
+		// Beta-protocol clients are only relayed to Bailian Qwen-ASR models, whose own protocol
+		// has the beta shape; Prepare answers every other model with ErrLegacyProtocol.
+		legacy := middleware.IsRealtimeBetaRequest(c.Request)
 
 		query := c.Request.URL.Query()
 
 		if callID := strings.TrimSpace(query.Get("call_id")); callID != "" {
+			if legacy {
+				h.writePrepareError(c, &realtime.PrepareError{Status: http.StatusBadRequest, Err: realtime.ErrLegacyProtocol})
+				return
+			}
+
 			h.serveSideband(c, prefix, callID)
+
 			return
 		}
 
@@ -99,6 +104,7 @@ func (h *RealtimeHandlers) Session(prefix string) gin.HandlerFunc {
 			APIKey:    apiKey,
 			ProjectID: projectID,
 			SessionID: sessionID,
+			Legacy:    legacy,
 		})
 		if perr != nil {
 			h.writePrepareError(c, perr)
@@ -179,8 +185,14 @@ func (h *RealtimeHandlers) serveSideband(c *gin.Context, prefix, callID string) 
 
 // runPrepared upgrades the client socket and blocks for the whole session.
 func (h *RealtimeHandlers) runPrepared(c *gin.Context, prepared *realtime.Prepared) {
+	subprotocols := []string{"realtime"}
+	if prepared.Legacy {
+		// Browser beta clients may offer only the beta token; "realtime" still wins when offered.
+		subprotocols = append(subprotocols, middleware.RealtimeBetaSubprotocol)
+	}
+
 	upgrader := websocket.Upgrader{
-		Subprotocols: []string{"realtime"},
+		Subprotocols: subprotocols,
 		CheckOrigin:  func(*http.Request) bool { return true }, // validated by originAllowed
 	}
 

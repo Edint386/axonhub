@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 
+	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/request"
@@ -357,16 +358,22 @@ func TestRealtimeRoutes_RejectsBetaUnknownModelAndMissingKey(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	// The beta and auth rejections stop in the handler and middleware and leave no row. The
-	// unknown model fails candidate selection, which is recorded like a chat request that
-	// finds no channel: one failed row naming the model and the reason.
-	rows, err := h.db.Request.Query().All(h.ctx)
+	// The auth rejection stops in the middleware and leaves no row. The beta request (only
+	// accepted for Bailian Qwen-ASR models) and the unknown model fail candidate selection,
+	// which is recorded like a chat request that finds no channel: one failed row each, naming
+	// the model and the reason.
+	rows, err := h.db.Request.Query().Order(ent.Asc(request.FieldID)).All(h.ctx)
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
+	require.Len(t, rows, 2)
+
 	require.Equal(t, request.StatusFailed, rows[0].Status)
-	require.Equal(t, "no-such-model", rows[0].ModelID)
-	require.Equal(t, "openai/realtime", rows[0].Format)
-	require.Contains(t, string(rows[0].ResponseBody), "no-such-model")
+	require.Equal(t, "gpt-realtime", rows[0].ModelID)
+	require.Contains(t, string(rows[0].ResponseBody), "beta protocol")
+
+	require.Equal(t, request.StatusFailed, rows[1].Status)
+	require.Equal(t, "no-such-model", rows[1].ModelID)
+	require.Equal(t, "openai/realtime", rows[1].Format)
+	require.Contains(t, string(rows[1].ResponseBody), "no-such-model")
 }
 
 func TestRealtimeRoutes_SubprotocolKeyIsLiftedAndEchoed(t *testing.T) {

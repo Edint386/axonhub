@@ -32,8 +32,13 @@ type Output struct {
 
 	// OpenGate is set by the dialect once the upstream session is configured and queued
 	// client frames may be flushed. It is only meaningful while the session gate is closed
-	// (see Dialect.Start).
+	// (see Dialect.Start and CloseGate).
 	OpenGate bool
+
+	// CloseGate closes the session gate before the frames above are written: later client
+	// frames are queued, in order, until the dialect reports OpenGate. Dialects use it to hold
+	// client input until the upstream acknowledged a configuration sent mid-session.
+	CloseGate bool
 
 	// Close asks the session to end with the given close code after the frames above have
 	// been written. Dialects use it for unsupported configurations (e.g. G.711 audio).
@@ -43,6 +48,11 @@ type Output struct {
 	// response.created, false after response.done. The session uses it to decide whether to
 	// wait for usage when the client hangs up mid-response.
 	ResponseInProgress *bool
+
+	// UpstreamFinished is set when the upstream acknowledged the dialect's goodbye frames
+	// (Bailian's session.finished). Dialects that flush pending work on goodbye report it so
+	// the session can stop waiting for that work at teardown.
+	UpstreamFinished bool
 }
 
 // UsageRecord is one billable unit extracted from the upstream stream.
@@ -76,7 +86,9 @@ type CloseRequest struct {
 // All methods must be safe for concurrent use: ClientFrame runs on the client reader
 // goroutine and UpstreamFrame on the upstream reader goroutine.
 type Dialect interface {
-	// Name returns the dialect name used in logs and metadata ("ga", "bailian").
+	// Name returns the dialect name used in logs and metadata ("ga", "bailian", "bailian_asr",
+	// "bailian_asr_legacy"). Every Bailian dialect name starts with "bailian":
+	// Config.SessionDuration uses that prefix for the Bailian session-duration limit.
 	Name() string
 
 	// Start is called once, after the upstream socket is connected and the client socket is

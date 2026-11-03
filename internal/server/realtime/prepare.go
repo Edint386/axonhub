@@ -93,7 +93,15 @@ type SessionRequest struct {
 	APIKey    *ent.APIKey
 	ProjectID int
 	SessionID string
+	// Legacy marks a client speaking the removed OpenAI Realtime beta protocol. It is only
+	// relayed, unchanged, to Bailian Qwen-ASR models (their own protocol has that shape).
+	Legacy bool
 }
+
+// ErrLegacyProtocol answers beta-protocol clients whose model is not served by a Bailian
+// Qwen-ASR channel.
+var ErrLegacyProtocol = errors.New("the Realtime API beta protocol (OpenAI-Beta: realtime=v1) was removed by OpenAI on 2026-05-12; " +
+	"this gateway only accepts it for Bailian Qwen-ASR transcription models. Remove the header and use the GA protocol")
 
 // Prepared is a session whose upstream is connected; call Run after the client upgrade or
 // Abort when the upgrade failed.
@@ -103,7 +111,10 @@ type Prepared struct {
 	Target    biz.RealtimeTarget
 	Actual    string
 	Requested string
-	release   func()
+	// Legacy is set for beta-protocol sessions; the client upgrade then also accepts the beta
+	// subprotocol.
+	Legacy  bool
+	release func()
 }
 
 // Run relays until the session ends and releases every slot afterwards.
@@ -173,14 +184,27 @@ func (r *Relay) prepare(ctx context.Context, req SessionRequest) (*Prepared, *Pr
 		Mode:    biz.RealtimeModeWebSocket,
 		Intent:  req.Intent,
 		Headers: req.Headers,
+		Legacy:  req.Legacy,
 	})
+
+	noCandidate := err == nil && (selection == nil || len(selection.Candidates) == 0)
+
+	// A beta-protocol client whose model is only served by channels that cannot take that
+	// protocol gets the protocol answer, not a misleading "model not found" (the model may well
+	// work for GA clients). Model-access and channel restrictions keep their own answer.
+	if req.Legacy && errors.Is(err, orchestrator.ErrRealtimeLegacyOnly) {
+		r.recordRejected(ctx, req, req.Model, ErrLegacyProtocol)
+
+		return nil, &PrepareError{Status: http.StatusBadRequest, Err: ErrLegacyProtocol}
+	}
+
 	if err != nil {
 		r.recordRejected(ctx, req, req.Model, err)
 
 		return nil, &PrepareError{Status: 0, Err: err}
 	}
 
-	if selection == nil || len(selection.Candidates) == 0 {
+	if noCandidate {
 		err := fmt.Errorf("%w: %s", biz.ErrInvalidModel, req.Model)
 		r.recordRejected(ctx, req, req.Model, err)
 
@@ -298,7 +322,7 @@ func (a *prepareAttempt) try(candidate *orchestrator.ChannelModelsCandidate) (*P
 		return nil, true
 	}
 
-	wsURL := buildSessionURL(target.WSURL, a.req, actual)
+	wsURL := buildSessionURL(target.WSURL, a.req, actual, target.Dialect)
 	upstreamKey := UpstreamKeyForHealth(cred.Bearer, cred.OAuth)
 
 	// The performance record starts here so its first-frame latency covers the handshake.
@@ -374,6 +398,7 @@ func (a *prepareAttempt) try(candidate *orchestrator.ChannelModelsCandidate) (*P
 		Target:    target,
 		Actual:    actual,
 		Requested: a.selection.RequestedModel,
+		Legacy:    a.req.Legacy,
 		release:   releaseSlot,
 	}, false
 }
@@ -381,13 +406,22 @@ func (a *prepareAttempt) try(candidate *orchestrator.ChannelModelsCandidate) (*P
 // checkTarget re-checks what the selector already drops, so a stale candidate cannot be
 // dialed with an intent or model its dialect cannot serve.
 func (a *prepareAttempt) checkTarget(target biz.RealtimeTarget, actual string) error {
-	if target.Dialect == biz.RealtimeDialectBailian {
-		if a.req.Intent == "transcription" {
-			return fmt.Errorf("%w: Bailian channels do not support transcription sessions", ErrUnsupportedModel)
-		}
+	asr := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual)
 
-		if !bailian.Supported(actual) {
-			return fmt.Errorf("%w: %s is not a Qwen-Omni realtime model", ErrUnsupportedModel, actual)
+	if a.req.Legacy && !asr {
+		return ErrLegacyProtocol
+	}
+
+	if target.Dialect == biz.RealtimeDialectBailian {
+		switch {
+		case a.req.Intent == "quicksilver":
+			return fmt.Errorf("%w: intent=quicksilver requires an OpenAI channel", ErrUnsupportedModel)
+		case asr:
+			return nil
+		case a.req.Intent == "transcription":
+			return fmt.Errorf("%w: Bailian Qwen-Omni models do not support transcription sessions; use a Qwen-ASR realtime model", ErrUnsupportedModel)
+		case !bailian.Supported(actual):
+			return fmt.Errorf("%w: %s is not a Qwen-Omni or Qwen-ASR realtime model", ErrUnsupportedModel, actual)
 		}
 
 		return nil
@@ -516,8 +550,15 @@ const persistTimeout = 10 * time.Second
 
 // newDialect picks the translation layer for the target.
 func (r *Relay) newDialect(target biz.RealtimeTarget, requested, actual string, ids *dialect.EventIDs, req SessionRequest) (dialect.Dialect, error) {
-	switch target.Dialect {
-	case biz.RealtimeDialectBailian:
+	switch {
+	case target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual):
+		opts := bailian.ASROptions{RequestedModel: requested, ActualModel: actual, IDs: ids}
+		if req.Legacy {
+			return bailian.NewASRPassthrough(opts), nil
+		}
+
+		return bailian.NewASR(opts)
+	case target.Dialect == biz.RealtimeDialectBailian:
 		return bailian.New(bailian.Options{
 			RequestedModel:    requested,
 			ActualModel:       actual,
@@ -652,7 +693,7 @@ func IsGatewayError(err error) bool {
 	}
 
 	for _, gateway := range []error{
-		ErrTooManySessions, ErrChannelBusy, ErrNoCandidate, ErrUnsupportedModel,
+		ErrTooManySessions, ErrChannelBusy, ErrNoCandidate, ErrUnsupportedModel, ErrLegacyProtocol, ErrDraining,
 		orchestrator.ErrRealtimeRPMExceeded, orchestrator.ErrLocalRPMExhausted,
 	} {
 		if errors.Is(err, gateway) {
@@ -669,20 +710,25 @@ func IsGatewayError(err error) bool {
 }
 
 // buildSessionURL appends the forwarded query to the upstream WebSocket URL: the model is
-// rewritten to the upstream name, transcription sessions carry no model, and every other
-// parameter (intent, call_id) is forwarded unchanged.
-func buildSessionURL(wsURL string, req SessionRequest, actual string) string {
+// rewritten to the upstream name, OpenAI transcription sessions carry no model, and every other
+// parameter (intent, call_id) is forwarded unchanged. Bailian targets always get the model and
+// never the intent.
+func buildSessionURL(wsURL string, req SessionRequest, actual string, target biz.RealtimeDialect) string {
 	query := url.Values{}
 
+	// Bailian selects everything by ?model=: it knows no intent, and a transcription session
+	// must name the ASR model because there is no session.type to pick one later.
+	bailianTarget := target == biz.RealtimeDialectBailian
+
 	for key, values := range req.Query {
-		if key == "model" {
+		if key == "model" || (bailianTarget && key == "intent") {
 			continue
 		}
 
 		query[key] = append([]string(nil), values...)
 	}
 
-	if req.Intent != "transcription" {
+	if req.Intent != "transcription" || bailianTarget {
 		query.Set("model", actual)
 	}
 
