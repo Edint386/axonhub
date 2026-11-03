@@ -617,7 +617,7 @@ const optionalIntInputSchema = z.preprocess((value) => {
 export const pricingModeSchema = z.enum(['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume']);
 export type PricingMode = z.infer<typeof pricingModeSchema>;
 
-export const priceItemCodeSchema = z.enum(['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens']);
+export const priceItemCodeSchema = z.enum(['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens', 'duration_seconds']);
 export type PriceItemCode = z.infer<typeof priceItemCodeSchema>;
 
 export const priceTierSchema = z.object({

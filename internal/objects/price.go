@@ -248,6 +248,10 @@ const (
 	// PriceItemCodeWriteCachedTokens is the price item code for the cached token write.
 	//nolint:gosec // not token.
 	PriceItemCodeWriteCachedTokens PriceItemCode = "prompt_write_cached_tokens"
+
+	// PriceItemCodeDurationSeconds is the price item code for audio/transcription duration.
+	// For this item, Pricing.UsagePerUnit is the price per second (not per million tokens).
+	PriceItemCodeDurationSeconds PriceItemCode = "duration_seconds"
 )
 
 type PromptWriteCacheVariantCode string

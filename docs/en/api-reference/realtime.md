@@ -14,6 +14,7 @@ usage logging. These upstreams are supported:
 | Codex (ChatGPT login) voice | WebRTC call signalling (`POST /v1/live`) + sideband relay | Codex desktop/CLI voice chat. |
 | Alibaba Bailian Qwen-Omni-Realtime (`qwen3.8-omni-flash-realtime`, `qwen3.5-omni-*-realtime`) | WebSocket relay with protocol translation | GA clients work unchanged; the gateway translates the Bailian dialect. |
 | Alibaba Bailian Qwen-ASR realtime (`qwen3-asr-flash-realtime`) | WebSocket transcription sessions | GA transcription clients are translated; beta-protocol clients (Bailian's own protocol) are relayed unchanged. See [Bailian real-time speech recognition](#bailian-real-time-speech-recognition-qwen-asr). |
+| Alibaba Bailian Paraformer realtime (`paraformer-realtime-v2`, `paraformer-realtime-8k-v2`) | WebSocket transcription sessions | GA transcription clients are translated to the Bailian inference protocol (`run-task` / binary PCM / `finish-task`). Beta-protocol clients are rejected. See [Bailian Paraformer realtime](#bailian-paraformer-realtime). |
 
 Audio media for WebRTC calls flows **directly between the client and OpenAI**; the gateway only
 forwards the SDP signalling and relays the sideband WebSocket.
@@ -26,7 +27,7 @@ All routes exist under `/v1` and, for Codex clients whose base URL ends in `/cod
 | Route | Purpose |
 |---|---|
 | `GET /v1/realtime?model=<model>` | WebSocket session (OpenAI GA protocol) |
-| `GET /v1/realtime?intent=transcription[&model=]` | Transcription session; `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL` is used when `model` is absent. A Bailian Qwen-ASR model is always a transcription session, with or without `intent` |
+| `GET /v1/realtime?intent=transcription[&model=]` | Transcription session; `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL` is used when `model` is absent. A Bailian Qwen-ASR or Paraformer realtime model is always a transcription session, with or without `intent` |
 | `GET /v1/realtime?call_id=<id>` | Sideband attach to a WebRTC call created through the gateway |
 | `GET /v1/live/{call_id}` | Codex v3 sideband attach |
 | `POST /v1/live` | Codex WebRTC call create (multipart `sdp` + `session`) |
@@ -38,7 +39,7 @@ Not supported (answered with a JSON 404 explaining why): `POST /v1/realtime/clie
 pass through the gateway), `GET /v1/live?model=` (GPT-Live websocket transport), the removed beta
 `POST /v1/realtime/sessions` and `/v1/realtime/transcription_sessions`, and the removed beta
 protocol (`OpenAI-Beta: realtime=v1` is rejected with 400) for every model except Bailian Qwen-ASR
-models, whose own protocol is that shape.
+models, whose own protocol is that shape. Paraformer realtime models reject the beta protocol.
 
 ### Authentication
 
@@ -167,6 +168,43 @@ On close the gateway sends `session.finish` (unless the client already did) and 
 `AXONHUB_REALTIME_RESPONSE_DRAIN` for Bailian to transcribe the utterance in progress, so its usage
 is recorded.
 
+## Bailian Paraformer realtime
+
+`paraformer-realtime-v2` (16 kHz) and `paraformer-realtime-8k-v2` (8 kHz) on a Bailian channel
+serve transcription-only sessions over Bailian's **inference** WebSocket
+(`wss://…/api-ws/v1/inference`), not the `/realtime` path used by Qwen-Omni and Qwen-ASR. Add
+the model to the Bailian channel's model list. Connect with a GA transcription client:
+
+`/v1/realtime?intent=transcription&model=paraformer-realtime-v2` (or omit `model` and set
+`AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL`, or map the client's transcription model with a
+model association). The gateway:
+
+- Answers `session.created` itself (Paraformer is silent until `run-task`).
+- Accepts 24 kHz PCM as GA requires and resamples to 16 kHz (or 8 kHz for the `8k` model).
+  `audio/pcmu` and `audio/pcma` (G.711, 8 kHz) are accepted and decoded.
+- On the first audio, sends one `run-task` with the merged configuration, holds further audio
+  until `task-started`, then streams **binary** PCM frames. A later `session.update` is answered
+  with an `error` (code `unsupported_on_upstream`); reconnect to change the configuration.
+- Mapped fields: `audio.input.turn_detection` (`server_vad` with `silence_duration_ms` clamped to
+  200–6000 ms, default 1300; `semantic_vad` is echoed as `semantic_vad` with `eagerness`, enables
+  Bailian `semantic_punctuation_enabled`, and folds `eagerness` into `max_sentence_silence` the
+  same way Qwen-ASR does — high 400 / medium 800 / low 1200; `null` is manual mode with a long
+  silence window so `finish-task` usually ends the utterance) and
+  `audio.input.transcription.language` / a single-element `languages` (zh/en/ja/yue/ko/de/fr/ru;
+  unknown codes fall back to automatic detection).
+- Turns each Paraformer sentence (`result-generated`) into GA
+  `conversation.item.input_audio_transcription.delta` / `completed` events. Usage is billed by
+  **duration seconds** (`usage.type` is `duration`); Bailian reports a running total per final
+  sentence and the gateway bills the difference. To turn those seconds into AxonHub cost, add a
+  channel model-price item with `itemCode: duration_seconds` and `usage_per_unit` set to the
+  vendor's **per-second** rate (unlike token items, this rate is not scaled by 1e6).
+- On close, sends `finish-task` and waits up to `AXONHUB_REALTIME_RESPONSE_DRAIN` for
+  `task-finished`.
+
+Beta-protocol clients (`OpenAI-Beta: realtime=v1`) are rejected for Paraformer models (they only
+work for Qwen-ASR).
+
+
 ## Codex voice (Codex desktop / CLI)
 
 1. Point Codex at AxonHub (`base_url = "https://host/v1"` or `https://host/codex`).
@@ -236,13 +274,13 @@ Only the API key that created a call may attach to its sideband.
 
 - Beta protocol clients are rejected except for Bailian Qwen-ASR models; audio tokens are billed
   at the text rate.
-- Bailian Qwen-ASR transcription sessions cannot be reconfigured after the first audio, cannot
+- Bailian Qwen-ASR and Paraformer transcription sessions cannot be reconfigured after the first audio, cannot
   clear the audio buffer, and have no `prompt`/`keywords`/noise reduction.
 - One realtime session holds one channel concurrency slot (`MaxConcurrent`) for its whole duration.
 - No mid-session channel failover; a channel disabled mid-session ends the session at the next check.
 - Call bindings are per process (multi-replica deployments cannot share them).
 - WebRTC calls whose sideband does not pass through the gateway are recorded once with zero usage.
-- Codex voice token usage is not reported by the upstream; duration-billed transcription is unmetered.
+- Codex voice token usage is not reported by the upstream and stays unmetered. Paraformer duration-billed transcription is metered when the channel model price includes a `duration_seconds` item (`usage_per_unit` = price **per second**, not per million tokens); without that item the UsageLog still stores the duration in the request summary but `TotalCost` stays empty.
 - Browser WebRTC posts need `server.cors.enabled` with the page origin allowed.
 - The OpenAI and Codex paths were verified against fake upstream servers only; Bailian was verified
   with a live key.

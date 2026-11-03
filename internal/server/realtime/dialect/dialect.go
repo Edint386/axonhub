@@ -27,6 +27,11 @@ type Output struct {
 	ToUpstream [][]byte
 	ToClient   [][]byte
 
+	// BinaryUpstream sends the ToUpstream frames as binary WebSocket messages instead of text
+	// (upstreams that take raw audio frames, such as Bailian Paraformer). A dialect that needs
+	// both kinds returns them in separate outputs.
+	BinaryUpstream bool
+
 	// Usage carries usage records extracted from the frame (normally from upstream frames).
 	Usage []UsageRecord
 
@@ -87,7 +92,7 @@ type CloseRequest struct {
 // goroutine and UpstreamFrame on the upstream reader goroutine.
 type Dialect interface {
 	// Name returns the dialect name used in logs and metadata ("ga", "bailian", "bailian_asr",
-	// "bailian_asr_legacy"). Every Bailian dialect name starts with "bailian":
+	// "bailian_asr_legacy", "bailian_paraformer"). Every Bailian dialect name starts with "bailian":
 	// Config.SessionDuration uses that prefix for the Bailian session-duration limit.
 	Name() string
 

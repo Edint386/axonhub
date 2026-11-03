@@ -189,6 +189,12 @@ type finishDrainer interface {
 	FinishDrain() bool
 }
 
+// greeter is an optional Dialect extension for upstreams that send nothing on connect: its
+// frames are written to the client before any relaying starts (the GA session.created).
+type greeter interface {
+	Greeting() [][]byte
+}
+
 // gateQueueFrames caps the client frames queued while the gate is closed. The byte budget
 // (twice MaxMessageSize) is the real bound; the frame cap only limits per-frame overhead and is
 // high enough for a client that dumps many seconds of 20 ms audio frames while a mid-session
@@ -323,6 +329,17 @@ func (s *Session) Run(client *websocket.Conn) EndSummary {
 	for _, frame := range toUpstream {
 		if err := s.uw.enqueue(ctx, websocket.TextMessage, frame); err != nil {
 			s.finish(CauseWriteFailed, err, 0, "")
+		}
+	}
+
+	// Upstreams that say nothing until configured (Bailian Paraformer) still owe the client its
+	// GA session.created first.
+	if g, ok := s.dialect.(greeter); ok {
+		for _, frame := range g.Greeting() {
+			if err := s.cw.enqueue(ctx, websocket.TextMessage, frame); err != nil {
+				s.writerFailed(err, true)
+				break
+			}
 		}
 	}
 
@@ -759,8 +776,13 @@ func (s *Session) apply(ctx context.Context, out dialect.Output) bool {
 	// Once the session is ending, client input is not forwarded any more: teardown owns the
 	// upstream writer (response.cancel, dialect goodbye, close frame).
 	if !s.ending() {
+		msgType := websocket.TextMessage
+		if out.BinaryUpstream {
+			msgType = websocket.BinaryMessage
+		}
+
 		for _, frame := range out.ToUpstream {
-			if err := s.uw.enqueue(ctx, websocket.TextMessage, frame); err != nil {
+			if err := s.uw.enqueue(ctx, msgType, frame); err != nil {
 				s.writerFailed(err, false)
 				break
 			}

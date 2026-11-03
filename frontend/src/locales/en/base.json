@@ -243,6 +243,8 @@
   "price.itemCodes.completion_tokens": "Output Tokens",
   "price.itemCodes.prompt_cached_tokens": "Input Cached Tokens",
   "price.itemCodes.prompt_write_cached_tokens": "Write Cached Tokens",
+  "price.itemCodes.duration_seconds": "Duration (seconds)",
+  "price.mode_usage_per_second": "Per Second",
   "price.mode": "Mode",
   "price.mode_flat_fee": "Flat Fee",
   "price.mode_usage_per_unit": "Per 1M Tokens",

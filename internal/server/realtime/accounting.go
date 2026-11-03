@@ -197,10 +197,7 @@ func (a *Accounting) OnUsage(ctx context.Context, rec dialect.UsageRecord) {
 		model = rec.Model
 	}
 
-	usage := rec.Usage
-	if usage == nil {
-		usage = &llm.Usage{}
-	}
+	usage := usageForAccounting(rec)
 
 	req, err := a.p.RequestService.CreateRequest(ctx, a.llmRequest(), a.baseRequest(summary), a.p.Format)
 	if err != nil {
@@ -536,4 +533,22 @@ func UpstreamKeyForHealth(bearer string, oauth bool) string {
 	}
 
 	return strings.TrimSpace(bearer)
+}
+
+// usageForAccounting builds the llm.Usage snapshot written to UsageLog for one
+// dialect UsageRecord. Duration-billed ASR (Paraformer) puts seconds on the
+// record; token-billed ASR may already set Usage. A copy is returned so the
+// shared record pointer is never mutated.
+func usageForAccounting(rec dialect.UsageRecord) *llm.Usage {
+	usage := rec.Usage
+	if usage == nil {
+		usage = &llm.Usage{}
+	} else {
+		copied := *usage
+		usage = &copied
+	}
+	if rec.DurationSeconds > 0 {
+		usage.DurationSeconds = rec.DurationSeconds
+	}
+	return usage
 }

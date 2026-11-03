@@ -323,6 +323,9 @@ func (a *prepareAttempt) try(candidate *orchestrator.ChannelModelsCandidate) (*P
 	}
 
 	wsURL := buildSessionURL(target.WSURL, a.req, actual, target.Dialect)
+	if bailian.SupportedParaformer(actual) {
+		wsURL = bailian.ParaformerWSURL(wsURL)
+	}
 	upstreamKey := UpstreamKeyForHealth(cred.Bearer, cred.OAuth)
 
 	// The performance record starts here so its first-frame latency covers the handshake.
@@ -406,9 +409,11 @@ func (a *prepareAttempt) try(candidate *orchestrator.ChannelModelsCandidate) (*P
 // checkTarget re-checks what the selector already drops, so a stale candidate cannot be
 // dialed with an intent or model its dialect cannot serve.
 func (a *prepareAttempt) checkTarget(target biz.RealtimeTarget, actual string) error {
-	asr := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual)
+	qwenASR := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual)
+	transcription := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedBailianTranscription(actual)
 
-	if a.req.Legacy && !asr {
+	// Legacy beta protocol is only the Qwen-ASR wire shape, not Paraformer inference.
+	if a.req.Legacy && !qwenASR {
 		return ErrLegacyProtocol
 	}
 
@@ -416,12 +421,12 @@ func (a *prepareAttempt) checkTarget(target biz.RealtimeTarget, actual string) e
 		switch {
 		case a.req.Intent == "quicksilver":
 			return fmt.Errorf("%w: intent=quicksilver requires an OpenAI channel", ErrUnsupportedModel)
-		case asr:
+		case transcription:
 			return nil
 		case a.req.Intent == "transcription":
-			return fmt.Errorf("%w: Bailian Qwen-Omni models do not support transcription sessions; use a Qwen-ASR realtime model", ErrUnsupportedModel)
+			return fmt.Errorf("%w: Bailian Qwen-Omni models do not support transcription sessions; use a Qwen-ASR or Paraformer realtime model", ErrUnsupportedModel)
 		case !bailian.Supported(actual):
-			return fmt.Errorf("%w: %s is not a Qwen-Omni or Qwen-ASR realtime model", ErrUnsupportedModel, actual)
+			return fmt.Errorf("%w: %s is not a Qwen-Omni, Qwen-ASR or Paraformer realtime model", ErrUnsupportedModel, actual)
 		}
 
 		return nil
@@ -551,6 +556,8 @@ const persistTimeout = 10 * time.Second
 // newDialect picks the translation layer for the target.
 func (r *Relay) newDialect(target biz.RealtimeTarget, requested, actual string, ids *dialect.EventIDs, req SessionRequest) (dialect.Dialect, error) {
 	switch {
+	case target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedParaformer(actual):
+		return bailian.NewParaformer(bailian.ParaformerOptions{RequestedModel: requested, ActualModel: actual, IDs: ids})
 	case target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual):
 		opts := bailian.ASROptions{RequestedModel: requested, ActualModel: actual, IDs: ids}
 		if req.Legacy {

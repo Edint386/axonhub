@@ -345,9 +345,9 @@ func (s *realtimeCapableSelector) Select(ctx context.Context, req *llm.Request) 
 // WebSocket mode rejects OAuth credentials inside RealtimeTarget (they only support WebRTC calls
 // through the Codex live base); the relay re-checks every condition before dialing.
 //
-// Bailian serves two model families: Qwen-Omni conversations and Qwen-ASR transcription. An ASR
-// model always gets a transcription session (with or without intent=transcription); an omni
-// model never does. Beta-protocol (legacy) clients are only relayed to ASR models.
+// Bailian serves Qwen-Omni conversations plus Qwen-ASR and Paraformer transcription. A
+// transcription model always gets a transcription session (with or without intent=transcription);
+// an omni model never does. Beta-protocol (legacy) clients are only relayed to Qwen-ASR models.
 func realtimeIncapableReason(candidate *ChannelModelsCandidate, mode biz.RealtimeMode, intent, requested string, legacy bool) string {
 	if candidate == nil || candidate.Channel == nil || candidate.Channel.Channel == nil {
 		return "nil candidate"
@@ -361,9 +361,11 @@ func realtimeIncapableReason(candidate *ChannelModelsCandidate, mode biz.Realtim
 	}
 
 	actual := RealtimeActualModel(candidate, requested)
-	asr := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual)
+	qwenASR := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual)
+	transcription := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedBailianTranscription(actual)
 
-	if legacy && !asr {
+	// Legacy beta protocol is only relayed to Qwen-ASR (same wire shape), not Paraformer.
+	if legacy && !qwenASR {
 		return realtimeLegacyReason
 	}
 
@@ -373,12 +375,12 @@ func realtimeIncapableReason(candidate *ChannelModelsCandidate, mode biz.Realtim
 			return "bailian channels only support websocket sessions"
 		case intent == realtimeIntentQuicksilver:
 			return "intent=quicksilver requires an openai channel"
-		case asr:
-			// Qwen-ASR serves transcription sessions.
+		case transcription:
+			// Qwen-ASR and Paraformer serve transcription sessions.
 		case intent == realtimeIntentTranscription:
-			return "bailian qwen-omni models do not support transcription sessions; use a qwen-asr realtime model"
+			return "bailian qwen-omni models do not support transcription sessions; use a qwen-asr or paraformer realtime model"
 		case !bailian.Supported(actual):
-			return "not a qwen-omni or qwen-asr realtime model"
+			return "not a qwen-omni, qwen-asr or paraformer realtime model"
 		}
 	}
 

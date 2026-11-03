@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 
-const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens'] as const;
+const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens', 'duration_seconds'] as const;
 const promptWriteCacheVariantCodes = ['five_min', 'one_hour'] as const;
 type PricingMode = 'flat_fee' | 'usage_per_unit' | 'usage_tiered' | 'usage_volume';
 
@@ -261,7 +261,7 @@ const PriceItemRow = memo(function PriceItemRow({
                   </FormControl>
                   <SelectContent>
                     <SelectItem value='flat_fee'>{t('price.mode_flat_fee')}</SelectItem>
-                    <SelectItem value='usage_per_unit'>{t('price.mode_usage_per_unit')}</SelectItem>
+                    <SelectItem value='usage_per_unit'>{itemCode === 'duration_seconds' ? t('price.mode_usage_per_second') : t('price.mode_usage_per_unit')}</SelectItem>
                     <SelectItem value='usage_tiered'>{t('price.mode_usage_tiered')}</SelectItem>
                     <SelectItem value='usage_volume'>{t('price.mode_usage_volume')}</SelectItem>
                   </SelectContent>

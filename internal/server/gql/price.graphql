@@ -11,6 +11,7 @@ enum PriceItemCode {
   completion_tokens
   prompt_cached_tokens
   prompt_write_cached_tokens
+  duration_seconds
 }
 
 enum PromptWriteCacheVariantCode {

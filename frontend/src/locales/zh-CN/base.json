@@ -91,6 +91,8 @@
   "price.itemCodes.completion_tokens": "输出 Token",
   "price.itemCodes.prompt_cached_tokens": "输入缓存 Token",
   "price.itemCodes.prompt_write_cached_tokens": "写入缓存 Token",
+  "price.itemCodes.duration_seconds": "时长（秒）",
+  "price.mode_usage_per_second": "每秒",
   "price.mode": "计费模式",
   "price.mode_flat_fee": "固定费用",
   "price.mode_usage_per_unit": "每百万 Token",

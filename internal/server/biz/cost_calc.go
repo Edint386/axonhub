@@ -1,6 +1,7 @@
 package biz
 
 import (
+	"math"
 	"slices"
 	"time"
 
@@ -11,14 +12,25 @@ import (
 )
 
 func unitsInMillionTokens(units int64) decimal.Decimal {
-	if units <= 0 {
+	return scaleUnits(units, 1_000_000)
+}
+
+// scaleUnits converts a raw quantity into billable units by dividing by unitDivisor.
+// Token price items use unitDivisor=1_000_000 (price per million tokens).
+// Duration price items use unitDivisor=1 (price per second).
+func scaleUnits(units, unitDivisor int64) decimal.Decimal {
+	if units <= 0 || unitDivisor <= 0 {
 		return decimal.Zero
 	}
 
-	return decimal.NewFromInt(units).Div(decimal.NewFromInt(1_000_000))
+	return decimal.NewFromInt(units).Div(decimal.NewFromInt(unitDivisor))
 }
 
 func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostItem, decimal.Decimal) {
+	return computeItemSubtotalScaled(quantity, pricing, 1_000_000)
+}
+
+func computeItemSubtotalScaled(quantity int64, pricing objects.Pricing, unitDivisor int64) (objects.CostItem, decimal.Decimal) {
 	item := objects.CostItem{
 		Quantity: quantity,
 	}
@@ -34,7 +46,7 @@ func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostI
 		return item, decimal.Zero
 	case objects.PricingModeUsagePerUnit:
 		if pricing.UsagePerUnit != nil {
-			sub := pricing.UsagePerUnit.Mul(unitsInMillionTokens(quantity))
+			sub := pricing.UsagePerUnit.Mul(scaleUnits(quantity, unitDivisor))
 			item.Subtotal = sub
 
 			return item, sub
@@ -71,7 +83,7 @@ func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostI
 					continue
 				}
 
-				sub := tier.PricePerUnit.Mul(unitsInMillionTokens(tierUnits))
+				sub := tier.PricePerUnit.Mul(scaleUnits(tierUnits, unitDivisor))
 				total = total.Add(sub)
 				item.TierBreakdown = append(item.TierBreakdown, objects.TierCost{
 					UpTo:     tier.UpTo,
@@ -109,7 +121,7 @@ func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostI
 
 			if matchedIdx >= 0 {
 				matchedTier := pricing.UsageTiered.Tiers[matchedIdx]
-				sub := matchedTier.PricePerUnit.Mul(unitsInMillionTokens(quantity))
+				sub := matchedTier.PricePerUnit.Mul(scaleUnits(quantity, unitDivisor))
 				item.Subtotal = sub
 				item.TierBreakdown = []objects.TierCost{
 					{
@@ -129,6 +141,21 @@ func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostI
 	default:
 		return item, decimal.Zero
 	}
+}
+
+// durationSecondsQuantity rounds Bailian-reported duration to whole billable seconds.
+// Any positive fraction below 0.5 still bills 1 second so tiny clips are not free.
+func durationSecondsQuantity(seconds float64) int64 {
+	if seconds <= 0 {
+		return 0
+	}
+
+	q := int64(math.Round(seconds))
+	if q == 0 {
+		return 1
+	}
+
+	return q
 }
 
 func getUpToOrZero(v *int64) int64 {
@@ -239,6 +266,14 @@ func computeUsageCostWithItems(usage *llm.Usage, priceItems []objects.ModelPrice
 				// Fallback to shared WriteCachedTokens if no variants present
 				quantity = usage.PromptTokensDetails.WriteCachedTokens
 			}
+		case objects.PriceItemCodeDurationSeconds:
+			quantity = durationSecondsQuantity(usage.DurationSeconds)
+			item, sub := computeItemSubtotalScaled(quantity, it.Pricing, 1)
+			item.ItemCode = it.ItemCode
+			items = append(items, item)
+			total = total.Add(sub)
+
+			continue
 		default:
 			quantity = 0
 		}

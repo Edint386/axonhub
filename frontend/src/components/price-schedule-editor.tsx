@@ -21,7 +21,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 60 }, (_, i) => i);
 
 type PricingMode = 'flat_fee' | 'usage_per_unit' | 'usage_tiered' | 'usage_volume';
-const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens'] as const;
+const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens', 'duration_seconds'] as const;
 
 type DateRangeValue = { start: string; end: string };
 
@@ -984,7 +984,7 @@ const OverrideItemRow = memo(function OverrideItemRow({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value='flat_fee'>{t('price.mode_flat_fee')}</SelectItem>
-                  <SelectItem value='usage_per_unit'>{t('price.mode_usage_per_unit')}</SelectItem>
+                  <SelectItem value='usage_per_unit'>{currentCode === 'duration_seconds' ? t('price.mode_usage_per_second') : t('price.mode_usage_per_unit')}</SelectItem>
                   <SelectItem value='usage_tiered'>{t('price.mode_usage_tiered')}</SelectItem>
                   <SelectItem value='usage_volume'>{t('price.mode_usage_volume')}</SelectItem>
                 </SelectContent>
