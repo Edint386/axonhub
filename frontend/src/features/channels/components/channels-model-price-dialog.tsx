@@ -1211,6 +1211,7 @@ export function ChannelsModelPriceDialog() {
                   </div>
                   <div className='min-w-0'>
                     <FormLabel className='text-sm'>{t('price.apply.multiplier')}</FormLabel>
+                    {/* custom: the multiplier is saved with the prices, so allow any precision; step='0.01' blocks saving 0.875 */}
                     <Input
                       type='number'
                       value={multiplier}
@@ -1219,7 +1220,7 @@ export function ChannelsModelPriceDialog() {
                         setMultiplier(Number.isFinite(value) ? Math.max(0, value) : 0);
                       }}
                       className='h-8'
-                      step='0.01'
+                      step='any'
                       min='0'
                     />
                   </div>

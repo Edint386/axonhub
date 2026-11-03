@@ -35,7 +35,23 @@ test('price dialog reads, exports, and saves through the multiplier contract', (
 test('provider prices are applied as-is because the backend applies the multiplier', () => {
   const dialog = read('features/channels/components/channels-model-price-dialog.tsx');
 
-  assert.doesNotMatch(dialog, /\* multiplier\)/);
+  assert.doesNotMatch(dialog, /\* multiplier\b/);
+  assert.doesNotMatch(dialog, /\bmultiplier \*/);
   assert.doesNotMatch(dialog, /buildItemsFromProviderModel\([^)]*multiplier/);
   assert.doesNotMatch(dialog, /mergeItemsWithProviderCost\([^)]*multiplier/);
+});
+
+test('the persisted multiplier input accepts any precision', () => {
+  const dialog = read('features/channels/components/channels-model-price-dialog.tsx');
+
+  // The input sits inside the price form, so step='0.01' makes the browser refuse to save a multiplier such as 0.875.
+  assert.match(dialog, /value=\{multiplier\}(?:(?!\/>)[\s\S])*step='any'/);
+});
+
+test('the saved multiplier is only reset when the dialog closes', () => {
+  const dialog = read('features/channels/components/channels-model-price-dialog.tsx');
+
+  // Upstream also resets it in the provider-catalog effect, so a late catalog load would show 1 and the next save would store 1.
+  assert.equal(dialog.match(/setMultiplier\(1\)/g)?.length ?? 0, 1);
+  assert.match(dialog, /const handleClose = useCallback\(\(\) => \{(?:(?!useCallback)[\s\S])*?setMultiplier\(1\);/);
 });

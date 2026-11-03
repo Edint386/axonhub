@@ -72,6 +72,7 @@
 | `internal/server/orchestrator/pass_through.go` `responsesTransportAdaptationEnabled` | `PassThroughBodyBlocked` 时返回 false | `TestResponsesTransportAdaptationHonoursPassThroughBodyBlocked` |
 | `internal/server/biz/channel_llm.go` `buildChannel` | `ch.setModelPriceMultiplier(c.ModelPriceMultiplier)`（渠道价格倍率，倍率 0 = 免费） | `TestUsageCost_ZeroChannelMultiplierSurvivesChannelBuild` |
 | `internal/server/biz/usage_log.go` 模型库价格兜底 | 兜底计费也乘渠道倍率 | `TestUsageCost_ModelLibraryFallbackAppliesChannelMultiplier` |
+| `frontend/src/features/channels/components/channels-model-price-dialog.tsx` | 倍率随价格一起存到渠道（打开时 `setMultiplier(currentPrices.multiplier)`，保存时带 `multiplier`），计费时由后端乘；只在关闭弹窗时把倍率重置为 1（上游在模型库数据加载时也会重置，会冲掉已保存的倍率）；从模型库填价格只乘上游的汇率（#2662），不乘倍率；倍率输入框 `step='any'`（`0.01` 会让浏览器拒绝保存 0.875 这类倍率） | `frontend/src/features/channels/data/channel-price-multiplier.test.mjs` |
 | `internal/server/routes.go` `SetupRoutes` | `registerRealtimeRoutes(server, handlers, services)`（实时语音路由，`// fork:`） | `TestSetupRoutes_RegistersRealtimeRoutes`（`internal/server/realtime_routes_fork_test.go`） |
 | `internal/server/biz/channel_llm.go` `buildNonDefaultEndpointOutbound` switch 开头 | `case llm.APIFormatOpenAIRealtime.String(): return newRealtimeEndpointOutbound(), nil`（没有它带 `openai/realtime` 端点的渠道会整个被丢弃） | `TestRealtimeEndpoint_ForkHookInBuildNonDefaultEndpointOutbound` |
 | `frontend/src/features/channels/data/schema.ts` `configurableChannelEndpointApiFormats` | `'openai/realtime'`（端点对话框能选它） | `frontend/src/features/realtime/realtime-endpoint.test.mjs` |
