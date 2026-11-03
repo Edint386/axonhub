@@ -112,7 +112,8 @@ with client.realtime.connect(model="qwen3.5-omni-plus-realtime") as conn:
 - 在第一段音频时发送一次带合并配置的 `run-task`，在收到 `task-started` 之前压住后续音频，然后以**二进制** PCM 帧推流。音频开始后再发 `session.update` 会收到 `error`（code `unsupported_on_upstream`），要改配置请重连。
 - 会翻译的字段：`audio.input.turn_detection`（`server_vad` 的 `silence_duration_ms`，限制在 200–6000 毫秒，默认 1300；`semantic_vad` 会原样回显（含 `eagerness`），并打开百炼 `semantic_punctuation_enabled`，同时按 Qwen-ASR 同样的规则把 `eagerness` 折成 `max_sentence_silence`——high 400 / medium 800 / low 1200；`null` 是手动模式，静音窗口拉满，通常靠 `finish-task` 结束一句）以及 `audio.input.transcription.language` / 只有一个元素的 `languages`（zh/en/ja/yue/ko/de/fr/ru；不认识的代码改为自动识别）。
 - 把每句 Paraformer 结果（`result-generated`）转成正式版的 `conversation.item.input_audio_transcription.delta` / `completed`。用量按**时长秒**计费（`usage.type` 为 `duration`）；百炼在每句最终结果上报累计秒数，网关按差值记账。要让这些秒数进入 AxonHub 成本核算，请在渠道模型价格里增加 `itemCode: duration_seconds` 的计费项，并将 `usage_per_unit` 设为厂商的**每秒单价**（与 token 计费项不同，不会再按百万缩放）。
-- 关闭时发送 `finish-task`，并最多等待 `AXONHUB_REALTIME_RESPONSE_DRAIN` 等 `task-finished`。
+- `input_audio_buffer.commit` 会**立刻**结束正在说的那句话：网关发送 `finish-task`，百炼不用再等 `max_sentence_silence` 那段静音就给出整句结果，`completed` 大约一次往返之后就到。在 `task-finished` 之前，客户端发来的帧会被网关先压住；之后的下一段音频会在同一个连接上开一个新任务（网关重新发 `run-task`，并把这段音频压到 `task-started` 之后）。自己做了语音检测（VAD）的客户端，应该在说话人停下时直接发 commit，不用再推一段静音。距离上一次 commit 之后没有新音频的 commit 会收到 `input_audio_buffer_commit_empty`。上一个任务结束后 60 秒内没有开新任务，百炼会断开连接，会话也随之结束。
+- 关闭时发送 `finish-task`（如果 commit 的 finish 已经在途就不再重复发送），并最多等待 `AXONHUB_REALTIME_RESPONSE_DRAIN` 等 `task-finished`；没有任务在跑的会话会立刻关闭。客户端自己先关闭连接的话，收不到最后一条 `completed`（这句话照样计费），所以应该先 commit、等到 `completed` 再关闭。
 
 Paraformer 模型拒绝 beta 协议客户端（`OpenAI-Beta: realtime=v1`）；beta 只对 Qwen-ASR 开放。
 

@@ -198,8 +198,19 @@ model association). The gateway:
   sentence and the gateway bills the difference. To turn those seconds into AxonHub cost, add a
   channel model-price item with `itemCode: duration_seconds` and `usage_per_unit` set to the
   vendor's **per-second** rate (unlike token items, this rate is not scaled by 1e6).
-- On close, sends `finish-task` and waits up to `AXONHUB_REALTIME_RESPONSE_DRAIN` for
-  `task-finished`.
+- `input_audio_buffer.commit` ends the sentence in progress **now**: the gateway sends
+  `finish-task`, so Paraformer finalises the sentence without waiting for
+  `max_sentence_silence` of trailing silence, and the `completed` event follows within about one
+  round trip. Client frames are held until `task-finished`; the next audio then starts a new task
+  on the same connection (the gateway sends `run-task` again and holds that audio until
+  `task-started`). A client with its own voice activity detection should send a commit as soon
+  as the speaker stops instead of streaming trailing silence. A commit with no audio since the
+  previous one is answered with `input_audio_buffer_commit_empty`. Bailian closes the
+  connection when no new task starts within 60 s of the previous one, which ends the session.
+- On close, sends `finish-task` (unless a commit's finish is already in flight) and waits up to
+  `AXONHUB_REALTIME_RESPONSE_DRAIN` for `task-finished`; a session with no task running closes at
+  once. A client that closes its own socket does not receive the last `completed` event (the
+  sentence is still billed), so commit and wait for `completed` before closing.
 
 Beta-protocol clients (`OpenAI-Beta: realtime=v1`) are rejected for Paraformer models (they only
 work for Qwen-ASR).

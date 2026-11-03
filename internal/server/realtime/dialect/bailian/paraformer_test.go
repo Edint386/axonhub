@@ -271,3 +271,98 @@ func TestParaformer_ServerVADClearsSemantic(t *testing.T) {
 	require.False(t, run.Get("payload.parameters.semantic_punctuation_enabled").Bool())
 	require.EqualValues(t, 900, run.Get("payload.parameters.max_sentence_silence").Int())
 }
+
+func TestParaformer_CommitEndsTheSentenceNowAndTheNextAudioStartsANewTask(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+
+	run1 := gjson.ParseBytes(client(t, d, asrAppend(2400)).ToUpstream[0])
+	task1 := run1.Get("header.task_id").String()
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	_ = upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"text":"帮我看","sentence_end":false}}}}`)
+
+	// commit: finish-task right away, client frames held until Paraformer is done.
+	out := client(t, d, `{"event_id":"c1","type":"input_audio_buffer.commit"}`)
+	require.True(t, out.CloseGate)
+	require.False(t, out.BinaryUpstream)
+
+	finish := single(t, out.ToUpstream)
+	require.Equal(t, "finish-task", finish.Get("header.action").String())
+	require.Equal(t, task1, finish.Get("header.task_id").String())
+
+	// Paraformer finalises the cut sentence, then ends the task.
+	final := upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"end_time":1200,"text":"帮我看一下。","sentence_end":true}},"usage":{"duration":2}}}`)
+	require.Contains(t, eventTypes(final.ToClient), "conversation.item.input_audio_transcription.completed")
+	require.InDelta(t, 2, final.Usage[0].DurationSeconds, 1e-9)
+
+	done := upstream(t, d, `{"header":{"event":"task-finished"},"payload":{}}`)
+	require.True(t, done.OpenGate, "held client frames are released")
+	require.False(t, done.UpstreamFinished, "the session goes on")
+	require.Empty(t, done.ToClient)
+
+	// No task now: closing would have nothing to finish or wait for.
+	require.Empty(t, d.CloseUpstream())
+	require.False(t, d.FinishDrain())
+
+	d.closing = false // the session did not actually close in this test
+
+	// The next audio starts a new task with a new id; usage counts from zero again.
+	out = client(t, d, asrAppend(2400))
+	require.True(t, out.CloseGate)
+
+	run2 := single(t, out.ToUpstream)
+	require.Equal(t, "run-task", run2.Get("header.action").String())
+	require.NotEqual(t, task1, run2.Get("header.task_id").String())
+
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	again := upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"end_time":800,"text":"好的。","sentence_end":true}},"usage":{"duration":1}}}`)
+	require.InDelta(t, 1, again.Usage[0].DurationSeconds, 1e-9)
+}
+
+func TestParaformer_CommitWithoutAudioIsAnEmptyCommit(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+
+	out := client(t, d, `{"event_id":"c0","type":"input_audio_buffer.commit"}`)
+	require.Empty(t, out.ToUpstream)
+	require.Equal(t, "input_audio_buffer_commit_empty", single(t, out.ToClient).Get("error.code").String())
+
+	// A second commit while the first is still finishing is empty as well.
+	_ = client(t, d, asrAppend(2400))
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	require.NotEmpty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
+	require.Empty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
+}
+
+func TestParaformer_CloseWhileACommitFinishesWaitsForIt(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, asrAppend(2400))
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	_ = client(t, d, `{"type":"input_audio_buffer.commit"}`)
+
+	// The commit's finish-task is already out: no second one, but teardown still waits.
+	require.Empty(t, d.CloseUpstream())
+	require.True(t, d.FinishDrain())
+
+	out := upstream(t, d, `{"header":{"event":"task-finished"},"payload":{}}`)
+	require.True(t, out.UpstreamFinished, "ends the teardown drain")
+	require.False(t, out.OpenGate)
+}
+
+func TestParaformer_CloseWithoutAnyAudioDoesNotWait(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+
+	require.Empty(t, d.CloseUpstream())
+	require.False(t, d.FinishDrain())
+}
+
+func TestParaformer_CommitClosesAnOpenSentenceParaformerDidNotFinalise(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, asrAppend(2400))
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	_ = upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"text":"帮我","sentence_end":false}}}}`)
+	_ = client(t, d, `{"type":"input_audio_buffer.commit"}`)
+
+	done := upstream(t, d, `{"header":{"event":"task-finished"},"payload":{}}`)
+	types := eventTypes(done.ToClient)
+	require.Equal(t, []string{"input_audio_buffer.committed", "conversation.item.input_audio_transcription.completed", "conversation.item.done"}, types)
+	require.Equal(t, "帮我", gjson.ParseBytes(done.ToClient[1]).Get("transcript").String())
+}

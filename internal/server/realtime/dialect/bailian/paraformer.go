@@ -113,10 +113,19 @@ type ParaformerDialect struct {
 	resampler *audio.Resampler
 	g711Up    *audio.Resampler // 8 kHz PCM → model rate when needed
 
-	started  bool // run-task sent
+	started  bool // run-task sent for the current task
 	awaiting bool // waiting for task-started
 	pending  [][]byte
 	finished bool
+	// audioSent is set once the current task received audio; a commit needs something to end.
+	audioSent bool
+	// committing is set while a client commit's finish-task waits for task-finished; the next
+	// audio then starts a new task on the same connection.
+	committing bool
+	// closing is set once teardown asked for the goodbye; drain reports whether a finish-task is
+	// still outstanding for the session's last task.
+	closing bool
+	drain   bool
 
 	lastDuration int64 // cumulative usage.duration from last final
 
@@ -181,20 +190,43 @@ func (d *ParaformerDialect) Greeting() [][]byte {
 
 func (d *ParaformerDialect) Start() ([][]byte, bool) { return nil, false }
 
+// CloseUpstream sends finish-task for a running task so Paraformer finalises (and bills) the
+// sentence in progress. A commit's finish-task already in flight is waited for instead of
+// being sent twice; with no task (none started yet, or the last one ended by a commit) there
+// is nothing to finish.
 func (d *ParaformerDialect) CloseUpstream() [][]byte {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if !d.started || d.finished {
+
+	d.closing = true
+
+	switch {
+	case d.committing:
+		d.drain = true
 		return nil
+	case !d.started || d.finished:
+		d.drain = false
+		return nil
+	default:
+		d.drain = true
+		return [][]byte{d.finishTaskFrame()}
 	}
-	return [][]byte{d.finishTaskFrame()}
 }
 
-func (d *ParaformerDialect) FinishDrain() bool { return true }
+// FinishDrain reports whether teardown must wait for task-finished: only while a finish-task
+// is outstanding, so an idle session closes at once.
+func (d *ParaformerDialect) FinishDrain() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.drain
+}
 
 func (d *ParaformerDialect) CloseGrace() time.Duration { return 2 * time.Second }
 
-func (d *ParaformerDialect) GateTimeout() time.Duration { return 5 * time.Second }
+// GateTimeout bounds the waits for task-started and for a commit's task-finished; the
+// Paraformer endpoint is in Beijing, so cross-border round trips get the default bound.
+func (d *ParaformerDialect) GateTimeout() time.Duration { return 10 * time.Second }
 
 func (d *ParaformerDialect) synth(event map[string]any) []byte {
 	event["event_id"] = d.ids.Next()
@@ -223,13 +255,17 @@ func (d *ParaformerDialect) ClientFrame(frame []byte) (dialect.Output, error) {
 	case "input_audio_buffer.append":
 		return d.clientAppend(ev, clientEventID), nil
 	case "input_audio_buffer.commit":
-		// Paraformer has no commit; VAD / finish-task ends utterances. Empty commits in
-		// server_vad with nothing open match GA's empty-commit error.
-		if !d.cfg.manual && !d.sentenceOpen {
+		// Paraformer has no commit: finish-task makes it finalise the sentence in progress now,
+		// without waiting for max_sentence_silence of trailing silence. Client frames are held
+		// until task-finished; the next audio then starts a new task on the same connection.
+		if !d.started || d.awaiting || d.committing || !d.audioSent {
 			return dialect.Output{ToClient: [][]byte{d.clientError("input_audio_buffer_commit_empty",
-				"No speech is in progress; server_vad commits utterances by itself.", "", clientEventID)}}, nil
+				"Input audio buffer is empty: no audio was sent since the last commit.", "", clientEventID)}}, nil
 		}
-		return dialect.Output{}, nil
+
+		d.committing = true
+
+		return dialect.Output{ToUpstream: [][]byte{d.finishTaskFrame()}, CloseGate: true}, nil
 	case "input_audio_buffer.clear":
 		return dialect.Output{ToClient: [][]byte{d.clientError("unsupported_on_upstream",
 			"input_audio_buffer.clear is not supported by this transcription upstream; the buffered audio is still transcribed.",
@@ -377,6 +413,8 @@ func (d *ParaformerDialect) clientAppend(ev gjson.Result, clientEventID string) 
 		return dialect.Output{}
 	}
 
+	d.audioSent = true
+
 	if !d.started {
 		d.started = true
 		d.awaiting = true
@@ -476,13 +514,55 @@ func (d *ParaformerDialect) UpstreamFrame(frame []byte) (dialect.Output, error) 
 	case "result-generated":
 		return d.resultGenerated(ev), nil
 	case "task-finished":
+		if d.committing && !d.closing {
+			return d.commitFinished(), nil
+		}
+
+		d.committing = false
 		d.finished = true
+
 		return dialect.Output{UpstreamFinished: true}, nil
 	case "task-failed":
 		return d.taskFailed(ev), nil
 	default:
 		return dialect.Output{}, nil
 	}
+}
+
+// commitFinished ends the task a client commit finished: the next audio starts a new task
+// (new task_id, usage counted from zero) and the held client frames are released.
+func (d *ParaformerDialect) commitFinished() dialect.Output {
+	d.committing = false
+	d.started = false
+	d.audioSent = false
+	d.taskID = uuid.NewString()
+	d.lastDuration = 0
+
+	out := dialect.Output{OpenGate: true}
+
+	// Paraformer finalises the sentence on finish-task; should it not have, close the item
+	// with the last hypothesis so the client is not left with an open turn.
+	if d.sentenceOpen {
+		id := d.current
+
+		text := ""
+		if tr := d.trackers[id]; tr != nil {
+			text = tr.prev
+		}
+
+		out.ToClient = append(out.ToClient,
+			d.synth(map[string]any{"type": "input_audio_buffer.committed", "item_id": id, "previous_item_id": nullable(d.itemPrev[id])}),
+			d.synth(map[string]any{"type": "conversation.item.input_audio_transcription.completed", "item_id": id, "content_index": 0, "transcript": text, "usage": map[string]any{"type": "duration", "seconds": 0}}),
+			d.synth(map[string]any{"type": "conversation.item.done", "previous_item_id": nullable(d.itemPrev[id]), "item": userAudioItem(id, "completed", text)}),
+		)
+
+		d.lastCommitted = id
+		d.current = ""
+		d.sentenceOpen = false
+		delete(d.trackers, id)
+	}
+
+	return out
 }
 
 func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
