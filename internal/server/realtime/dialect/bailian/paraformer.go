@@ -51,7 +51,7 @@ func ParaformerWSURL(wsURL string) string {
 		base, query := u[:i], u[i+1:]
 		u = base
 		kept := make([]string, 0)
-		for _, part := range strings.Split(query, "&") {
+		for part := range strings.SplitSeq(query, "&") {
 			if part == "" || strings.HasPrefix(part, "model=") {
 				continue
 			}
