@@ -345,6 +345,8 @@ func TestParaformer_CloseWhileACommitFinishesWaitsForIt(t *testing.T) {
 	out := upstream(t, d, `{"header":{"event":"task-finished"},"payload":{}}`)
 	require.True(t, out.UpstreamFinished, "ends the teardown drain")
 	require.False(t, out.OpenGate)
+	// The commit is still answered while teardown drains (the client writer may be open).
+	require.Equal(t, "input_audio_buffer.committed", eventTypes(out.ToClient)[0])
 }
 
 func TestParaformer_CloseWithoutAnyAudioDoesNotWait(t *testing.T) {
@@ -365,4 +367,175 @@ func TestParaformer_CommitClosesAnOpenSentenceParaformerDidNotFinalise(t *testin
 	types := eventTypes(done.ToClient)
 	require.Equal(t, []string{"input_audio_buffer.committed", "conversation.item.input_audio_transcription.completed", "conversation.item.done"}, types)
 	require.Equal(t, "帮我", gjson.ParseBytes(done.ToClient[1]).Get("transcript").String())
+}
+
+func TestParaformer_CommitOfSilenceGetsAnEmptyItem(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, asrAppend(2400))
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+
+	out := client(t, d, `{"event_id":"c1","type":"input_audio_buffer.commit"}`)
+	require.Equal(t, "finish-task", single(t, out.ToUpstream).Get("header.action").String())
+
+	// Live Bailian ends a silent task with task-finished and no result-generated at all.
+	done := upstream(t, d, `{"header":{"event":"task-finished"},"payload":{"output":{}}}`)
+	require.True(t, done.OpenGate)
+	require.Equal(t, []string{
+		"input_audio_buffer.committed",
+		"conversation.item.added",
+		"conversation.item.input_audio_transcription.completed",
+		"conversation.item.done",
+	}, eventTypes(done.ToClient))
+
+	committed := gjson.ParseBytes(done.ToClient[0])
+	id := committed.Get("item_id").String()
+	require.NotEmpty(t, id)
+	require.Equal(t, gjson.Null, committed.Get("previous_item_id").Type)
+
+	completed := gjson.ParseBytes(done.ToClient[2])
+	require.Equal(t, id, completed.Get("item_id").String())
+	require.True(t, completed.Get("transcript").Exists())
+	require.Empty(t, completed.Get("transcript").String())
+	require.Equal(t, "duration", completed.Get("usage.type").String())
+	require.Equal(t, id, gjson.ParseBytes(done.ToClient[3]).Get("item.id").String())
+	require.Empty(t, done.Usage)
+
+	// The next sentence links to the empty item and gets its own id.
+	_ = client(t, d, asrAppend(2400))
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	next := upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"text":"好","sentence_end":false}}}}`)
+	added := gjson.ParseBytes(next.ToClient[1])
+	require.Equal(t, "conversation.item.added", added.Get("type").String())
+	require.Equal(t, id, added.Get("previous_item_id").String())
+	require.NotEqual(t, id, added.Get("item.id").String())
+}
+
+func TestParaformer_CommitAfterParaformerEndedTheSentence(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, asrAppend(2400))
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	final := upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"end_time":900,"text":"你好。","sentence_end":true}},"usage":{"duration":1}}}`)
+	first := gjson.ParseBytes(final.ToClient[len(final.ToClient)-1]).Get("item.id").String()
+
+	// Paraformer's own VAD committed the buffer; no audio since → empty commit, task untouched.
+	out := client(t, d, `{"event_id":"c1","type":"input_audio_buffer.commit"}`)
+	require.Empty(t, out.ToUpstream)
+	require.False(t, out.CloseGate)
+	require.Equal(t, "input_audio_buffer_commit_empty", single(t, out.ToClient).Get("error.code").String())
+	require.Equal(t, "c1", single(t, out.ToClient).Get("error.event_id").String())
+
+	// Trailing silence afterwards is a buffer like any other: committed as an empty item.
+	_ = client(t, d, asrAppend(4800))
+	out = client(t, d, `{"type":"input_audio_buffer.commit"}`)
+	require.Equal(t, "finish-task", single(t, out.ToUpstream).Get("header.action").String())
+
+	done := upstream(t, d, `{"header":{"event":"task-finished"},"payload":{"output":{}}}`)
+	require.Equal(t, "input_audio_buffer.committed", eventTypes(done.ToClient)[0])
+	require.Equal(t, first, gjson.ParseBytes(done.ToClient[0]).Get("previous_item_id").String())
+	require.Empty(t, gjson.ParseBytes(done.ToClient[2]).Get("transcript").String())
+}
+
+func TestParaformer_CommitUnder100msIsEmpty(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, asrAppend(1200)) // 50 ms
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+
+	out := client(t, d, `{"type":"input_audio_buffer.commit"}`)
+	require.Empty(t, out.ToUpstream)
+	errEvent := single(t, out.ToClient)
+	require.Equal(t, "input_audio_buffer_commit_empty", errEvent.Get("error.code").String())
+	require.Contains(t, errEvent.Get("error.message").String(), "50.00ms")
+
+	_ = client(t, d, asrAppend(1200)) // 100 ms in all
+	require.NotEmpty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
+}
+
+func TestParaformer_CommitCountsG711Duration(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, `{"type":"session.update","session":{"audio":{"input":{"format":{"type":"audio/pcma"}}}}}`)
+
+	alaw := func(n int) string { // n bytes = n samples at 8 kHz
+		return `{"type":"input_audio_buffer.append","audio":"` + base64.StdEncoding.EncodeToString(make([]byte, n)) + `"}`
+	}
+
+	_ = client(t, d, alaw(400)) // 50 ms
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	require.Empty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
+
+	_ = client(t, d, alaw(400)) // 100 ms in all
+	require.NotEmpty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
+}
+
+func TestParaformer_LateFinalKeepsAudioSentPastTheSentence(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2") // server_vad, 1300 ms silence
+	_ = client(t, d, asrAppend(72000))                  // 3 s of speech A
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	_ = upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"text":"你好","sentence_end":false}}}}`)
+
+	// A 1.5 s pause and 1 s of speech B are already on their way when A's final arrives.
+	_ = client(t, d, asrAppend(36000))
+	_ = client(t, d, asrAppend(24000))
+	_ = upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"end_time":3000,"text":"你好。","sentence_end":true}},"usage":{"duration":3}}}`)
+
+	// OpenAI's buffer still holds the audio past 3000+1300 ms: the commit must finish B.
+	_ = client(t, d, asrAppend(960))
+	out := client(t, d, `{"type":"input_audio_buffer.commit"}`)
+	require.Empty(t, out.ToClient)
+	require.Equal(t, "finish-task", single(t, out.ToUpstream).Get("header.action").String())
+}
+
+func TestParaformer_CommitOfExactly100msInSmallChunks(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	for range 12 {
+		_ = client(t, d, asrAppend(200)) // 12 × 8.33 ms
+		if !d.started || !d.awaiting {
+			continue
+		}
+		_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	}
+
+	require.NotEmpty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
+}
+
+func TestParaformer_TimesStayOnTheSessionTimelineAcrossCommits(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, asrAppend(24000)) // task 1: 1 s
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	_ = client(t, d, `{"type":"input_audio_buffer.commit"}`)
+	_ = upstream(t, d, `{"header":{"event":"task-finished"},"payload":{"output":{}}}`)
+
+	_ = client(t, d, asrAppend(24000)) // task 2: Paraformer's clock restarts at 0
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	started := upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":200,"text":"好","sentence_end":false}}}}`)
+	require.EqualValues(t, 1200, gjson.ParseBytes(started.ToClient[0]).Get("audio_start_ms").Int())
+
+	final := upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":200,"end_time":800,"text":"好的。","sentence_end":true}},"usage":{"duration":1}}}`)
+	for _, f := range final.ToClient {
+		if ev := gjson.ParseBytes(f); ev.Get("type").String() == "input_audio_buffer.speech_stopped" {
+			require.EqualValues(t, 1800, ev.Get("audio_end_ms").Int())
+		}
+	}
+	require.EqualValues(t, 1800, gjson.GetBytes(final.Usage[0].Summary, "end_time_ms").Int())
+}
+
+func TestParaformer_FinalsDoNotCommitInManualMode(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, `{"type":"session.update","session":{"audio":{"input":{"turn_detection":null}}}}`)
+	_ = client(t, d, asrAppend(2400))
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	_ = upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"end_time":50,"text":"嗯。","sentence_end":true}},"usage":{"duration":1}}}`)
+
+	// OpenAI never commits on its own in manual mode: the buffer still holds the 100 ms.
+	require.NotEmpty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
+}
+
+func TestParaformer_SemanticVADCommitsAtTheSpeechEnd(t *testing.T) {
+	d := newTestParaformer(t, "paraformer-realtime-v2")
+	_ = client(t, d, `{"type":"session.update","session":{"audio":{"input":{"turn_detection":{"type":"semantic_vad"}}}}}`)
+	_ = client(t, d, asrAppend(24000)) // 1 s
+	_ = upstream(t, d, `{"header":{"event":"task-started"},"payload":{}}`)
+	_ = upstream(t, d, `{"header":{"event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"end_time":500,"text":"好。","sentence_end":true}},"usage":{"duration":1}}}`)
+
+	// Semantic VAD may end the sentence before the silence window: the 500 ms after it count.
+	require.NotEmpty(t, client(t, d, `{"type":"input_audio_buffer.commit"}`).ToUpstream)
 }

@@ -204,8 +204,17 @@ model association). The gateway:
   round trip. Client frames are held until `task-finished`; the next audio then starts a new task
   on the same connection (the gateway sends `run-task` again and holds that audio until
   `task-started`). A client with its own voice activity detection should send a commit as soon
-  as the speaker stops instead of streaming trailing silence. A commit with no audio since the
-  previous one is answered with `input_audio_buffer_commit_empty`. Bailian closes the
+  as the speaker stops instead of streaming trailing silence. As on OpenAI, every commit is
+  answered: with `input_audio_buffer.committed` and a `completed` event, or with an error. A
+  commit of less than 100 ms of audio since the previous commit point is answered with
+  `input_audio_buffer_commit_empty`. The commit point is the previous commit, or where
+  Paraformer's own VAD ended the previous sentence: the speech end plus `silence_duration_ms`
+  for `server_vad`, the speech end for `semantic_vad`; in manual mode only commits count.
+  Committed audio in which Paraformer heard no speech becomes an empty user item
+  (`input_audio_buffer.committed`, `conversation.item.added`, `completed` with an empty
+  `transcript`, `conversation.item.done`), so clients should skip empty transcripts.
+  `audio_start_ms` / `audio_end_ms` count from the start of the session across commits, even
+  though each commit starts a new Paraformer task. Bailian closes the
   connection when no new task starts within 60 s of the previous one, which ends the session.
 - On close, sends `finish-task` (unless a commit's finish is already in flight) and waits up to
   `AXONHUB_REALTIME_RESPONSE_DRAIN` for `task-finished`; a session with no task running closes at

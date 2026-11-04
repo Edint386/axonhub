@@ -27,6 +27,12 @@ const (
 	paraformerSilenceMin = 200
 	paraformerSilenceMax = 6000
 	paraformerSilenceDef = 1300
+
+	// paraformerCommitMinMs is OpenAI's minimum for input_audio_buffer.commit.
+	paraformerCommitMinMs = 100
+
+	// paraformerTicksPerMs: client audio is counted in 24 kHz sample ticks, exact for PCM and G.711.
+	paraformerTicksPerMs = clientRate / 1000
 )
 
 // paraformerAdmission matches the realtime Paraformer models in scope.
@@ -117,11 +123,20 @@ type ParaformerDialect struct {
 	awaiting bool // waiting for task-started
 	pending  [][]byte
 	finished bool
-	// audioSent is set once the current task received audio; a commit needs something to end.
-	audioSent bool
+	// Client audio in ticks. Paraformer's timeline restarts at zero with every task: taskTicks is
+	// the audio sent in the current task, committedTicks where its last commit point falls (a
+	// final moves it the way OpenAI's server VAD commits), so the GA input audio buffer a commit
+	// must not find under 100 ms is the difference. offsetTicks is the audio of the earlier tasks,
+	// keeping audio_start_ms / audio_end_ms on the session timeline.
+	taskTicks      int64
+	committedTicks int64
+	offsetTicks    int64
 	// committing is set while a client commit's finish-task waits for task-finished; the next
 	// audio then starts a new task on the same connection.
 	committing bool
+	// commitAnswered is set once a final answered the commit in flight; otherwise task-finished
+	// synthesises the reply, since OpenAI answers every commit.
+	commitAnswered bool
 	// closing is set once teardown asked for the goodbye; drain reports whether a finish-task is
 	// still outstanding for the session's last task.
 	closing bool
@@ -258,12 +273,21 @@ func (d *ParaformerDialect) ClientFrame(frame []byte) (dialect.Output, error) {
 		// Paraformer has no commit: finish-task makes it finalise the sentence in progress now,
 		// without waiting for max_sentence_silence of trailing silence. Client frames are held
 		// until task-finished; the next audio then starts a new task on the same connection.
-		if !d.started || d.awaiting || d.committing || !d.audioSent {
+		// Like OpenAI, a buffer under 100 ms is an error; anything else gets a committed item.
+		buffered := d.taskTicks - d.committedTicks
+		if d.committing {
+			buffered = 0
+		}
+
+		running := d.started && !d.awaiting && !d.committing
+		if !running || (!d.sentenceOpen && buffered < paraformerCommitMinMs*paraformerTicksPerMs) {
 			return dialect.Output{ToClient: [][]byte{d.clientError("input_audio_buffer_commit_empty",
-				"Input audio buffer is empty: no audio was sent since the last commit.", "", clientEventID)}}, nil
+				fmt.Sprintf("Error committing input audio buffer: buffer too small. Expected at least %dms of audio, but buffer only has %.2fms of audio.",
+					paraformerCommitMinMs, float64(buffered)/paraformerTicksPerMs), "", clientEventID)}}, nil
 		}
 
 		d.committing = true
+		d.commitAnswered = false
 
 		return dialect.Output{ToUpstream: [][]byte{d.finishTaskFrame()}, CloseGate: true}, nil
 	case "input_audio_buffer.clear":
@@ -408,12 +432,12 @@ func (d *ParaformerDialect) clientAppend(ev gjson.Result, clientEventID string) 
 		return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", "audio", clientEventID)}}
 	}
 
+	d.taskTicks += d.clientTicks(len(raw))
+
 	pcm := d.decodeClientAudio(raw)
 	if len(pcm) == 0 {
 		return dialect.Output{}
 	}
-
-	d.audioSent = true
 
 	if !d.started {
 		d.started = true
@@ -428,6 +452,16 @@ func (d *ParaformerDialect) clientAppend(ev gjson.Result, clientEventID string) 
 	}
 
 	return dialect.Output{ToUpstream: [][]byte{pcm}, BinaryUpstream: true}
+}
+
+// clientTicks is the duration of n bytes of client audio in the session's input format.
+func (d *ParaformerDialect) clientTicks(n int) int64 {
+	switch d.cfg.inputFormat {
+	case paraformerMuLaw, paraformerALaw:
+		return int64(n) * (clientRate / audio.G711Rate) // one byte per 8 kHz sample
+	default:
+		return int64(n) / 2 // pcm16 at 24 kHz
+	}
 }
 
 func (d *ParaformerDialect) decodeClientAudio(raw []byte) []byte {
@@ -514,14 +548,27 @@ func (d *ParaformerDialect) UpstreamFrame(frame []byte) (dialect.Output, error) 
 	case "result-generated":
 		return d.resultGenerated(ev), nil
 	case "task-finished":
-		if d.committing && !d.closing {
-			return d.commitFinished(), nil
+		if !d.committing {
+			d.finished = true
+			return dialect.Output{UpstreamFinished: true}, nil
 		}
 
+		// A client commit's finish-task: answer the commit, then either start over for the next
+		// audio or, when teardown is already waiting for this task, end there.
+		out := dialect.Output{ToClient: d.commitReply()}
 		d.committing = false
-		d.finished = true
 
-		return dialect.Output{UpstreamFinished: true}, nil
+		if d.closing {
+			d.finished = true
+			out.UpstreamFinished = true
+
+			return out, nil
+		}
+
+		d.nextTask()
+		out.OpenGate = true
+
+		return out, nil
 	case "task-failed":
 		return d.taskFailed(ev), nil
 	default:
@@ -529,20 +576,29 @@ func (d *ParaformerDialect) UpstreamFrame(frame []byte) (dialect.Output, error) 
 	}
 }
 
-// commitFinished ends the task a client commit finished: the next audio starts a new task
-// (new task_id, usage counted from zero) and the held client frames are released.
-func (d *ParaformerDialect) commitFinished() dialect.Output {
-	d.committing = false
+// nextTask resets for the task the next audio starts after a commit: new task_id, usage counted
+// from zero, and a timeline that continues where this task's audio ended.
+func (d *ParaformerDialect) nextTask() {
 	d.started = false
-	d.audioSent = false
 	d.taskID = uuid.NewString()
 	d.lastDuration = 0
+	d.offsetTicks += d.taskTicks
+	d.taskTicks = 0
+	d.committedTicks = 0
+}
 
-	out := dialect.Output{OpenGate: true}
+// commitReply answers a client commit once its finish-task is done, unless a Paraformer final
+// already did: OpenAI answers every commit with a committed item.
+func (d *ParaformerDialect) commitReply() [][]byte {
+	answered := d.commitAnswered
+	d.commitAnswered = false
 
-	// Paraformer finalises the sentence on finish-task; should it not have, close the item
-	// with the last hypothesis so the client is not left with an open turn.
-	if d.sentenceOpen {
+	var out [][]byte
+
+	switch {
+	case d.sentenceOpen:
+		// Paraformer finalises the sentence on finish-task; should it not have, close the item
+		// with the last hypothesis so the client is not left with an open turn.
 		id := d.current
 
 		text := ""
@@ -550,7 +606,7 @@ func (d *ParaformerDialect) commitFinished() dialect.Output {
 			text = tr.prev
 		}
 
-		out.ToClient = append(out.ToClient,
+		out = append(out,
 			d.synth(map[string]any{"type": "input_audio_buffer.committed", "item_id": id, "previous_item_id": nullable(d.itemPrev[id])}),
 			d.synth(map[string]any{"type": "conversation.item.input_audio_transcription.completed", "item_id": id, "content_index": 0, "transcript": text, "usage": map[string]any{"type": "duration", "seconds": 0}}),
 			d.synth(map[string]any{"type": "conversation.item.done", "previous_item_id": nullable(d.itemPrev[id]), "item": userAudioItem(id, "completed", text)}),
@@ -560,6 +616,21 @@ func (d *ParaformerDialect) commitFinished() dialect.Output {
 		d.current = ""
 		d.sentenceOpen = false
 		delete(d.trackers, id)
+	case !answered:
+		// No speech in the committed audio (Paraformer ends a silent task with task-finished and
+		// no result): answer the way OpenAI answers a silent buffer, with an empty user item.
+		d.itemSeq++
+		id := fmt.Sprintf("item_axh_%d", d.itemSeq)
+		prev := nullable(d.lastCommitted)
+
+		out = append(out,
+			d.synth(map[string]any{"type": "input_audio_buffer.committed", "item_id": id, "previous_item_id": prev}),
+			d.synth(map[string]any{"type": "conversation.item.added", "previous_item_id": prev, "item": userAudioItem(id, "in_progress", nil)}),
+			d.synth(map[string]any{"type": "conversation.item.input_audio_transcription.completed", "item_id": id, "content_index": 0, "transcript": "", "usage": map[string]any{"type": "duration", "seconds": 0}}),
+			d.synth(map[string]any{"type": "conversation.item.done", "previous_item_id": prev, "item": userAudioItem(id, "completed", "")}),
+		)
+
+		d.lastCommitted = id
 	}
 
 	return out
@@ -589,7 +660,7 @@ func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 		out.ToClient = append(out.ToClient, d.synth(map[string]any{
 			"type":           "input_audio_buffer.speech_started",
 			"item_id":        d.current,
-			"audio_start_ms": sent.Get("begin_time").Int(),
+			"audio_start_ms": d.sessionMs(sent.Get("begin_time").Int()),
 		}))
 		out.ToClient = append(out.ToClient, d.synth(map[string]any{
 			"type":             "conversation.item.added",
@@ -626,11 +697,11 @@ func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 		}))
 	}
 
-	endMs := sent.Get("end_time").Int()
+	endMs := sent.Get("end_time").Int() // on this task's timeline
 	out.ToClient = append(out.ToClient, d.synth(map[string]any{
 		"type":         "input_audio_buffer.speech_stopped",
 		"item_id":      id,
-		"audio_end_ms": endMs,
+		"audio_end_ms": d.sessionMs(endMs),
 	}))
 	out.ToClient = append(out.ToClient, d.synth(map[string]any{
 		"type":             "input_audio_buffer.committed",
@@ -652,8 +723,8 @@ func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 			"item_id":          id,
 			"transcript":       text,
 			"duration_seconds": deltaSec,
-			"begin_time_ms":    sent.Get("begin_time").Int(),
-			"end_time_ms":      endMs,
+			"begin_time_ms":    d.sessionMs(sent.Get("begin_time").Int()),
+			"end_time_ms":      d.sessionMs(endMs),
 		})
 		usageRec = append(usageRec, dialect.UsageRecord{
 			Kind:            "transcription",
@@ -686,7 +757,30 @@ func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 	d.current = ""
 	d.sentenceOpen = false
 	delete(d.trackers, id)
+
+	// A final commits the buffer the way OpenAI's server VAD does: at the end of the speech plus
+	// the silence that ended it, on Paraformer's timeline rather than when the final arrives, so
+	// audio already sent past that point stays in the buffer. Semantic VAD can end a sentence
+	// sooner, so only the speech end counts there; OpenAI never commits on its own in manual mode.
+	if !d.cfg.manual {
+		point := endMs
+		if !d.cfg.semanticVAD {
+			point += d.cfg.silenceDurationMs
+		}
+
+		d.committedTicks = min(d.taskTicks, max(d.committedTicks, point*paraformerTicksPerMs))
+	}
+
+	if d.committing {
+		d.commitAnswered = true
+	}
+
 	return out
+}
+
+// sessionMs moves a time on the current task's timeline onto the session timeline.
+func (d *ParaformerDialect) sessionMs(taskMs int64) int64 {
+	return taskMs + d.offsetTicks/paraformerTicksPerMs
 }
 
 func (d *ParaformerDialect) taskFailed(ev gjson.Result) dialect.Output {
