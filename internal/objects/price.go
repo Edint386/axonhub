@@ -251,6 +251,7 @@ const (
 
 	// PriceItemCodeDurationSeconds is the price item code for audio/transcription duration.
 	// For this item, Pricing.UsagePerUnit is the price per second (not per million tokens).
+	// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 	PriceItemCodeDurationSeconds PriceItemCode = "duration_seconds"
 )
 

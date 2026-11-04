@@ -890,6 +890,7 @@ type Usage struct {
 
 	// DurationSeconds is billed audio/transcription duration in seconds.
 	// Used by duration-priced realtime ASR (e.g. Bailian Paraformer). Omitted when unused.
+	// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 	DurationSeconds float64 `json:"duration_seconds,omitempty"`
 
 	// Cost is the request cost calculated by AxonHub from channel model prices.

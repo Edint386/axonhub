@@ -11,6 +11,7 @@ enum PriceItemCode {
   completion_tokens
   prompt_cached_tokens
   prompt_write_cached_tokens
+  # custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
   duration_seconds
 }
 

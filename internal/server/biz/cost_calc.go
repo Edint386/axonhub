@@ -12,12 +12,14 @@ import (
 )
 
 func unitsInMillionTokens(units int64) decimal.Decimal {
+	// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 	return scaleUnits(units, 1_000_000)
 }
 
 // scaleUnits converts a raw quantity into billable units by dividing by unitDivisor.
 // Token price items use unitDivisor=1_000_000 (price per million tokens).
 // Duration price items use unitDivisor=1 (price per second).
+// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 func scaleUnits(units, unitDivisor int64) decimal.Decimal {
 	if units <= 0 || unitDivisor <= 0 {
 		return decimal.Zero
@@ -27,9 +29,12 @@ func scaleUnits(units, unitDivisor int64) decimal.Decimal {
 }
 
 func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostItem, decimal.Decimal) {
+	// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 	return computeItemSubtotalScaled(quantity, pricing, 1_000_000)
 }
 
+// computeItemSubtotalScaled is upstream's computeItemSubtotal with the unit divisor as a parameter.
+// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 func computeItemSubtotalScaled(quantity int64, pricing objects.Pricing, unitDivisor int64) (objects.CostItem, decimal.Decimal) {
 	item := objects.CostItem{
 		Quantity: quantity,
@@ -145,6 +150,7 @@ func computeItemSubtotalScaled(quantity int64, pricing objects.Pricing, unitDivi
 
 // durationSecondsQuantity rounds Bailian-reported duration to whole billable seconds.
 // Any positive fraction below 0.5 still bills 1 second so tiny clips are not free.
+// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 func durationSecondsQuantity(seconds float64) int64 {
 	if seconds <= 0 {
 		return 0
@@ -267,6 +273,7 @@ func computeUsageCostWithItems(usage *llm.Usage, priceItems []objects.ModelPrice
 				quantity = usage.PromptTokensDetails.WriteCachedTokens
 			}
 		case objects.PriceItemCodeDurationSeconds:
+			// custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 			quantity = durationSecondsQuantity(usage.DurationSeconds)
 			item, sub := computeItemSubtotalScaled(quantity, it.Pricing, 1)
 			item.ItemCode = it.ItemCode

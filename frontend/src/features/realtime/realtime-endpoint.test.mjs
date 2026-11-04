@@ -1,9 +1,9 @@
 // Guard test for the custom (fork) realtime endpoint format.
 //
-// The only frontend line the realtime relay adds to an upstream-owned file is the
-// 'openai/realtime' entry in configurableChannelEndpointApiFormats (schema.ts). Removing it
-// still type-checks, so this test fails loudly when an upstream merge drops it. It also pins
-// the locale labels that live in the custom realtime.json files.
+// The realtime relay adds the 'openai/realtime' entry to configurableChannelEndpointApiFormats
+// in the upstream-owned schema.ts. Removing it still type-checks, so this test fails loudly when
+// an upstream merge drops it. It also pins the locale labels that live in the custom
+// realtime.json files. The per-second billing lines are guarded in duration-price-item.test.mjs.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
