@@ -15,13 +15,16 @@ export interface ProbeAttempt {
   rateLimitRetries: number;
   // The answer arrived without the stream's finish event but was long enough to count.
   unfinished?: boolean;
+  // The stream was cancelled because the answer ran well past the asked-for count (a model that
+  // keeps listing numbers is cut off to save tokens).
+  stoppedEarly?: boolean;
   error?: string;
   errorCode?: string;
 }
 
 export interface RunProbesOptions {
   challenges: Challenge[];
-  send: (prompt: string, options: { signal?: AbortSignal; onText: (text: string) => void }) => Promise<ProbeAnswer>;
+  send: (prompt: string, options: { signal?: AbortSignal; onText: (text: string) => void; shouldStop?: () => boolean }) => Promise<ProbeAnswer>;
   // Answers needed for a full-strength result (ModelTrace calibrates for 1, 2 or 3).
   target?: number;
   concurrency?: number;
@@ -36,6 +39,11 @@ export const MAX_RATE_LIMIT_RETRIES = 3;
 // An answer without the finish event counts only if it has nearly all the numbers asked for;
 // shorter ones are likely cut off. Some relays never send a finish reason at all.
 export const UNFINISHED_MIN_SHARE = 0.9;
+// A stream is cut once the answer runs this far past the asked-for count. Most models write exactly
+// the asked-for count and stop, so cutting at the count itself would cut nearly every normal answer
+// at its last number; the margin leaves those alone and still stops a model that keeps going.
+// Kept in percent so the threshold is computed exactly (330 * 1.1 is 363.00000000000006 in floats).
+export const STOP_OVERSHOOT_PERCENT = 110;
 
 // ModelTrace's own backoff: 1 s per attempt plus up to 0.5 s of jitter.
 const defaultRateLimitDelay = (retry: number) => 1000 * retry + Math.random() * 500;
@@ -55,6 +63,13 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
     }
     signal?.addEventListener('abort', done, { once: true });
   });
+}
+
+// Drops the last number of a stream that was cancelled mid-answer: the cut can land inside a
+// number, and a fragment ("14" cut to "1") would corrupt the sequence. One number more or less
+// does not matter for the fingerprint, so the trailing one is simply removed.
+export function trimTrailingNumber(text: string): string {
+  return text.replace(/\d+([^\d]*)$/, '$1');
 }
 
 // Runs challenges in parallel until `target` answers pass ModelTrace's length check. A failed or
@@ -135,25 +150,37 @@ export function runProbes({
       attempt.error = undefined;
       attempt.errorCode = undefined;
       attempt.unfinished = undefined;
+      attempt.stoppedEarly = undefined;
       emit();
       const onText = (text: string) => {
         attempt.text = text;
         attempt.parsedNumbers = parseNumbers(text).length;
         emit();
       };
+      // Once the answer runs 10% past the asked-for count the stream is cut: some models keep
+      // listing numbers far past the challenge's count, burning tokens for nothing.
+      const stopAt = Math.ceil((attempt.challenge.expected_count * STOP_OVERSHOOT_PERCENT) / 100);
+      let stoppedEarly = false;
+      const shouldStop = () => {
+        if (attempt.parsedNumbers < stopAt) return false;
+        stoppedEarly = true;
+        return true;
+      };
       let rateLimited = false;
       Promise.resolve()
-        .then(() => send(attempt.challenge.prompt, { signal, onText }))
+        .then(() => send(attempt.challenge.prompt, { signal, onText, shouldStop }))
         .then(({ text, finished }) => {
-          attempt.text = text;
-          attempt.parsedNumbers = parseNumbers(text).length;
+          const finalText = stoppedEarly ? trimTrailingNumber(text) : text;
+          attempt.text = finalText;
+          attempt.parsedNumbers = parseNumbers(finalText).length;
           if (!finished && attempt.parsedNumbers < Math.ceil(attempt.challenge.expected_count * UNFINISHED_MIN_SHARE)) {
             attempt.status = 'failed';
             attempt.errorCode = 'incomplete';
             attempt.error = 'The answer did not finish normally';
           } else if (attempt.parsedNumbers >= attempt.minimumNumbers) {
             attempt.status = 'accepted';
-            attempt.unfinished = !finished || undefined;
+            attempt.unfinished = (!finished && !stoppedEarly) || undefined;
+            attempt.stoppedEarly = stoppedEarly || undefined;
             accepted += 1;
           } else {
             attempt.status = 'rejected';

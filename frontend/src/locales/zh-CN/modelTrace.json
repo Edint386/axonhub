@@ -53,6 +53,7 @@
   "modelTrace.verdict.uncertain": "回答在几个模型家族之间拿不准，没法下结论；单看模型最像 {{model}}（{{probability}}）。可以再测一次。",
   "modelTrace.errors.incomplete": "回答没有正常结束，数字也明显不够（可能被截断），这次不计入。",
   "modelTrace.probe.unfinished": "没收到结束标记，但数字基本写全了，按完整回答计入。",
+  "modelTrace.probe.stoppedEarly": "模型写的数字明显超出要求，已提前停止请求。",
   "modelTrace.run.rateLimitedOut": "渠道一直在限流，检测提前结束了，请稍后再试。",
   "modelTrace.verdict.sameFamilyUnsure": "家族对得上（{{family}}），但具体版本拿不准：最像的 {{model}} 也只有 {{probability}}。"
 }

@@ -130,6 +130,7 @@ function ProbeCard({ attempt }: { attempt: ProbeAttempt }) {
       </p>
       {preview && <p className='text-muted-foreground line-clamp-3 font-mono text-[11px] break-all'>{preview}</p>}
       {attempt.unfinished && <p className='text-muted-foreground text-xs'>{t('modelTrace.probe.unfinished')}</p>}
+      {attempt.stoppedEarly && <p className='text-muted-foreground text-xs'>{t('modelTrace.probe.stoppedEarly')}</p>}
       {attempt.error && attempt.status !== 'cancelled' && (
         <p className={cn('text-xs wrap-anywhere', attempt.status === 'throttled' ? 'text-muted-foreground' : 'text-destructive')}>
           {attempt.errorCode === 'incomplete' ? t('modelTrace.errors.incomplete') : attempt.error}
@@ -367,13 +368,14 @@ export function ModelTracePanel({ hidden, modelSource, channelId, model }: Model
       target: TARGET_ANSWERS,
       signal: controller.signal,
       onChange,
-      send: (prompt, { signal, onText }) =>
+      send: (prompt, { signal, onText, shouldStop }) =>
         sendPlaygroundProbe({
           prompt,
           target: { projectId, channelId: runTarget.channelId, model: runTarget.model },
           getToken: ensureFreshAccessToken,
           signal,
           onText,
+          shouldStop,
         }),
     });
     if (frame) cancelAnimationFrame(frame);

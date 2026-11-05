@@ -57,6 +57,66 @@ test('stream errors become request failures', async () => {
   await assert.rejects(readTextStream(streamOf('event: error\n' + sse({ error: { message: 'upstream 529' } }))), /upstream 529/);
 });
 
+// A stream that hands out one chunk per read, so a cancelled read is visible as "not pulled".
+function pullStreamOf(...chunks) {
+  const encoder = new TextEncoder();
+  const state = { pulled: 0, cancelled: false };
+  const body = new ReadableStream({
+    pull(controller) {
+      if (state.pulled < chunks.length) controller.enqueue(encoder.encode(chunks[state.pulled++]));
+      else controller.close();
+    },
+    cancel() {
+      state.cancelled = true;
+    },
+  });
+  return { body, state };
+}
+
+const numberList = (from, to) => Array.from({ length: to - from }, (_, index) => from + index).join(', ');
+
+test('stops reading and cancels the stream when shouldStop fires', async () => {
+  const { body, state } = pullStreamOf(
+    sse({ type: 'text-delta', id: 't', delta: numberList(1, 101) }),
+    sse({ type: 'text-delta', id: 't', delta: ', ' + numberList(101, 201) }),
+    // The trailing block is complete JSON but lacks its blank line, so it is still buffered when the
+    // stream stops; it must not be flushed into the answer.
+    sse({ type: 'text-delta', id: 't', delta: ', ' + numberList(201, 301) }) +
+      `data: ${JSON.stringify({ type: 'text-delta', id: 't', delta: ', 9999' })}\n`,
+    sse({ type: 'text-delta', id: 't', delta: ', ' + numberList(301, 401) }),
+  );
+  let seen = 0;
+  const answer = await readTextStream(
+    body,
+    (text) => {
+      seen = text.split(',').length;
+    },
+    () => seen >= 250,
+  );
+  assert.equal(answer.finished, false);
+  assert.equal(answer.text.split(',').length, 300, 'all complete blocks, no more');
+  assert.ok(answer.text.endsWith('300'), 'the partial trailing block is dropped');
+  assert.ok(state.cancelled, 'the stream is cancelled');
+  assert.ok(state.pulled <= 3, `only ${state.pulled} chunks were read`);
+});
+
+test('does not ask shouldStop once the finish event arrived', async () => {
+  const calls = [];
+  const answer = await readTextStream(
+    streamOf(
+      sse({ type: 'text-delta', id: 't', delta: '1, 2, 3' }),
+      sse({ type: 'finish' }) + sse({ type: 'text-delta', id: 't', delta: ', 4' }),
+    ),
+    undefined,
+    () => {
+      calls.push(true);
+      return false;
+    },
+  );
+  assert.deepEqual(answer, { text: '1, 2, 3, 4', finished: true });
+  assert.equal(calls.length, 1, 'asked only before the finish event');
+});
+
 function fakeFetch(response) {
   const calls = [];
   const fetchImpl = async (url, init) => {

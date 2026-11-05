@@ -16,6 +16,11 @@ export interface SendProbeOptions {
   getToken: () => Promise<string | null | undefined>;
   signal?: AbortSignal;
   onText?: (text: string) => void;
+  // Asked once per chunk read from the network, after the chunk's complete blocks are consumed (so
+  // how finely a stop lands depends on how the network splits the stream). Returning true cancels
+  // the stream and returns what was read so far (with finished: false). Used to stop a model that
+  // keeps producing numbers past the amount the challenge asked for.
+  shouldStop?: () => boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -87,12 +92,17 @@ export interface ProbeAnswer {
   finished: boolean;
 }
 
-export async function readTextStream(body: ReadableStream<Uint8Array>, onText?: (text: string) => void): Promise<ProbeAnswer> {
+export async function readTextStream(
+  body: ReadableStream<Uint8Array>,
+  onText?: (text: string) => void,
+  shouldStop?: () => boolean,
+): Promise<ProbeAnswer> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let text = '';
   let finished = false;
+  let stopped = false;
 
   const consume = (block: string) => {
     const data = block
@@ -116,16 +126,24 @@ export async function readTextStream(body: ReadableStream<Uint8Array>, onText?: 
       const blocks = buffer.split(/\r?\n\r?\n/);
       buffer = blocks.pop() ?? '';
       blocks.forEach(consume);
+      // Not asked once the finish event arrived: a finished stream has nothing left to save.
+      if (!finished && shouldStop?.()) {
+        stopped = true;
+        await reader.cancel().catch(() => {});
+        break;
+      }
     }
-    buffer += decoder.decode();
-    if (buffer.trim()) consume(buffer);
+    if (!stopped) {
+      buffer += decoder.decode();
+      if (buffer.trim()) consume(buffer);
+    }
   } finally {
     reader.releaseLock();
   }
   return { text, finished };
 }
 
-export async function sendPlaygroundProbe({ prompt, target, getToken, signal, onText, fetchImpl = fetch }: SendProbeOptions): Promise<ProbeAnswer> {
+export async function sendPlaygroundProbe({ prompt, target, getToken, signal, onText, shouldStop, fetchImpl = fetch }: SendProbeOptions): Promise<ProbeAnswer> {
   const token = await getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -143,5 +161,5 @@ export async function sendPlaygroundProbe({ prompt, target, getToken, signal, on
   });
   if (!response.ok) throw new ProbeRequestError(await readErrorMessage(response), response.status);
   if (!response.body) throw new Error('Empty response');
-  return readTextStream(response.body, onText);
+  return readTextStream(response.body, onText, shouldStop);
 }

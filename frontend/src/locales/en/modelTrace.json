@@ -53,6 +53,7 @@
   "modelTrace.verdict.uncertain": "The answers sit between model families, so there is no conclusion; the single closest model is {{model}} ({{probability}}). Try again.",
   "modelTrace.errors.incomplete": "The answer did not finish normally and is clearly short (probably cut off); not counted.",
   "modelTrace.probe.unfinished": "No end marker arrived, but nearly all numbers are there, so it counts as complete.",
+  "modelTrace.probe.stoppedEarly": "The model kept writing numbers well past the asked-for count, so the request was stopped early.",
   "modelTrace.run.rateLimitedOut": "The channel kept rate limiting, so the check stopped early. Try again later.",
   "modelTrace.verdict.sameFamilyUnsure": "Same family ({{family}}), but the version is unclear: the closest, {{model}}, is only {{probability}}."
 }

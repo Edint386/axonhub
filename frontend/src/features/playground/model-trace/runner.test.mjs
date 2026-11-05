@@ -174,3 +174,72 @@ test('challenges use distinct lengths in ModelTrace range without crypto.randomU
     Object.defineProperty(crypto, 'randomUUID', { value: saved, configurable: true });
   }
 });
+
+// A fake sender that keeps producing numbers like the transport does: a few numbers per chunk,
+// checking shouldStop after each chunk and cutting the stream when it fires. Small chunks keep the
+// stop point exact enough to pin the threshold.
+const CHUNK = 5;
+function numberStreamSender(total, chunk = CHUNK) {
+  const numbers = Array.from({ length: total }, (_, index) => (index * 37) % 355 + 1);
+  const state = { delivered: 0, ranDry: false };
+  const send = (prompt, { onText, shouldStop }) =>
+    new Promise((resolve) => {
+      const step = () => {
+        if (state.delivered >= numbers.length) {
+          state.ranDry = true;
+          resolve({ text: numbers.join(', '), finished: true });
+          return;
+        }
+        state.delivered = Math.min(state.delivered + chunk, numbers.length);
+        const text = numbers.slice(0, state.delivered).join(', ');
+        onText(text);
+        if (shouldStop?.()) resolve({ text, finished: false });
+        else setTimeout(step, 0);
+      };
+      setTimeout(step, 0);
+    });
+  return { send, state };
+}
+
+test('cuts a number-spewing answer once it runs 10% past the asked-for count', async () => {
+  const [challenge] = generateChallenges(1);
+  const stopAt = Math.ceil((challenge.expected_count * 11) / 10);
+  const { send, state } = numberStreamSender(challenge.expected_count * 3);
+  const attempts = await runProbes({ challenges: [challenge], send });
+  const [attempt] = attempts;
+  assert.equal(attempt.status, 'accepted');
+  assert.equal(attempt.stoppedEarly, true);
+  assert.equal(attempt.unfinished, undefined);
+  assert.ok(!state.ranDry, 'the answer was cut before the stream ran dry');
+  assert.ok(state.delivered >= stopAt && state.delivered < stopAt + CHUNK, `cut at ${state.delivered}, threshold ${stopAt}`);
+  assert.ok(!/\d$/.test(attempt.text), 'the trailing number was dropped');
+  assert.equal(attempt.parsedNumbers, state.delivered - 1, 'one number short of what was read');
+});
+
+// One number per chunk pins the exact cut point, including 330 where 330 * 1.1 rounds up to
+// 363.00000000000006 in floating point.
+for (const [count, stopAt] of [[292, 322], [330, 363], [332, 366]]) {
+  test(`a ${count}-number challenge is cut exactly at ${stopAt} numbers`, async () => {
+    const challenge = { ...generateChallenges(1)[0], expected_count: count };
+    const { send, state } = numberStreamSender(count * 2, 1);
+    const [attempt] = await runProbes({ challenges: [challenge], send });
+    assert.equal(state.delivered, stopAt);
+    assert.equal(attempt.parsedNumbers, stopAt - 1);
+    assert.equal(attempt.stoppedEarly, true);
+  });
+}
+
+for (const [label, extra] of [['below', -10], ['exactly at', 0], ['slightly past', 5]]) {
+  test(`an answer ${label} the asked-for count runs to the end untouched`, async () => {
+    const [challenge] = generateChallenges(1);
+    const total = challenge.expected_count + extra;
+    const { send, state } = numberStreamSender(total);
+    const attempts = await runProbes({ challenges: [challenge], send });
+    const [attempt] = attempts;
+    assert.equal(attempt.status, 'accepted');
+    assert.equal(attempt.stoppedEarly, undefined);
+    assert.equal(attempt.unfinished, undefined);
+    assert.ok(state.ranDry, 'nothing was cut short');
+    assert.equal(attempt.parsedNumbers, total, 'no trimming on a normally finished answer');
+  });
+}

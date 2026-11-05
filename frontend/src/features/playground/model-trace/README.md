@@ -30,6 +30,10 @@ Differences from ModelTrace's own API tester:
 - Requests run 3 at a time. A 429/408 re-sends the same prompt after ModelTrace's backoff
   (1 s per retry plus jitter, at most 3 retries) and lowers the concurrency; 5xx is left to
   AxonHub's own retry policy.
+- A stream is cancelled once the answer runs 10% past the asked-for count of numbers: some models
+  keep listing numbers far past the challenge's count, burning tokens for nothing. Most models
+  write exactly the asked-for count and stop, so they are not cut. The trailing number of a cut
+  answer is dropped (it may be a fragment) and the answer still counts normally.
 - Verdicts are given only when the model sent upstream is one of the bank's models. ModelTrace is
   closed-set, so a model outside the bank (even a sibling version) gets no verdict.
 
