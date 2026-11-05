@@ -25,6 +25,8 @@ import (
 	"github.com/looplj/axonhub/internal/ent/invitation"
 	"github.com/looplj/axonhub/internal/ent/model"
 	"github.com/looplj/axonhub/internal/ent/oidcidentity"
+	"github.com/looplj/axonhub/internal/ent/plugin"
+	"github.com/looplj/axonhub/internal/ent/pluginstorage"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/prompt"
 	"github.com/looplj/axonhub/internal/ent/promptprotectionrule"
@@ -112,6 +114,8 @@ func checkColumn(t, c string) error {
 			invitation.Table:               invitation.ValidColumn,
 			model.Table:                    model.ValidColumn,
 			oidcidentity.Table:             oidcidentity.ValidColumn,
+			plugin.Table:                   plugin.ValidColumn,
+			pluginstorage.Table:            pluginstorage.ValidColumn,
 			project.Table:                  project.ValidColumn,
 			prompt.Table:                   prompt.ValidColumn,
 			promptprotectionrule.Table:     promptprotectionrule.ValidColumn,
