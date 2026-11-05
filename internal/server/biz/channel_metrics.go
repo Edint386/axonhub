@@ -449,6 +449,9 @@ func (cm *channelMetrics) recordSuccess(slot *timeSlotMetrics, perf *Performance
 
 	// Reset consecutive failures on success
 	cm.aggregatedMetrics.ConsecutiveFailures = 0
+	if perf.LatencyExcluded { // fork: see channel_bailian_asr_metrics.go
+		return
+	}
 
 	firstTokenLatencyMs, requestLatencyMs, tokensPerSecond := perf.Calculate()
 
@@ -725,6 +728,8 @@ type PerformanceRecord struct {
 	ResponseStatusCode int
 	ErrorMessage       string
 	CompletionTokens   int64
+
+	LatencyExcluded bool // fork: a success that says nothing about latency; see channel_bailian_asr_metrics.go
 }
 
 func (m *PerformanceRecord) IsSynthetic() bool {

@@ -610,7 +610,10 @@ func newRealtimeBailianFixture(t *testing.T) (context.Context, *ChatCompletionOr
 		SetName("bailian-realtime").
 		SetBaseURL("https://dashscope.aliyuncs.com/compatible-mode/v1").
 		SetCredentials(objects.ChannelCredentials{APIKey: "sk-bailian"}).
-		SetSupportedModels([]string{"qwen3-omni-flash-realtime", "qwen3-asr-flash-realtime", "gpt-realtime"}).
+		SetSupportedModels([]string{
+			"qwen3-omni-flash-realtime", "qwen3-asr-flash-realtime", "gpt-realtime",
+			"paraformer-realtime-v2", "qwen-audio-3.1-asr-flash-streaming", "qwen-audio-3.1-asr-flash-message",
+		}).
 		SetDefaultTestModel("qwen3-omni-flash-realtime").
 		SetOrderingWeight(100).
 		SetStatus(channel.StatusEnabled).
@@ -688,6 +691,25 @@ func TestSelectRealtime_BailianIntentAndModelFilter(t *testing.T) {
 
 		_, err = orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: "qwen3-asr-flash-realtime", Mode: biz.RealtimeModeWebRTC})
 		require.ErrorIs(t, err, biz.ErrInvalidModel)
+	})
+
+	t.Run("inference-protocol models are transcription sessions on websocket only", func(t *testing.T) {
+		for _, model := range []string{"paraformer-realtime-v2", "qwen-audio-3.1-asr-flash-streaming", "qwen-audio-3.1-asr-flash-message"} {
+			for _, intent := range []string{"", realtimeIntentTranscription} {
+				selection, err := orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: model, Mode: biz.RealtimeModeWebSocket, Intent: intent})
+				require.NoError(t, err, model, intent)
+				require.Equal(t, []int{bailianChannel.ID}, realtimeCandidateChannelIDs(selection.Candidates), model, intent)
+			}
+
+			_, err := orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: model, Mode: biz.RealtimeModeWebSocket, Intent: realtimeIntentQuicksilver})
+			require.ErrorIs(t, err, biz.ErrInvalidModel, model)
+
+			_, err = orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: model, Mode: biz.RealtimeModeWebRTC})
+			require.ErrorIs(t, err, biz.ErrInvalidModel, model)
+
+			_, err = orch.SelectRealtime(ctx, RealtimeSelectionRequest{Model: model, Mode: biz.RealtimeModeWebSocket, Legacy: true})
+			require.ErrorIs(t, err, ErrRealtimeLegacyOnly, model)
+		}
 	})
 
 	t.Run("legacy clients only reach bailian asr models", func(t *testing.T) {

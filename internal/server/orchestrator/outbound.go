@@ -374,6 +374,7 @@ func (ts *OutboundPersistentStream) markPerformanceTerminal(state streamTerminal
 		// Token limits and content filtering end a response without indicating
 		// a channel fault. Keep them out of failure counts and auto-disable rules.
 		ts.perf.MarkSuccess()
+		markTranscriptionSuccess(ts.perf, ts.state) // fork: see performance_bailian_asr.go
 	case streamTerminalCanceled:
 		ts.perf.MarkCanceled()
 	case streamTerminalFailed:

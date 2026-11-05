@@ -1,0 +1,1 @@
+{"task":"transcribe","language":"english","duration":8,"text":"今天天气不错，我们去公园散步。明天下午三点开会，记得带电脑。","words":[{"word":"今天天气不错","start":0.16,"end":1.2},{"word":"我们去公园散步","start":1.2,"end":3.2},{"word":"明天下午三点开会","start":4.4,"end":6.4},{"word":"记得带电脑","start":6.4,"end":8.016}],"usage":{"type":"tokens","input_tokens":100,"output_tokens":18,"total_tokens":118}}

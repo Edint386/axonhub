@@ -335,6 +335,9 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 		if errors.Is(lastErr, ErrPreCommitBufferExceeded) || errors.Is(lastErr, httpclient.ErrStreamEventTooLarge) {
 			return nil, lastErr
 		}
+		if isNoRetryError(lastErr) { // fork: see no_retry_fork.go
+			return nil, lastErr
+		}
 
 		// Stop retrying if the context is canceled or the deadline is exceeded.
 		if ctx.Err() != nil {
@@ -454,6 +457,7 @@ func (p *pipeline) processRequest(ctx context.Context, request *llm.Request) (*R
 	// Resolve the timeouts after TransformRequest so the outbound transformer
 	// has selected the channel for this attempt and can apply channel overrides.
 	streamFirstEventTimeout, nonStreamTimeout := p.effectiveResponseTimeouts(ctx)
+	streamFirstEventTimeout, nonStreamTimeout = jobResponseTimeouts(httpReq, streamFirstEventTimeout, nonStreamTimeout) // fork: see no_retry_fork.go
 
 	var result *Result
 	switch {

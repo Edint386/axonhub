@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"regexp"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -35,16 +35,16 @@ const (
 	paraformerTicksPerMs = clientRate / 1000
 )
 
-// paraformerAdmission matches the realtime Paraformer models in scope.
-var paraformerAdmission = regexp.MustCompile(`^paraformer-realtime-(8k-)?v2`)
-
-// SupportedParaformer reports whether model is a Paraformer realtime model this dialect relays.
+// SupportedParaformer reports whether model speaks Bailian's inference WebSocket protocol and
+// this dialect relays it: Paraformer realtime, or Qwen-Audio ASR -streaming / -message (see
+// inferenceProfiles).
 func SupportedParaformer(model string) bool {
-	return paraformerAdmission.MatchString(strings.ToLower(strings.TrimSpace(model)))
+	_, ok := inferenceProfileFor(model)
+	return ok
 }
 
 // SupportedBailianTranscription reports whether model is any Bailian transcription realtime
-// model (Qwen-ASR or Paraformer). Legacy beta passthrough remains Qwen-ASR only.
+// model (Qwen-ASR, Paraformer or Qwen-Audio ASR). Legacy beta passthrough remains Qwen-ASR only.
 func SupportedBailianTranscription(model string) bool {
 	return SupportedASR(model) || SupportedParaformer(model)
 }
@@ -100,14 +100,17 @@ type paraformerConfig struct {
 	eagerness         string // GA semantic_vad eagerness; empty unless semanticVAD
 	silenceDurationMs int64
 	inputFormat       paraformerInputFormat
+	noiseReduction    string // GA noise_reduction type; only for profiles with vadModel
 }
 
-// ParaformerDialect relays a GA transcription session to Bailian Paraformer realtime
-// (run-task / binary PCM / finish-task on /api-ws/v1/inference).
+// ParaformerDialect relays a GA transcription session to a model on Bailian's inference
+// WebSocket (run-task / binary PCM / finish-task on /api-ws/v1/inference): Paraformer realtime
+// and Qwen-Audio ASR -streaming / -message, whose differences live in prof.
 type ParaformerDialect struct {
 	mu sync.Mutex
 
 	opts ParaformerOptions
+	prof inferenceProfile
 	ids  *dialect.EventIDs
 	ctx  context.Context
 
@@ -123,6 +126,13 @@ type ParaformerDialect struct {
 	awaiting bool // waiting for task-started
 	pending  [][]byte
 	finished bool
+	// forwardedTicks is the client audio of the session handed to the session for the upstream
+	// and not handed back (Output.Discarded): what usageAudioSeconds bills at most.
+	// pendingTicks are the ticks of each pending frame, and heldTicks those of client audio the
+	// decoder has not produced output for yet (it comes out with the next frame).
+	forwardedTicks int64
+	pendingTicks   []int64
+	heldTicks      int64
 	// Client audio in ticks. Paraformer's timeline restarts at zero with every task: taskTicks is
 	// the audio sent in the current task, committedTicks where its last commit point falls (a
 	// final moves it the way OpenAI's server VAD commits), so the GA input audio buffer a commit
@@ -142,7 +152,11 @@ type ParaformerDialect struct {
 	closing bool
 	drain   bool
 
-	lastDuration int64 // cumulative usage.duration from last final
+	lastDuration int64 // cumulative usage.duration from last final (Paraformer)
+	// meter diffs the cumulative per-task token usage (usageReportedTokens); billedSeconds is
+	// the session audio already billed in whole seconds (usageAudioSeconds).
+	meter         usageMeter
+	billedSeconds int64
 
 	itemSeq       int
 	current       string
@@ -154,17 +168,21 @@ type ParaformerDialect struct {
 
 var _ dialect.Dialect = (*ParaformerDialect)(nil)
 
-// NewParaformer returns the GA transcription dialect for a Paraformer realtime model.
+// NewParaformer returns the GA transcription dialect for a model SupportedParaformer admits.
 func NewParaformer(opts ParaformerOptions) (*ParaformerDialect, error) {
 	ids := opts.IDs
 	if ids == nil {
 		ids = &dialect.EventIDs{}
 	}
 
-	rate := paraformerRateV2
-	if strings.Contains(strings.ToLower(opts.ActualModel), "8k") {
-		rate = paraformerRate8k
+	prof, ok := inferenceProfileFor(opts.ActualModel)
+	if !ok {
+		// Callers admit with SupportedParaformer; anything else (live probes) is spoken to
+		// as Paraformer.
+		prof = paraformerProfile
 	}
+
+	rate := prof.rate(opts.ActualModel)
 
 	rs, err := audio.NewResampler(clientRate, rate)
 	if err != nil {
@@ -181,11 +199,12 @@ func NewParaformer(opts ParaformerOptions) (*ParaformerDialect, error) {
 
 	return &ParaformerDialect{
 		opts:      opts,
+		prof:      prof,
 		ids:       ids,
 		ctx:       context.Background(),
-		cfg:       paraformerConfig{model: opts.RequestedModel, silenceDurationMs: paraformerSilenceDef},
+		cfg:       paraformerConfig{model: opts.RequestedModel, silenceDurationMs: prof.silenceDefault},
 		sessionID: "sess_axh_" + uuid.NewString(),
-		taskID:    uuid.NewString(),
+		taskID:    prof.newTaskID(),
 		inputRate: rate,
 		resampler: rs,
 		g711Up:    g711Up,
@@ -194,7 +213,7 @@ func NewParaformer(opts ParaformerOptions) (*ParaformerDialect, error) {
 	}, nil
 }
 
-func (d *ParaformerDialect) Name() string { return paraformerDialectName }
+func (d *ParaformerDialect) Name() string { return d.prof.name }
 
 // Greeting synthesises the GA session.created Paraformer never sends on connect.
 func (d *ParaformerDialect) Greeting() [][]byte {
@@ -240,7 +259,7 @@ func (d *ParaformerDialect) FinishDrain() bool {
 func (d *ParaformerDialect) CloseGrace() time.Duration { return 2 * time.Second }
 
 // GateTimeout bounds the waits for task-started and for a commit's task-finished; the
-// Paraformer endpoint is in Beijing, so cross-border round trips get the default bound.
+// inference endpoint may be in Beijing, so cross-border round trips get the default bound.
 func (d *ParaformerDialect) GateTimeout() time.Duration { return 10 * time.Second }
 
 func (d *ParaformerDialect) synth(event map[string]any) []byte {
@@ -270,6 +289,11 @@ func (d *ParaformerDialect) ClientFrame(frame []byte) (dialect.Output, error) {
 	case "input_audio_buffer.append":
 		return d.clientAppend(ev, clientEventID), nil
 	case "input_audio_buffer.commit":
+		if d.closing {
+			// Teardown already sent the goodbye: nothing reaches the upstream any more.
+			return dialect.Output{}, nil
+		}
+
 		// Paraformer has no commit: finish-task makes it finalise the sentence in progress now,
 		// without waiting for max_sentence_silence of trailing silence. Client frames are held
 		// until task-finished; the next audio then starts a new task on the same connection.
@@ -310,7 +334,7 @@ func (d *ParaformerDialect) clientSessionUpdate(ev gjson.Result, clientEventID s
 			"session", clientEventID)}}
 	}
 
-	cfg, rej := mergeParaformerUpdate(d.cfg, ev.Get("session"), d.inputRate)
+	cfg, rej := mergeParaformerUpdate(d.cfg, ev.Get("session"), d.prof)
 	if rej != nil {
 		out := dialect.Output{ToClient: [][]byte{dialect.ErrorEvent(d.ids, rej.errType, rej.code, rej.message, rej.param, clientEventID)}}
 		if rej.closeCode != 0 {
@@ -322,7 +346,7 @@ func (d *ParaformerDialect) clientSessionUpdate(ev gjson.Result, clientEventID s
 	return dialect.Output{ToClient: [][]byte{d.renderSessionEvent("session.updated")}}
 }
 
-func mergeParaformerUpdate(cfg paraformerConfig, session gjson.Result, modelRate int) (paraformerConfig, *rejection) {
+func mergeParaformerUpdate(cfg paraformerConfig, session gjson.Result, prof inferenceProfile) (paraformerConfig, *rejection) {
 	if t := session.Get("type"); t.Exists() && t.String() != "transcription" {
 		return cfg, &rejection{
 			errType: "invalid_request_error", code: "unsupported_session_type", param: "session.type",
@@ -358,15 +382,26 @@ func mergeParaformerUpdate(cfg paraformerConfig, session gjson.Result, modelRate
 			cfg.model = m.String()
 		}
 		if lang := tr.Get("language"); lang.Exists() {
-			cfg.language = paraformerLanguage(lang.String())
+			cfg.language = prof.language(lang.String())
 		}
 		if langs := tr.Get("languages"); langs.IsArray() {
 			if list := langs.Array(); len(list) == 1 {
-				cfg.language = paraformerLanguage(list[0].String())
+				cfg.language = prof.language(list[0].String())
 			} else {
 				cfg.language = ""
 			}
 		}
+	}
+
+	if nr := in.Get("noise_reduction"); prof.vadModel && nr.Exists() {
+		typ := nr.Get("type").String()
+		if _, ok := vadModels[typ]; nr.Type != gjson.Null && !ok {
+			return cfg, &rejection{
+				errType: "invalid_request_error", code: "invalid_value", param: "session.audio.input.noise_reduction.type",
+				message: fmt.Sprintf("Unsupported noise_reduction.type %q; use near_field or far_field.", typ),
+			}
+		}
+		cfg.noiseReduction = typ
 	}
 
 	if td := in.Get("turn_detection"); td.Exists() {
@@ -412,7 +447,6 @@ func mergeParaformerUpdate(cfg paraformerConfig, session gjson.Result, modelRate
 		}
 	}
 
-	_ = modelRate
 	return cfg, nil
 }
 
@@ -427,31 +461,70 @@ func paraformerLanguage(code string) string {
 }
 
 func (d *ParaformerDialect) clientAppend(ev gjson.Result, clientEventID string) dialect.Output {
+	if d.closing {
+		// Teardown already sent the goodbye and the session forwards nothing any more: the
+		// audio is neither buffered nor billed.
+		return dialect.Output{}
+	}
+
 	raw, err := base64.StdEncoding.DecodeString(ev.Get("audio").String())
 	if err != nil || len(raw) == 0 {
 		return dialect.Output{ToClient: [][]byte{d.clientError("invalid_value", "Invalid base64 audio.", "audio", clientEventID)}}
 	}
 
-	d.taskTicks += d.clientTicks(len(raw))
+	ticks := d.clientTicks(len(raw))
+	d.taskTicks += ticks
+	d.heldTicks += ticks
 
 	pcm := d.decodeClientAudio(raw)
 	if len(pcm) == 0 {
 		return dialect.Output{}
 	}
 
+	ticks, d.heldTicks = d.heldTicks, 0
+
 	if !d.started {
 		d.started = true
 		d.awaiting = true
 		d.pending = append(d.pending, pcm)
+		d.pendingTicks = append(d.pendingTicks, ticks)
 		return dialect.Output{ToUpstream: [][]byte{d.runTaskFrame()}, CloseGate: true}
 	}
 
 	if d.awaiting {
 		d.pending = append(d.pending, pcm)
+		d.pendingTicks = append(d.pendingTicks, ticks)
 		return dialect.Output{}
 	}
 
-	return dialect.Output{ToUpstream: [][]byte{pcm}, BinaryUpstream: true}
+	return d.forward([][]byte{pcm}, []int64{ticks})
+}
+
+// forward hands PCM frames carrying ticks of client audio each to the session for the upstream
+// and counts them as forwarded; the session hands back the frames it then drops (the session
+// was ending or the upstream writer failed), so only audio that reached the upstream writer is
+// billed.
+func (d *ParaformerDialect) forward(frames [][]byte, ticks []int64) dialect.Output {
+	if len(frames) == 0 {
+		return dialect.Output{}
+	}
+
+	for _, t := range ticks {
+		d.forwardedTicks += t
+	}
+
+	return dialect.Output{
+		ToUpstream:     frames,
+		BinaryUpstream: true,
+		Discarded: func(sent int) {
+			d.mu.Lock()
+			defer d.mu.Unlock()
+
+			for _, t := range ticks[min(max(sent, 0), len(ticks)):] {
+				d.forwardedTicks -= t
+			}
+		},
+	}
 }
 
 // clientTicks is the duration of n bytes of client audio in the session's input format.
@@ -488,17 +561,22 @@ func (d *ParaformerDialect) runTaskFrame() []byte {
 		"format":      "pcm",
 		"sample_rate": d.inputRate,
 	}
+	maps.Copy(params, d.prof.fixedParams)
 	if d.cfg.language != "" {
 		params["language_hints"] = []string{d.cfg.language}
 	}
 	if !d.cfg.manual {
 		params["max_sentence_silence"] = d.cfg.silenceDurationMs
-		params["semantic_punctuation_enabled"] = d.cfg.semanticVAD
 	} else {
 		// Manual clients still need segmentation somewhere; keep VAD with a long silence so
 		// finish-task is what usually ends the utterance.
 		params["max_sentence_silence"] = paraformerSilenceMax
-		params["semantic_punctuation_enabled"] = false
+	}
+	if d.prof.semanticPunctuation {
+		params["semantic_punctuation_enabled"] = !d.cfg.manual && d.cfg.semanticVAD
+	}
+	if vad := vadModels[d.cfg.noiseReduction]; vad != "" {
+		params["vad_model"] = vad
 	}
 
 	b, _ := json.Marshal(map[string]any{
@@ -542,20 +620,32 @@ func (d *ParaformerDialect) UpstreamFrame(frame []byte) (dialect.Output, error) 
 			return dialect.Output{}, nil
 		}
 		d.awaiting = false
-		out := dialect.Output{ToUpstream: d.pending, BinaryUpstream: true, OpenGate: true}
-		d.pending = nil
+		pending, ticks := d.pending, d.pendingTicks
+		d.pending, d.pendingTicks = nil, nil
+
+		if d.closing {
+			// The goodbye is already on its way and the session forwards nothing any more:
+			// the held audio is never sent, so it is not billed either.
+			return dialect.Output{OpenGate: true}, nil
+		}
+
+		out := d.forward(pending, ticks)
+		out.OpenGate = true
 		return out, nil
 	case "result-generated":
 		return d.resultGenerated(ev), nil
 	case "task-finished":
+		tail := d.taskTail(ev)
+
 		if !d.committing {
 			d.finished = true
-			return dialect.Output{UpstreamFinished: true}, nil
+			return dialect.Output{UpstreamFinished: true, Usage: d.tailRecords(tail)}, nil
 		}
 
 		// A client commit's finish-task: answer the commit, then either start over for the next
 		// audio or, when teardown is already waiting for this task, end there.
-		out := dialect.Output{ToClient: d.commitReply()}
+		out := dialect.Output{ToClient: d.commitReply(tail)}
+		out.Usage = d.tailRecords(tail)
 		d.committing = false
 
 		if d.closing {
@@ -580,16 +670,18 @@ func (d *ParaformerDialect) UpstreamFrame(frame []byte) (dialect.Output, error) 
 // from zero, and a timeline that continues where this task's audio ended.
 func (d *ParaformerDialect) nextTask() {
 	d.started = false
-	d.taskID = uuid.NewString()
+	d.taskID = d.prof.newTaskID()
 	d.lastDuration = 0
+	d.meter = usageMeter{}
 	d.offsetTicks += d.taskTicks
 	d.taskTicks = 0
 	d.committedTicks = 0
 }
 
 // commitReply answers a client commit once its finish-task is done, unless a Paraformer final
-// already did: OpenAI answers every commit with a committed item.
-func (d *ParaformerDialect) commitReply() [][]byte {
+// already did: OpenAI answers every commit with a committed item. An item synthesised here
+// carries the task's tail usage.
+func (d *ParaformerDialect) commitReply(tail asrUsage) [][]byte {
 	answered := d.commitAnswered
 	d.commitAnswered = false
 
@@ -608,7 +700,7 @@ func (d *ParaformerDialect) commitReply() [][]byte {
 
 		out = append(out,
 			d.synth(map[string]any{"type": "input_audio_buffer.committed", "item_id": id, "previous_item_id": nullable(d.itemPrev[id])}),
-			d.synth(map[string]any{"type": "conversation.item.input_audio_transcription.completed", "item_id": id, "content_index": 0, "transcript": text, "usage": map[string]any{"type": "duration", "seconds": 0}}),
+			d.synth(map[string]any{"type": "conversation.item.input_audio_transcription.completed", "item_id": id, "content_index": 0, "transcript": text, "usage": d.gaUsage(tail)}),
 			d.synth(map[string]any{"type": "conversation.item.done", "previous_item_id": nullable(d.itemPrev[id]), "item": userAudioItem(id, "completed", text)}),
 		)
 
@@ -626,7 +718,7 @@ func (d *ParaformerDialect) commitReply() [][]byte {
 		out = append(out,
 			d.synth(map[string]any{"type": "input_audio_buffer.committed", "item_id": id, "previous_item_id": prev}),
 			d.synth(map[string]any{"type": "conversation.item.added", "previous_item_id": prev, "item": userAudioItem(id, "in_progress", nil)}),
-			d.synth(map[string]any{"type": "conversation.item.input_audio_transcription.completed", "item_id": id, "content_index": 0, "transcript": "", "usage": map[string]any{"type": "duration", "seconds": 0}}),
+			d.synth(map[string]any{"type": "conversation.item.input_audio_transcription.completed", "item_id": id, "content_index": 0, "transcript": "", "usage": d.gaUsage(tail)}),
 			d.synth(map[string]any{"type": "conversation.item.done", "previous_item_id": prev, "item": userAudioItem(id, "completed", "")}),
 		)
 
@@ -639,6 +731,8 @@ func (d *ParaformerDialect) commitReply() [][]byte {
 func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 	sent := ev.Get("payload.output.sentence")
 	if !sent.Exists() || sent.Get("heartbeat").Bool() {
+		// A heartbeat result (heartbeat:true in run-task) only keeps a silent task alive: no
+		// event, no usage, no commit point.
 		return dialect.Output{}
 	}
 
@@ -709,30 +803,14 @@ func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 		"previous_item_id": nullable(d.itemPrev[id]),
 	}))
 
-	usageRaw := ev.Get("payload.usage")
-	var usageRec []dialect.UsageRecord
-	duration := usageRaw.Get("duration").Int()
-	deltaSec := duration - d.lastDuration
-	if deltaSec < 0 {
-		deltaSec = duration
-	}
-	d.lastDuration = duration
-	if deltaSec > 0 || duration > 0 {
-		summary, _ := json.Marshal(map[string]any{
-			"type":             "paraformer_sentence",
-			"item_id":          id,
-			"transcript":       text,
-			"duration_seconds": deltaSec,
-			"begin_time_ms":    d.sessionMs(sent.Get("begin_time").Int()),
-			"end_time_ms":      d.sessionMs(endMs),
-		})
-		usageRec = append(usageRec, dialect.UsageRecord{
-			Kind:            "transcription",
-			ItemID:          id,
-			Model:           d.opts.ActualModel,
-			DurationSeconds: float64(deltaSec),
-			Summary:         summary,
-		})
+	var (
+		usage    map[string]any
+		usageRec []dialect.UsageRecord
+	)
+	if d.prof.usage == usageReportedSeconds {
+		usage, usageRec = d.paraformerFinalUsage(ev, sent, id, text, endMs)
+	} else {
+		usage, usageRec = d.qwenAudioFinalUsage(ev, sent, id, text, endMs)
 	}
 
 	completed := d.synth(map[string]any{
@@ -740,10 +818,7 @@ func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 		"item_id":       id,
 		"content_index": 0,
 		"transcript":    text,
-		"usage": map[string]any{
-			"type":    "duration",
-			"seconds": deltaSec,
-		},
+		"usage":         usage,
 	})
 	out.ToClient = append(out.ToClient, completed)
 	out.ToClient = append(out.ToClient, d.synth(map[string]any{
@@ -778,6 +853,38 @@ func (d *ParaformerDialect) resultGenerated(ev gjson.Result) dialect.Output {
 	return out
 }
 
+// paraformerFinalUsage bills a Paraformer final by the difference of its cumulative
+// usage.duration.
+func (d *ParaformerDialect) paraformerFinalUsage(ev, sent gjson.Result, id, text string, endMs int64) (map[string]any, []dialect.UsageRecord) {
+	usageRaw := ev.Get("payload.usage")
+	var usageRec []dialect.UsageRecord
+	duration := usageRaw.Get("duration").Int()
+	deltaSec := duration - d.lastDuration
+	if deltaSec < 0 {
+		deltaSec = duration
+	}
+	d.lastDuration = duration
+	if deltaSec > 0 || duration > 0 {
+		summary, _ := json.Marshal(map[string]any{
+			"type":             d.prof.summaryType,
+			"item_id":          id,
+			"transcript":       text,
+			"duration_seconds": deltaSec,
+			"begin_time_ms":    d.sessionMs(sent.Get("begin_time").Int()),
+			"end_time_ms":      d.sessionMs(endMs),
+		})
+		usageRec = append(usageRec, dialect.UsageRecord{
+			Kind:            "transcription",
+			ItemID:          id,
+			Model:           d.opts.ActualModel,
+			DurationSeconds: float64(deltaSec),
+			Summary:         summary,
+		})
+	}
+
+	return map[string]any{"type": "duration", "seconds": deltaSec}, usageRec
+}
+
 // sessionMs moves a time on the current task's timeline onto the session timeline.
 func (d *ParaformerDialect) sessionMs(taskMs int64) int64 {
 	return taskMs + d.offsetTicks/paraformerTicksPerMs
@@ -804,11 +911,30 @@ func (d *ParaformerDialect) taskFailed(ev gjson.Result) dialect.Output {
 	// pending audio so the session ends on Close instead of waiting ~5s for gate timeout.
 	if d.awaiting {
 		d.awaiting = false
-		d.pending = nil
+		d.pending, d.pendingTicks = nil, nil
 		out.OpenGate = true
 	}
 
+	// The -streaming audio forwarded since the last final is billed once the session ended
+	// (FinalUsage), since no task-finished follows a failed task.
 	return out
+}
+
+// FinalUsage implements the session's finalUsager: once the session ended, -streaming bills
+// the forwarded audio no final or task tail billed yet. That is the remainder of a task that
+// ended without task-finished (task-failed, a lost upstream, a commit or goodbye whose
+// task-finished never came); billAudioTo never bills a second twice, so after a task tail it
+// is nothing. -message and Paraformer bill what the upstream reports, so they have no
+// remainder of their own.
+func (d *ParaformerDialect) FinalUsage() []dialect.UsageRecord {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.prof.usage != usageAudioSeconds {
+		return nil
+	}
+
+	return d.tailRecords(asrUsage{Duration: d.billAudioTo(d.forwardedTicks)})
 }
 
 func (d *ParaformerDialect) renderSessionEvent(typ string) []byte {
@@ -823,6 +949,11 @@ func (d *ParaformerDialect) renderSessionEvent(typ string) []byte {
 		format = map[string]any{"type": "audio/pcmu", "rate": audio.G711Rate}
 	case paraformerALaw:
 		format = map[string]any{"type": "audio/pcma", "rate": audio.G711Rate}
+	}
+
+	var noiseReduction any
+	if d.cfg.noiseReduction != "" {
+		noiseReduction = map[string]any{"type": d.cfg.noiseReduction}
 	}
 
 	var turnDetection any
@@ -852,7 +983,7 @@ func (d *ParaformerDialect) renderSessionEvent(typ string) []byte {
 				"input": map[string]any{
 					"format":          format,
 					"transcription":   map[string]any{"model": d.cfg.model, "language": language},
-					"noise_reduction": nil,
+					"noise_reduction": noiseReduction,
 					"turn_detection":  turnDetection,
 				},
 			},

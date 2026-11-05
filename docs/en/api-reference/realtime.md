@@ -15,6 +15,11 @@ usage logging. These upstreams are supported:
 | Alibaba Bailian Qwen-Omni-Realtime (`qwen3.8-omni-flash-realtime`, `qwen3.5-omni-*-realtime`) | WebSocket relay with protocol translation | GA clients work unchanged; the gateway translates the Bailian dialect. |
 | Alibaba Bailian Qwen-ASR realtime (`qwen3-asr-flash-realtime`) | WebSocket transcription sessions | GA transcription clients are translated; beta-protocol clients (Bailian's own protocol) are relayed unchanged. See [Bailian real-time speech recognition](#bailian-real-time-speech-recognition-qwen-asr). |
 | Alibaba Bailian Paraformer realtime (`paraformer-realtime-v2`, `paraformer-realtime-8k-v2`) | WebSocket transcription sessions | GA transcription clients are translated to the Bailian inference protocol (`run-task` / binary PCM / `finish-task`). Beta-protocol clients are rejected. See [Bailian Paraformer realtime](#bailian-paraformer-realtime). |
+| Alibaba Bailian Qwen-Audio ASR realtime (`qwen-audio-3.1-asr-flash-streaming`, `qwen-audio-3.1-asr-flash-message`) | WebSocket transcription sessions | Same inference protocol and behaviour as Paraformer. See [Bailian Qwen-Audio ASR realtime](#bailian-qwen-audio-asr-realtime). |
+| Alibaba Bailian Qwen-LiveTranslate (`qwen3.8-livetranslate-flash-realtime`) | WebSocket translation sessions (`/v1/realtime/translations`) | OpenAI realtime translation clients are translated to the Bailian protocol. See [Realtime translation](#realtime-translation-v1realtimetranslations). |
+
+For non-realtime file transcription on Bailian (`POST /v1/audio/transcriptions`, including long
+audio), see [Bailian file transcription](bailian-transcription.md).
 
 Audio media for WebRTC calls flows **directly between the client and OpenAI**; the gateway only
 forwards the SDP signalling and relays the sideband WebSocket.
@@ -27,15 +32,17 @@ All routes exist under `/v1` and, for Codex clients whose base URL ends in `/cod
 | Route | Purpose |
 |---|---|
 | `GET /v1/realtime?model=<model>` | WebSocket session (OpenAI GA protocol) |
-| `GET /v1/realtime?intent=transcription[&model=]` | Transcription session; `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL` is used when `model` is absent. A Bailian Qwen-ASR or Paraformer realtime model is always a transcription session, with or without `intent` |
+| `GET /v1/realtime?intent=transcription[&model=]` | Transcription session; `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL` is used when `model` is absent. A Bailian Qwen-ASR, Paraformer or Qwen-Audio ASR realtime model is always a transcription session, with or without `intent` |
+| `GET /v1/realtime/translations?model=<model>` | Realtime translation session (OpenAI realtime translation protocol), Bailian Qwen-LiveTranslate only |
 | `GET /v1/realtime?call_id=<id>` | Sideband attach to a WebRTC call created through the gateway |
 | `GET /v1/live/{call_id}` | Codex v3 sideband attach |
 | `POST /v1/live` | Codex WebRTC call create (multipart `sdp` + `session`) |
 | `POST /v1/realtime/calls` | Standard WebRTC call create (`application/sdp`, multipart or JSON `{sdp, session}`) |
 | `POST /v1/realtime/calls/{call_id}/hangup` | End a call created through `/v1/realtime/calls` on an OpenAI channel |
 
-Not supported (answered with a JSON 404 explaining why): `POST /v1/realtime/client_secrets`
-(would hand out an unmetered upstream credential), `accept`/`reject`/`refer` (SIP calls never
+Not supported (answered with a JSON 404 explaining why): `POST /v1/realtime/client_secrets` and
+`POST /v1/realtime/translations/client_secrets` (would hand out an unmetered upstream credential),
+`POST /v1/realtime/translations/calls` (translation over WebRTC), `accept`/`reject`/`refer` (SIP calls never
 pass through the gateway), `GET /v1/live?model=` (GPT-Live websocket transport), the removed beta
 `POST /v1/realtime/sessions` and `/v1/realtime/transcription_sessions`, and the removed beta
 protocol (`OpenAI-Beta: realtime=v1` is rejected with 400) for every model except Bailian Qwen-ASR
@@ -224,6 +231,80 @@ model association). The gateway:
 Beta-protocol clients (`OpenAI-Beta: realtime=v1`) are rejected for Paraformer models (they only
 work for Qwen-ASR).
 
+## Bailian Qwen-Audio ASR realtime
+
+`qwen-audio-3.1-asr-flash-streaming` and `qwen-audio-3.1-asr-flash-message` (and their dated
+snapshots) on a Bailian channel serve GA transcription sessions exactly like Paraformer: the same
+inference WebSocket, the same commit behaviour (every commit answered, `commit_empty` under
+100 ms, session timeline across commits) and the same close/drain rules. Add the model to the
+channel and connect with `/v1/realtime?intent=transcription&model=qwen-audio-3.1-asr-flash-streaming`.
+Beta-protocol clients are rejected. Both models are served in Beijing and Singapore (Paraformer is
+Beijing only).
+
+Differences from Paraformer:
+
+- Audio is sent to Bailian at 16 kHz (24 kHz PCM and G.711 are converted as for Paraformer).
+- `turn_detection`: `server_vad` `silence_duration_ms` → `max_sentence_silence` (200–6000 ms,
+  default **800**); `semantic_vad` eagerness → high 400 / medium 800 / low 1200 ms (no semantic
+  punctuation is sent); `null` (manual) → 6000 ms. The gateway sends `heartbeat: true`, so a client
+  that streams silence between utterances keeps the task alive.
+- `audio.input.noise_reduction` selects Bailian's VAD model and is echoed back: `near_field` →
+  `near_meeting_16k`, `far_field` → `far_field_meeting_16k`, `null`/absent → Bailian's default (far
+  field); any other type is `invalid_value`.
+- `transcription.language` uses Qwen-Audio's 30 languages (zh en ja ko vi th id ms tl hi ar fr de es
+  pt ru it nl sv da fi no el pl cs hu ro bg hr sk). There is no Cantonese (`yue`, `zh-HK` →
+  automatic). Filipino is `tl` (`fil` is accepted). Unknown codes → automatic detection.
+- `-streaming` sends live partial deltas. `-message` (tuned for short voice messages) sends no
+  partial text: each sentence arrives once, about 1 s after the speech ends, as one delta plus
+  `completed`.
+- Billing:
+  - `-message` reports tokens per sentence (`completed.usage` is `{"type":"tokens",…}`); the usage
+    log also carries the reported seconds. Configure token prices (per 1M) **or** a
+    `duration_seconds` price for it, not both, or it is billed twice.
+  - `-streaming` reports no usage at all. AxonHub bills the seconds of audio it actually forwarded
+    (whole seconds, rounded up, at most 1 s over the real audio per session), also when a task
+    fails or the upstream drops. `completed.usage` is `{"type":"duration","seconds":N}`; configure
+    a `duration_seconds` price for it.
+- Push-to-talk clients that stop streaming entirely: Bailian fails a task after about 23 s without
+  any audio (`CLIENT_ERROR`), so commit at the end of each turn.
+
+## Realtime translation (`/v1/realtime/translations`)
+
+AxonHub relays the OpenAI realtime translation WebSocket protocol to Bailian Qwen-LiveTranslate
+(`qwen3.8-livetranslate-flash-realtime`). The official SDK clients work against it: Python
+`client.realtime.translations.connect(model=...)`, Node `OpenAIRealtimeTranslationWS`, Go
+`Realtime.ConnectTranslation`.
+
+- **Endpoint:** `GET /v1/realtime/translations?model=<model>` (WebSocket), with the same API-key
+  auth as `/v1/realtime` (also mirrored under `/codex`). Only Qwen-LiveTranslate 3.8 models are
+  accepted here, and they are refused on `/v1/realtime` with a 400 that points here.
+- **Setup:** add `qwen3.8-livetranslate-flash-realtime` to a Bailian channel and give it token
+  prices. Bailian bills about 7 tokens per second of input audio and 12.5 per second of output audio.
+- **Client events:** `session.update` (`audio.output.language`, `audio.input.transcription`,
+  `audio.input.noise_reduction`), `session.input_audio_buffer.append` (base64 24 kHz PCM16) and
+  `session.close`.
+- **Server events:** `session.created`, `session.updated`, `session.closed`,
+  `session.output_audio.delta` (24 kHz PCM16), `session.output_transcript.delta`,
+  `session.input_transcript.delta` (only when `audio.input.transcription` is set) and `error`.
+- **Languages:** 60 target languages. 29 are translated to speech (zh, en, ar, de, fr, es, pt, id,
+  it, ko, ru, th, vi, ja, tr, hi, ms, nl, ur, nb, sv, da, he, fi, pl, is, cs, fil, fa); the others
+  are text only and produce no audio deltas. BCP-47 tags are normalised (en-US → en, zh-CN / zh-TW
+  / zh-Hant-TW → zh, zh-HK / zh-Hant-HK → yue (text only), no → nb, tl → fil). The default is `en`.
+  An unsupported code returns an `invalid_value` error event and the session stays open.
+- **How it maps:** Bailian accepts only one configuration per session, so the gateway answers
+  `session.update` itself and sends one merged configuration to Bailian just before the first
+  audio. The target language is fixed from then on (a later change returns
+  `unsupported_on_upstream`; reconnect to switch). The upstream voice is
+  `AXONHUB_REALTIME_LIVETRANSLATE_VOICE` (default `Tina`; Bailian's own default voice fails every
+  response).
+- **Ending:** `session.close` waits up to 15 s for the last sentence, then sends `session.closed`
+  and closes with 1000 (also when the upstream fails during that wait; the session is then logged as
+  failed). Any upstream error ends the session with close code 1011.
+- **Billing / logs:** each translated sentence (each upstream `response.done`) creates one request
+  row and one usage row under the Bailian model; each session also gets a summary row. The client
+  receives no usage events. `noise_reduction` and `transcription.model` are echoed back but have no
+  effect.
+
 
 ## Codex voice (Codex desktop / CLI)
 
@@ -286,6 +367,7 @@ Only the API key that created a call may attach to its sideband.
 | `AXONHUB_REALTIME_CALL_BINDINGS_PER_PROJECT` | `1024` | Maximum remembered WebRTC calls per project |
 | `AXONHUB_REALTIME_QUOTA_CHECK_INTERVAL` | `30s` | In-session re-check of quotas, channel status and API key |
 | `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL` | `gpt-4o-transcribe` | Model for `intent=transcription` without `model` |
+| `AXONHUB_REALTIME_LIVETRANSLATE_VOICE` | `Tina` | Bailian voice for spoken translations on `/v1/realtime/translations` |
 | `AXONHUB_REALTIME_MONITOR_CALLS` | `true` | Gateway-owned usage monitor for OpenAI WebRTC calls |
 | `AXONHUB_CODEX_LIVE_FORWARD_ATTESTATION` | `true` | Forward `x-oai-attestation` to the Codex backend |
 | `AXONHUB_REALTIME_CALL_BODY_LIMIT` | `1048576` | Maximum call-create body |
@@ -294,8 +376,11 @@ Only the API key that created a call may attach to its sideband.
 
 - Beta protocol clients are rejected except for Bailian Qwen-ASR models; audio tokens are billed
   at the text rate.
-- Bailian Qwen-ASR and Paraformer transcription sessions cannot be reconfigured after the first audio, cannot
-  clear the audio buffer, and have no `prompt`/`keywords`/noise reduction.
+- Bailian Qwen-ASR, Paraformer and Qwen-Audio ASR transcription sessions cannot be reconfigured after
+  the first audio, cannot clear the audio buffer, and have no `prompt`/`keywords` (noise reduction
+  only selects Qwen-Audio's VAD model).
+- Translation sessions cannot change the target language after the first audio and have no WebRTC
+  or ephemeral-key path.
 - One realtime session holds one channel concurrency slot (`MaxConcurrent`) for its whole duration.
 - No mid-session channel failover; a channel disabled mid-session ends the session at the next check.
 - Call bindings are per process (multi-replica deployments cannot share them).

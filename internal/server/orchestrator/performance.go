@@ -87,6 +87,7 @@ func (m *performanceRecording) OnOutboundRawRequest(ctx context.Context, request
 	// This record REPLACES the one built in OnInboundLlmRequest, so the source has to
 	// be re-read here or a probe would look like real traffic at the recording point.
 	perf.Source = requestSourceFromContext(ctx)
+	perf.LatencyExcluded = excludesLatency(request) // fork: see performance_bailian_asr.go
 
 	// Get the API key used for this request from context (set by TraceStickyKeyProvider).
 	// OAuth channels authenticate from Credentials.OAuth and never pass through the
@@ -125,6 +126,7 @@ func (m *performanceRecording) OnOutboundLlmResponse(ctx context.Context, respon
 	}
 
 	m.outbound.state.Perf.MarkSuccess()
+	markTranscriptionSuccess(m.outbound.state.Perf, m.outbound.state) // fork: see performance_bailian_asr.go
 	m.outbound.state.ChannelService.AsyncRecordPerformance(ctx, m.outbound.state.Perf)
 
 	return response, nil
@@ -153,7 +155,7 @@ func (m *performanceRecording) OnOutboundRawError(ctx context.Context, err error
 	perf := m.outbound.state.Perf
 	if errors.Is(err, context.Canceled) {
 		perf.MarkCanceled()
-	} else {
+	} else if !markTranscriptionFailure(perf, err) { // fork: see performance_bailian_asr.go
 		errorCode := ExtractErrorCode(err)
 		perf.MarkFailedWithMessage(errorCode, extractErrorMessageForMatching(err))
 	}

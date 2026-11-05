@@ -38,6 +38,22 @@ var ErrRealtimeLegacyOnly = errors.New("realtime: the beta protocol is only rela
 // realtimeLegacyReason is the capability reason the legacy rule drops a candidate with.
 const realtimeLegacyReason = "the realtime beta protocol is only relayed to bailian qwen-asr models"
 
+// ErrRealtimeTranslationOnly is returned by selection for a /v1/realtime session when every
+// candidate was dropped because its model is a Bailian livetranslate model, which only serves
+// translation sessions (/v1/realtime/translations).
+var ErrRealtimeTranslationOnly = errors.New("realtime: livetranslate models only serve translation sessions")
+
+// ErrRealtimeNotTranslationModel is returned by selection for a translation session when every
+// candidate was dropped because it is not a Bailian livetranslate model.
+var ErrRealtimeNotTranslationModel = errors.New("realtime: translation sessions are only served by bailian livetranslate models")
+
+// Capability reasons of the translation rule: a candidate's model must be a livetranslate model
+// exactly when the session is a translation session.
+const (
+	realtimeTranslationOnlyReason     = "livetranslate models are served on /v1/realtime/translations"
+	realtimeNotTranslationModelReason = "translation sessions are served only by bailian livetranslate models"
+)
+
 // PrepareRealtimeContext installs the mutable request container and the system authz bypass,
 // exactly like Process does before candidate selection. It intentionally does not install
 // biz.WithModelLibraryPriceMemo: realtime sessions bill many responses over a long time and
@@ -81,6 +97,9 @@ type RealtimeSelectionRequest struct {
 	// (OpenAI-Beta: realtime=v1). It is only relayed to Bailian ASR models, whose own protocol is
 	// that shape, so every other candidate is dropped.
 	Legacy bool
+	// Translation marks an OpenAI realtime translation session (/v1/realtime/translations). It is
+	// only served by Bailian livetranslate models, which in turn serve nothing else.
+	Translation bool
 }
 
 // SelectRealtimeCandidates selects the channel candidates for a realtime session or call with
@@ -124,7 +143,7 @@ func (processor *ChatCompletionOrchestrator) SelectRealtime(ctx context.Context,
 		PromptProvider:      processor.PromptProvider,
 		PromptProtecter:     processor.PromptProtecter,
 		RetryPolicyProvider: processor.SystemService,
-		CandidateSelector:   withRealtimeCapableSelector(processor.channelSelector, mode, sel.Intent).withLegacy(sel.Legacy),
+		CandidateSelector:   withRealtimeCapableSelector(processor.channelSelector, mode, sel.Intent).withLegacy(sel.Legacy).withTranslation(sel.Translation),
 		LoadBalancers: map[string]*LoadBalancer{
 			biz.LoadBalancerStrategyAdaptive:       processor.adaptiveLoadBalancer,
 			biz.LoadBalancerStrategyFailover:       processor.failoverLoadBalancer,
@@ -271,10 +290,11 @@ const (
 // load-balancer truncation decorators that selectCandidates adds on top: a candidate the relay
 // would reject anyway must not push a usable channel out of the truncated list.
 type realtimeCapableSelector struct {
-	wrapped CandidateSelector
-	mode    biz.RealtimeMode
-	intent  string
-	legacy  bool
+	wrapped     CandidateSelector
+	mode        biz.RealtimeMode
+	intent      string
+	legacy      bool
+	translation bool
 }
 
 // withRealtimeCapableSelector wraps a selector with the realtime capability filter for mode and
@@ -286,6 +306,13 @@ func withRealtimeCapableSelector(wrapped CandidateSelector, mode biz.RealtimeMod
 // withLegacy restricts the selector to Bailian ASR candidates for beta-protocol clients.
 func (s *realtimeCapableSelector) withLegacy(legacy bool) *realtimeCapableSelector {
 	s.legacy = legacy
+	return s
+}
+
+// withTranslation restricts the selector to Bailian livetranslate candidates for translation
+// sessions (and drops those candidates otherwise).
+func (s *realtimeCapableSelector) withTranslation(translation bool) *realtimeCapableSelector {
+	s.translation = translation
 	return s
 }
 
@@ -306,17 +333,15 @@ func (s *realtimeCapableSelector) Select(ctx context.Context, req *llm.Request) 
 		requested = req.Model
 	}
 
-	legacyDropped := 0
+	dropped := map[string]int{}
 
 	kept := lo.Filter(candidates, func(candidate *ChannelModelsCandidate, _ int) bool {
-		reason := realtimeIncapableReason(candidate, s.mode, s.intent, requested, s.legacy)
+		reason := realtimeIncapableReason(candidate, s.mode, s.intent, requested, s.legacy, s.translation)
 		if reason == "" {
 			return true
 		}
 
-		if reason == realtimeLegacyReason {
-			legacyDropped++
-		}
+		dropped[reason]++
 
 		if log.DebugEnabled(ctx) {
 			log.Debug(ctx, "realtime candidate dropped",
@@ -331,8 +356,15 @@ func (s *realtimeCapableSelector) Select(ctx context.Context, req *llm.Request) 
 		return false
 	})
 
-	if s.legacy && len(kept) == 0 && legacyDropped > 0 {
-		return nil, ErrRealtimeLegacyOnly
+	if len(kept) == 0 {
+		switch {
+		case s.legacy && dropped[realtimeLegacyReason] > 0:
+			return nil, ErrRealtimeLegacyOnly
+		case s.translation && dropped[realtimeNotTranslationModelReason] > 0:
+			return nil, ErrRealtimeNotTranslationModel
+		case !s.translation && dropped[realtimeTranslationOnlyReason] > 0:
+			return nil, ErrRealtimeTranslationOnly
+		}
 	}
 
 	return kept, nil
@@ -345,10 +377,12 @@ func (s *realtimeCapableSelector) Select(ctx context.Context, req *llm.Request) 
 // WebSocket mode rejects OAuth credentials inside RealtimeTarget (they only support WebRTC calls
 // through the Codex live base); the relay re-checks every condition before dialing.
 //
-// Bailian serves Qwen-Omni conversations plus Qwen-ASR and Paraformer transcription. A
+// Bailian serves Qwen-Omni conversations plus Qwen-ASR, Paraformer and Qwen-Audio ASR
+// (-streaming / -message) transcription. A
 // transcription model always gets a transcription session (with or without intent=transcription);
 // an omni model never does. Beta-protocol (legacy) clients are only relayed to Qwen-ASR models.
-func realtimeIncapableReason(candidate *ChannelModelsCandidate, mode biz.RealtimeMode, intent, requested string, legacy bool) string {
+// Translation sessions are only relayed to Bailian livetranslate models, which serve nothing else.
+func realtimeIncapableReason(candidate *ChannelModelsCandidate, mode biz.RealtimeMode, intent, requested string, legacy, translation bool) string {
 	if candidate == nil || candidate.Channel == nil || candidate.Channel.Channel == nil {
 		return "nil candidate"
 	}
@@ -363,24 +397,37 @@ func realtimeIncapableReason(candidate *ChannelModelsCandidate, mode biz.Realtim
 	actual := RealtimeActualModel(candidate, requested)
 	qwenASR := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual)
 	transcription := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedBailianTranscription(actual)
+	liveTranslate := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedLiveTranslate(actual)
 
-	// Legacy beta protocol is only relayed to Qwen-ASR (same wire shape), not Paraformer.
+	// Legacy beta protocol is only relayed to Qwen-ASR (same wire shape), not to the inference
+	// protocol of Paraformer and Qwen-Audio ASR.
 	if legacy && !qwenASR {
 		return realtimeLegacyReason
 	}
 
+	if target.Dialect == biz.RealtimeDialectBailian && mode == biz.RealtimeModeWebRTC {
+		return "bailian channels only support websocket sessions"
+	}
+
+	switch {
+	case translation && !liveTranslate:
+		return realtimeNotTranslationModelReason
+	case !translation && liveTranslate:
+		return realtimeTranslationOnlyReason
+	}
+
 	if target.Dialect == biz.RealtimeDialectBailian {
 		switch {
-		case mode == biz.RealtimeModeWebRTC:
-			return "bailian channels only support websocket sessions"
+		case liveTranslate:
+			// A translation session (checked above).
 		case intent == realtimeIntentQuicksilver:
 			return "intent=quicksilver requires an openai channel"
 		case transcription:
-			// Qwen-ASR and Paraformer serve transcription sessions.
+			// Qwen-ASR, Paraformer and Qwen-Audio ASR serve transcription sessions.
 		case intent == realtimeIntentTranscription:
-			return "bailian qwen-omni models do not support transcription sessions; use a qwen-asr or paraformer realtime model"
+			return "bailian qwen-omni models do not support transcription sessions; use a qwen-asr, paraformer or qwen-audio asr (-streaming / -message) realtime model"
 		case !bailian.Supported(actual):
-			return "not a qwen-omni, qwen-asr or paraformer realtime model"
+			return "not a qwen-omni, qwen-asr, paraformer or qwen-audio asr (-streaming / -message) realtime model"
 		}
 	}
 

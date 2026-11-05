@@ -13,6 +13,10 @@ AxonHub 可以中继 **OpenAI Realtime API**（正式版协议），让语音客
 | 阿里云百炼 Qwen-Omni-Realtime（`qwen3.8-omni-flash-realtime`、`qwen3.5-omni-*-realtime`） | WebSocket 中继 + 协议翻译 | 正式版客户端无需改动，网关负责翻译百炼方言。 |
 | 阿里云百炼 Qwen-ASR 实时识别（`qwen3-asr-flash-realtime`） | WebSocket 转写会话 | 正式版转写客户端由网关翻译；beta 协议客户端（即百炼自己的协议）原样转发。见[百炼实时语音识别](#百炼实时语音识别qwen-asr)。 |
 | 阿里云百炼 Paraformer 实时识别（`paraformer-realtime-v2`、`paraformer-realtime-8k-v2`） | WebSocket 转写会话 | 正式版转写客户端由网关翻译成百炼 inference 协议（`run-task` / 二进制 PCM / `finish-task`）。不接受 beta 协议。见[百炼 Paraformer 实时识别](#百炼-paraformer-实时识别)。 |
+| 阿里云百炼 Qwen-Audio ASR 实时识别（`qwen-audio-3.1-asr-flash-streaming`、`qwen-audio-3.1-asr-flash-message`） | WebSocket 转写会话 | 协议和行为同 Paraformer。见[百炼 Qwen-Audio ASR 实时识别](#百炼-qwen-audio-asr-实时识别)。 |
+| 阿里云百炼 Qwen-LiveTranslate（`qwen3.8-livetranslate-flash-realtime`） | WebSocket 翻译会话（`/v1/realtime/translations`） | OpenAI 实时翻译客户端由网关翻译成百炼协议。见[实时翻译](#实时翻译v1realtimetranslations)。 |
+
+百炼的非实时文件转写（`POST /v1/audio/transcriptions`，含长音频）见[百炼文件转写](bailian-transcription.md)。
 
 WebRTC 通话的音频**由客户端直连 OpenAI**，网关只转发 SDP 信令并中继 sideband WebSocket。
 
@@ -23,14 +27,15 @@ WebRTC 通话的音频**由客户端直连 OpenAI**，网关只转发 SDP 信令
 | 路由 | 用途 |
 |---|---|
 | `GET /v1/realtime?model=<model>` | WebSocket 会话（OpenAI 正式版协议） |
-| `GET /v1/realtime?intent=transcription[&model=]` | 转写会话；不带 `model` 时用 `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL`。百炼 Qwen-ASR 或 Paraformer 实时模型不管带不带 `intent` 都是转写会话 |
+| `GET /v1/realtime?intent=transcription[&model=]` | 转写会话；不带 `model` 时用 `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL`。百炼 Qwen-ASR、Paraformer 或 Qwen-Audio ASR 实时模型不管带不带 `intent` 都是转写会话 |
+| `GET /v1/realtime/translations?model=<model>` | 实时翻译会话（OpenAI 实时翻译协议），只支持百炼 Qwen-LiveTranslate |
 | `GET /v1/realtime?call_id=<id>` | 附着到经网关创建的 WebRTC 通话（sideband） |
 | `GET /v1/live/{call_id}` | Codex v3 sideband |
 | `POST /v1/live` | Codex WebRTC 建连（multipart 的 `sdp` + `session`） |
 | `POST /v1/realtime/calls` | 标准 WebRTC 建连（`application/sdp`、multipart 或 JSON `{sdp, session}`） |
 | `POST /v1/realtime/calls/{call_id}/hangup` | 挂断经 `/v1/realtime/calls` 在 OpenAI 渠道上创建的通话 |
 
-不支持（返回带原因的 JSON 404）：`POST /v1/realtime/client_secrets`（会把上游临时凭证交给调用方、绕过计费）、`accept`/`reject`/`refer`（SIP 通话不经过网关）、`GET /v1/live?model=`（GPT-Live 的 WebSocket 传输）、已被 OpenAI 下线的 beta 接口 `POST /v1/realtime/sessions` 和 `/v1/realtime/transcription_sessions`，以及已下线的 beta 协议（带 `OpenAI-Beta: realtime=v1` 会收到 400）——百炼 Qwen-ASR 模型除外，它们自己的协议就是这个形状。Paraformer 实时模型拒绝 beta 协议。
+不支持（返回带原因的 JSON 404）：`POST /v1/realtime/client_secrets` 和 `POST /v1/realtime/translations/client_secrets`（会把上游临时凭证交给调用方、绕过计费）、`POST /v1/realtime/translations/calls`（WebRTC 翻译）、`accept`/`reject`/`refer`（SIP 通话不经过网关）、`GET /v1/live?model=`（GPT-Live 的 WebSocket 传输）、已被 OpenAI 下线的 beta 接口 `POST /v1/realtime/sessions` 和 `/v1/realtime/transcription_sessions`，以及已下线的 beta 协议（带 `OpenAI-Beta: realtime=v1` 会收到 400）——百炼 Qwen-ASR 模型除外，它们自己的协议就是这个形状。Paraformer 实时模型拒绝 beta 协议。
 
 ### 鉴权
 
@@ -117,6 +122,35 @@ with client.realtime.connect(model="qwen3.5-omni-plus-realtime") as conn:
 
 Paraformer 模型拒绝 beta 协议客户端（`OpenAI-Beta: realtime=v1`）；beta 只对 Qwen-ASR 开放。
 
+## 百炼 Qwen-Audio ASR 实时识别
+
+百炼渠道上的 `qwen-audio-3.1-asr-flash-streaming` 和 `qwen-audio-3.1-asr-flash-message`（及带日期的快照）提供正式版转写会话，用法和 Paraformer 完全一样：同一个 inference WebSocket、同样的 commit 行为（每个 commit 都有回应、不到 100 毫秒回 `commit_empty`、跨 commit 的会话时间轴）和同样的关闭规则。把模型加进渠道，用 `/v1/realtime?intent=transcription&model=qwen-audio-3.1-asr-flash-streaming` 连接。不接受 beta 协议。这两个模型北京和新加坡都有（Paraformer 只有北京）。
+
+和 Paraformer 的区别：
+
+- 发给百炼的是 16 kHz 音频（24 kHz PCM 和 G.711 的转换同 Paraformer）。
+- `turn_detection`：`server_vad` 的 `silence_duration_ms` → `max_sentence_silence`（200–6000 毫秒，默认 **800**）；`semantic_vad` 的 eagerness → high 400 / medium 800 / low 1200 毫秒（不开语义断句）；`null`（手动模式）→ 6000 毫秒。网关发送 `heartbeat: true`，客户端在两句之间持续推静音时任务不会超时。
+- `audio.input.noise_reduction` 用来选百炼的 VAD 模型，并原样回显：`near_field` → `near_meeting_16k`，`far_field` → `far_field_meeting_16k`，`null` 或不填 → 百炼默认（远场）；其他值返回 `invalid_value`。
+- `transcription.language` 用 Qwen-Audio 的 30 种语言（zh en ja ko vi th id ms tl hi ar fr de es pt ru it nl sv da fi no el pl cs hu ro bg hr sk）。没有粤语（`yue`、`zh-HK` → 自动识别）。菲律宾语是 `tl`（也接受 `fil`）。不认识的代码 → 自动识别。
+- `-streaming` 实时推中间结果；`-message`（为短语音消息优化）没有中间文字：每句话在说完约 1 秒后一次性给出（一个 delta 加 `completed`）。
+- 计费：
+  - `-message` 每句上报 token（`completed.usage` 是 `{"type":"tokens",…}`），用量日志里也带上报的秒数。给它配 token 单价（每百万）**或** `duration_seconds` 单价，二选一，否则会算两遍。
+  - `-streaming` 完全不上报用量。网关按实际转发给百炼的音频秒数计费（整秒、向上取整，每个会话最多多算 1 秒），任务失败或上游断开时也照算。`completed.usage` 是 `{"type":"duration","seconds":N}`；请给它配 `duration_seconds` 单价。
+- 按住说话、松开就完全不推音频的客户端：百炼在约 23 秒没有任何音频后会让任务失败（`CLIENT_ERROR`），所以每轮说完要发 commit。
+
+## 实时翻译（`/v1/realtime/translations`）
+
+AxonHub 把 OpenAI 实时翻译 WebSocket 协议中继到百炼 Qwen-LiveTranslate（`qwen3.8-livetranslate-flash-realtime`）。官方 SDK 的客户端可以直接用：Python `client.realtime.translations.connect(model=...)`、Node `OpenAIRealtimeTranslationWS`、Go `Realtime.ConnectTranslation`。
+
+- **接口：** `GET /v1/realtime/translations?model=<model>`（WebSocket），鉴权同 `/v1/realtime`（`/codex` 下也有镜像）。这里只接受 Qwen-LiveTranslate 3.8 模型；这些模型在 `/v1/realtime` 上会收到 400 并提示改用本接口。
+- **配置：** 把 `qwen3.8-livetranslate-flash-realtime` 加进百炼渠道，并配 token 单价。百炼大约按每秒输入音频 7 个 token、每秒输出音频 12.5 个 token 计费。
+- **客户端事件：** `session.update`（`audio.output.language`、`audio.input.transcription`、`audio.input.noise_reduction`）、`session.input_audio_buffer.append`（base64 的 24 kHz PCM16）和 `session.close`。
+- **服务端事件：** `session.created`、`session.updated`、`session.closed`、`session.output_audio.delta`（24 kHz PCM16）、`session.output_transcript.delta`、`session.input_transcript.delta`（只有设置了 `audio.input.transcription` 才发）和 `error`。
+- **语言：** 60 种目标语言。其中 29 种会翻成语音（zh、en、ar、de、fr、es、pt、id、it、ko、ru、th、vi、ja、tr、hi、ms、nl、ur、nb、sv、da、he、fi、pl、is、cs、fil、fa），其余只出文字、没有音频 delta。BCP-47 写法会被规范化（en-US → en，zh-CN / zh-TW / zh-Hant-TW → zh，zh-HK / zh-Hant-HK → yue（只出文字），no → nb，tl → fil）。默认 `en`。不支持的代码会收到 `invalid_value` 错误事件，会话不断开。
+- **翻译方式：** 百炼每个会话只接受一次配置，所以网关自己应答 `session.update`，在第一段音频之前把合并后的配置一次性发给百炼。此后目标语言固定（再改会收到 `unsupported_on_upstream`，要换语言请重连）。上游音色由 `AXONHUB_REALTIME_LIVETRANSLATE_VOICE` 指定（默认 `Tina`；百炼自己的默认音色会让每次回复都失败）。
+- **结束：** `session.close` 最多等 15 秒让最后一句翻完，然后发 `session.closed` 并以 1000 关闭（等待期间上游出错也照样发，这时会话记为失败）。任何上游错误都会以 1011 结束会话。
+- **计费 / 日志：** 每翻译一句（上游每个 `response.done`）记一条请求和一条用量，记在百炼模型名下；每个会话另有一条汇总记录。客户端收不到用量事件。`noise_reduction` 和 `transcription.model` 会回显，但不起作用。
+
 
 ## Codex 语音（Codex 桌面端 / CLI）
 
@@ -164,6 +198,7 @@ Paraformer 模型拒绝 beta 协议客户端（`OpenAI-Beta: realtime=v1`）；b
 | `AXONHUB_REALTIME_CALL_BINDINGS_PER_PROJECT` | `1024` | 每个项目最多记住的 WebRTC 通话数 |
 | `AXONHUB_REALTIME_QUOTA_CHECK_INTERVAL` | `30s` | 会话内复查配额、渠道状态和 API Key 的间隔 |
 | `AXONHUB_REALTIME_DEFAULT_TRANSCRIPTION_MODEL` | `gpt-4o-transcribe` | `intent=transcription` 不带 `model` 时的模型 |
+| `AXONHUB_REALTIME_LIVETRANSLATE_VOICE` | `Tina` | `/v1/realtime/translations` 翻译成语音时用的百炼音色 |
 | `AXONHUB_REALTIME_MONITOR_CALLS` | `true` | 网关自建的 OpenAI 通话用量监听 |
 | `AXONHUB_CODEX_LIVE_FORWARD_ATTESTATION` | `true` | 是否把 `x-oai-attestation` 转发给 Codex 后端 |
 | `AXONHUB_REALTIME_CALL_BODY_LIMIT` | `1048576` | 建连请求体上限 |
@@ -171,7 +206,8 @@ Paraformer 模型拒绝 beta 协议客户端（`OpenAI-Beta: realtime=v1`）；b
 ## 已知限制
 
 - 除百炼 Qwen-ASR 模型外，beta 协议客户端都会被拒绝；音频 token 按文字价计费。
-- 百炼 Qwen-ASR 与 Paraformer 转写会话在第一段音频之后不能再改配置，不能清空音频缓冲区，也没有 `prompt`/`keywords`/降噪。
+- 百炼 Qwen-ASR、Paraformer 与 Qwen-Audio ASR 转写会话在第一段音频之后不能再改配置，不能清空音频缓冲区，也没有 `prompt`/`keywords`（降噪只用来选 Qwen-Audio 的 VAD 模型）。
+- 翻译会话在第一段音频之后不能再改目标语言，也没有 WebRTC 和临时密钥方式。
 - 一个实时会话在整个时长内占用渠道的一个并发槽（`MaxConcurrent`）。
 - 会话中途不做渠道故障转移；渠道中途被禁用，会话在下一次检查时结束。
 - 通话绑定只在单进程内（多副本部署不共享）。

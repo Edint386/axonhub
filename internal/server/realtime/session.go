@@ -52,8 +52,13 @@ type EndSummary struct {
 // than a normal or client-driven close. Client faults (see ClientFault) are not failures.
 func (e EndSummary) Failed() bool {
 	switch e.Cause {
-	case CauseUpstreamError, CauseWriteFailed, CauseDialect, CauseGateTimeout:
+	case CauseUpstreamError, CauseWriteFailed, CauseGateTimeout:
 		return true
+	case CauseDialect:
+		// A dialect closes with 1000 only for a goodbye the client asked for (the translation
+		// protocol's session.close); every other dialect close reports a failure, and so does
+		// a goodbye the upstream failed to complete (Err, see goodbyeReporter).
+		return e.Code != "1000" || e.Err != nil
 	case CauseUpstreamClosed:
 		// 1005 is "no status received": gorilla reports it for an empty close payload and
 		// mapCloseCode treats it as a normal close.
@@ -187,6 +192,39 @@ type gateTimeoutHinter interface {
 // ResponseDrain, for the dialect to report Output.UpstreamFinished before closing.
 type finishDrainer interface {
 	FinishDrain() bool
+}
+
+// finishDrainTimeouter is an optional extension of finishDrainer: a dialect whose upstream may
+// need longer than ResponseDrain to flush on goodbye (Bailian LiveTranslate first finishes
+// translating the speech in flight) extends the finish drain to this duration.
+type finishDrainTimeouter interface {
+	FinishDrainTimeout() time.Duration
+}
+
+// pendingGoodbyer is an optional Dialect extension for a goodbye the client asked for whose
+// answer normally comes from the upstream (LiveTranslate answers session.close with
+// session.closed once the upstream reports session.finished). When the finish drain ends
+// without that acknowledgement (upstream error or close, drain timeout), teardown still queues
+// PendingGoodbye's frames to a live client, right before its close frame.
+type pendingGoodbyer interface {
+	PendingGoodbye() [][]byte
+}
+
+// goodbyeReporter is an optional Dialect extension for a dialect that ends the session with 1000
+// for a goodbye the client asked for: GoodbyeFailed reports why the upstream did not complete
+// that goodbye (an upstream error, or no acknowledgement of the flush), so the session is not
+// recorded as completed. It is called once, after the session ended.
+type goodbyeReporter interface {
+	GoodbyeFailed() error
+}
+
+// finalUsager is an optional Dialect extension for usage no upstream event bills: Bailian
+// qwen-audio -streaming bills the audio the gateway forwarded, and a task that ends without
+// task-finished (task-failed, a lost connection, a drain that timed out) leaves part of it
+// unbilled. FinalUsage is called once, after both pumps stopped, and must return only what was
+// not billed before.
+type finalUsager interface {
+	FinalUsage() []dialect.UsageRecord
 }
 
 // greeter is an optional Dialect extension for upstreams that send nothing on connect: its
@@ -357,6 +395,14 @@ func (s *Session) Run(client *websocket.Conn) EndSummary {
 	pumps.Wait()
 	helpers.Wait()
 
+	// Nothing reaches the dialect any more: what it has not billed yet is final. The accounting
+	// goroutine still drains usageCh, so these sends cannot block for good.
+	if fu, ok := s.dialect.(finalUsager); ok {
+		for _, rec := range fu.FinalUsage() {
+			s.usageCh <- rec
+		}
+	}
+
 	close(s.usageCh)
 	accounting.Wait()
 
@@ -383,9 +429,18 @@ func (s *Session) summary() EndSummary {
 		code = itoa(st.code)
 	}
 
+	// The end state is fixed by the first cause, so an upstream that fails while flushing a
+	// client goodbye cannot change it: the dialect reports that failure itself.
+	err := st.err
+	if st.cause == CauseDialect && st.code == websocket.CloseNormalClosure && err == nil {
+		if gr, ok := s.dialect.(goodbyeReporter); ok {
+			err = gr.GoodbyeFailed()
+		}
+	}
+
 	return EndSummary{
 		Cause:            st.cause,
-		Err:              st.err,
+		Err:              err,
 		Code:             code,
 		Reason:           st.reason,
 		Events:           s.events.Load(),
@@ -754,16 +809,14 @@ func (s *Session) apply(ctx context.Context, out dialect.Output) bool {
 		select {
 		case s.usageCh <- rec:
 		case <-ctx.Done():
+			discarded(out, 0)
+
 			return false
 		}
 	}
 
 	if out.ResponseInProgress != nil {
 		s.setResponseInProgress(*out.ResponseInProgress)
-	}
-
-	if out.UpstreamFinished {
-		s.upstreamFinishedOnce.Do(func() { close(s.upstreamFinished) })
 	}
 
 	// Close the gate before writing the frame whose acknowledgement opens it again: an ack read
@@ -774,7 +827,10 @@ func (s *Session) apply(ctx context.Context, out dialect.Output) bool {
 	}
 
 	// Once the session is ending, client input is not forwarded any more: teardown owns the
-	// upstream writer (response.cancel, dialect goodbye, close frame).
+	// upstream writer (response.cancel, dialect goodbye, close frame). Frames that were not
+	// queued go back to the dialect (Output.Discarded).
+	sent := 0
+
 	if !s.ending() {
 		msgType := websocket.TextMessage
 		if out.BinaryUpstream {
@@ -786,14 +842,24 @@ func (s *Session) apply(ctx context.Context, out dialect.Output) bool {
 				s.writerFailed(err, false)
 				break
 			}
+
+			sent++
 		}
 	}
+
+	discarded(out, sent)
 
 	for _, frame := range out.ToClient {
 		if err := s.cw.enqueue(ctx, websocket.TextMessage, frame); err != nil {
 			s.writerFailed(err, true)
 			break
 		}
+	}
+
+	// Signalled only after the frames above were queued: teardown queues the client close frame
+	// as soon as it sees the signal, and a goodbye event (session.closed) must precede it.
+	if out.UpstreamFinished {
+		s.upstreamFinishedOnce.Do(func() { close(s.upstreamFinished) })
 	}
 
 	if out.OpenGate {
@@ -807,6 +873,14 @@ func (s *Session) apply(ctx context.Context, out dialect.Output) bool {
 	}
 
 	return ctx.Err() == nil
+}
+
+// discarded reports the ToUpstream frames of out from index sent on, which were never queued
+// for the upstream, to the dialect that produced them.
+func discarded(out dialect.Output, sent int) {
+	if out.Discarded != nil && sent < len(out.ToUpstream) {
+		out.Discarded(sent)
+	}
 }
 
 // writerFailed classifies an enqueue error. A writer that was closed by teardown, or stopped
@@ -998,8 +1072,9 @@ func (s *Session) teardown(ctx context.Context) {
 	}
 
 	// 2. Dialect-specific goodbye frames (e.g. Bailian session.finish). A dialect that flushes
-	// work on goodbye is given ResponseDrain to report the upstream's acknowledgement, so the
-	// usage of the last utterance is still read and recorded. The wait also applies when the
+	// work on goodbye is given ResponseDrain (or its longer FinishDrainTimeout) to report the
+	// upstream's acknowledgement, so the usage of the last utterance is still read and recorded
+	// and frames flushed meanwhile still reach a live client. The wait also applies when the
 	// dialect sends nothing because the client already sent the goodbye itself (a beta client's
 	// session.finish); it ends at once if the acknowledgement was already relayed, and is
 	// skipped when the goodbye could not be written at all.
@@ -1014,20 +1089,14 @@ func (s *Session) teardown(ctx context.Context) {
 		}
 
 		if fd, ok := s.dialect.(finishDrainer); ok && fd.FinishDrain() && sent {
-			drain := time.NewTimer(s.cfg.ResponseDrain)
-			select {
-			case <-s.upstreamFinished:
-			case <-s.upstreamPumpDone:
-			case <-drain.C:
-			}
-
-			drain.Stop()
+			s.waitFinishDrain(st)
 		}
 	}
 
 	// 3. Close frames. gorilla echoes a received close automatically, so only the side that did
 	// not initiate gets one from us. An abnormal upstream close with a reason is also surfaced
-	// as a GA error event, because the close frame can only carry 123 bytes of it.
+	// as a GA error event, because the close frame can only carry 123 bytes of it. A client
+	// goodbye the upstream left unanswered gets its answer last, right before the close frame.
 	clientCode, clientReason, upCode, upReason := closeCodes(st)
 
 	if st.cause == CauseUpstreamClosed && st.reason != "" && clientCode != websocket.CloseNormalClosure {
@@ -1035,6 +1104,7 @@ func (s *Session) teardown(ctx context.Context) {
 	}
 
 	if !clientInitiated {
+		s.sendPendingGoodbye()
 		s.cw.enqueueClose(clientCode, clientReason)
 	}
 
@@ -1090,6 +1160,77 @@ waitHandshakes:
 		log.Int64("responses", s.responses.Load()),
 		log.Duration("duration", time.Since(s.started)),
 	)
+}
+
+// waitFinishDrain waits for the upstream to acknowledge the dialect's goodbye frames, for up to
+// ResponseDrain or the dialect's longer FinishDrainTimeout. A server restart keeps the default
+// drain so teardown fits the shutdown budget, also when the restart begins during an extended
+// drain: the wait is then cut to what is left of ResponseDrain.
+func (s *Session) waitFinishDrain(st endState) {
+	var shutdown <-chan struct{}
+
+	shuttingDown := st.cause == CauseShutdown
+	if lc := lifecycle.FromContext(s.baseCtx); lc != nil {
+		shutdown = lc.Context().Done()
+		shuttingDown = shuttingDown || lc.Context().Err() != nil
+	}
+
+	wait := s.cfg.ResponseDrain
+	if ft, ok := s.dialect.(finishDrainTimeouter); ok && !shuttingDown {
+		wait = max(wait, ft.FinishDrainTimeout())
+	}
+
+	if wait <= s.cfg.ResponseDrain {
+		shutdown = nil // already the default drain
+	}
+
+	began := time.Now()
+
+	drain := time.NewTimer(wait)
+	defer drain.Stop()
+
+	for {
+		select {
+		case <-s.upstreamFinished:
+			return
+		case <-s.upstreamPumpDone:
+			return
+		case <-drain.C:
+			return
+		case <-shutdown:
+			shutdown = nil
+
+			rest := s.cfg.ResponseDrain - time.Since(began)
+			if rest <= 0 {
+				return
+			}
+
+			drain.Reset(rest)
+		}
+	}
+}
+
+// sendPendingGoodbye queues the dialect's answer to a client goodbye the upstream did not
+// acknowledge (see pendingGoodbyer). The client writer must still be accepting frames.
+func (s *Session) sendPendingGoodbye() {
+	pg, ok := s.dialect.(pendingGoodbyer)
+	if !ok {
+		return
+	}
+
+	frames := pg.PendingGoodbye()
+	if len(frames) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, s.cfg.WriteTimeout)
+	defer cancel()
+
+	for _, frame := range frames {
+		if err := s.cw.enqueue(ctx, websocket.TextMessage, frame); err != nil {
+			return
+		}
+	}
 }
 
 // closeCodes maps the end cause to the close frames sent to each side.

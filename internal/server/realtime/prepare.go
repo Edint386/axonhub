@@ -96,6 +96,9 @@ type SessionRequest struct {
 	// Legacy marks a client speaking the removed OpenAI Realtime beta protocol. It is only
 	// relayed, unchanged, to Bailian Qwen-ASR models (their own protocol has that shape).
 	Legacy bool
+	// Translation marks an OpenAI realtime translation session (GET /v1/realtime/translations),
+	// relayed only to Bailian Qwen-LiveTranslate models (see translation.go).
+	Translation bool
 }
 
 // ErrLegacyProtocol answers beta-protocol clients whose model is not served by a Bailian
@@ -180,11 +183,12 @@ func (r *Relay) prepare(ctx context.Context, req SessionRequest) (*Prepared, *Pr
 	defer cancel()
 
 	selection, err := r.Orchestrator.SelectRealtime(budgetCtx, orchestrator.RealtimeSelectionRequest{
-		Model:   req.Model,
-		Mode:    biz.RealtimeModeWebSocket,
-		Intent:  req.Intent,
-		Headers: req.Headers,
-		Legacy:  req.Legacy,
+		Model:       req.Model,
+		Mode:        biz.RealtimeModeWebSocket,
+		Intent:      req.Intent,
+		Headers:     req.Headers,
+		Legacy:      req.Legacy,
+		Translation: req.Translation,
 	})
 
 	noCandidate := err == nil && (selection == nil || len(selection.Candidates) == 0)
@@ -196,6 +200,13 @@ func (r *Relay) prepare(ctx context.Context, req SessionRequest) (*Prepared, *Pr
 		r.recordRejected(ctx, req, req.Model, ErrLegacyProtocol)
 
 		return nil, &PrepareError{Status: http.StatusBadRequest, Err: ErrLegacyProtocol}
+	}
+
+	// Likewise a model that exists but belongs to the other surface (translation vs. realtime).
+	if answer := translationSelectionError(err); answer != nil {
+		r.recordRejected(ctx, req, req.Model, answer)
+
+		return nil, &PrepareError{Status: http.StatusBadRequest, Err: answer}
 	}
 
 	if err != nil {
@@ -412,9 +423,14 @@ func (a *prepareAttempt) checkTarget(target biz.RealtimeTarget, actual string) e
 	qwenASR := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual)
 	transcription := target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedBailianTranscription(actual)
 
-	// Legacy beta protocol is only the Qwen-ASR wire shape, not Paraformer inference.
+	// Legacy beta protocol is only the Qwen-ASR wire shape, not the inference protocol of
+	// Paraformer and Qwen-Audio ASR.
 	if a.req.Legacy && !qwenASR {
 		return ErrLegacyProtocol
+	}
+
+	if decided, err := checkTranslationTarget(a.req.Translation, target, actual); decided {
+		return err
 	}
 
 	if target.Dialect == biz.RealtimeDialectBailian {
@@ -424,9 +440,9 @@ func (a *prepareAttempt) checkTarget(target biz.RealtimeTarget, actual string) e
 		case transcription:
 			return nil
 		case a.req.Intent == "transcription":
-			return fmt.Errorf("%w: Bailian Qwen-Omni models do not support transcription sessions; use a Qwen-ASR or Paraformer realtime model", ErrUnsupportedModel)
+			return fmt.Errorf("%w: Bailian Qwen-Omni models do not support transcription sessions; use a Qwen-ASR, Paraformer or Qwen-Audio ASR (-streaming / -message) realtime model", ErrUnsupportedModel)
 		case !bailian.Supported(actual):
-			return fmt.Errorf("%w: %s is not a Qwen-Omni, Qwen-ASR or Paraformer realtime model", ErrUnsupportedModel, actual)
+			return fmt.Errorf("%w: %s is not a Qwen-Omni, Qwen-ASR, Paraformer or Qwen-Audio ASR (-streaming / -message) realtime model", ErrUnsupportedModel, actual)
 		}
 
 		return nil
@@ -556,6 +572,8 @@ const persistTimeout = 10 * time.Second
 // newDialect picks the translation layer for the target.
 func (r *Relay) newDialect(target biz.RealtimeTarget, requested, actual string, ids *dialect.EventIDs, req SessionRequest) (dialect.Dialect, error) {
 	switch {
+	case req.Translation:
+		return r.newTranslationDialect(requested, actual, ids)
 	case target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedParaformer(actual):
 		return bailian.NewParaformer(bailian.ParaformerOptions{RequestedModel: requested, ActualModel: actual, IDs: ids})
 	case target.Dialect == biz.RealtimeDialectBailian && bailian.SupportedASR(actual):
@@ -701,6 +719,7 @@ func IsGatewayError(err error) bool {
 
 	for _, gateway := range []error{
 		ErrTooManySessions, ErrChannelBusy, ErrNoCandidate, ErrUnsupportedModel, ErrLegacyProtocol, ErrDraining,
+		ErrNotTranslationModel, ErrTranslationOnlyModel,
 		orchestrator.ErrRealtimeRPMExceeded, orchestrator.ErrLocalRPMExhausted,
 	} {
 		if errors.Is(err, gateway) {

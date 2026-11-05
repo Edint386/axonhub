@@ -1,6 +1,7 @@
 // Package realtime implements the OpenAI Realtime API relay: WebSocket sessions
-// (GET /v1/realtime), WebRTC call signalling (POST /v1/realtime/calls, POST /v1/live) and
-// sideband relays (GET /v1/realtime?call_id=, GET /v1/live/{call_id}).
+// (GET /v1/realtime), translation sessions (GET /v1/realtime/translations), WebRTC call
+// signalling (POST /v1/realtime/calls, POST /v1/live) and sideband relays
+// (GET /v1/realtime?call_id=, GET /v1/live/{call_id}).
 //
 // Everything in this package is custom (fork) code. Configuration comes from AXONHUB_REALTIME_*
 // environment variables so that no upstream-owned config struct has to change; the one
@@ -66,6 +67,9 @@ type Config struct {
 	QuotaCheckInterval time.Duration
 	// CallBodyLimit caps the WebRTC call-create request body.
 	CallBodyLimit int64
+	// LiveTranslateVoice is the upstream voice of spoken translations on Bailian
+	// Qwen-LiveTranslate; empty means the dialect default (Tina).
+	LiveTranslateVoice string
 }
 
 const (
@@ -117,6 +121,7 @@ func LoadConfig() Config {
 		ForwardAttestation:        envBool("AXONHUB_CODEX_LIVE_FORWARD_ATTESTATION", true),
 		QuotaCheckInterval:        envDuration("AXONHUB_REALTIME_QUOTA_CHECK_INTERVAL", defaultQuotaCheckInterval),
 		CallBodyLimit:             envInt64("AXONHUB_REALTIME_CALL_BODY_LIMIT", defaultCallBodyLimit),
+		LiveTranslateVoice:        envString("AXONHUB_REALTIME_LIVETRANSLATE_VOICE", ""),
 	}
 
 	return cfg.withDefaults()

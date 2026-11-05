@@ -92,6 +92,7 @@ func registerRealtimeRoutes(server *Server, handlers Handlers, services Services
 func mountRealtime(server *Server, prefix string, rt *api.RealtimeHandlers, wsMiddlewares, httpMiddlewares []gin.HandlerFunc) {
 	ws := server.Group(prefix, wsMiddlewares...)
 	ws.GET("/realtime", rt.Session(prefix))
+	ws.GET("/realtime/translations", rt.TranslationSession())
 	ws.GET("/live/:call_id", rt.Sideband(prefix))
 	ws.GET("/live", rt.NotSupported("the GPT-Live websocket transport requires an OpenAI API key on the client; use the WebRTC transport"))
 
@@ -105,6 +106,8 @@ func mountRealtime(server *Server, prefix string, rt *api.RealtimeHandlers, wsMi
 	h.POST("/realtime/client_secrets", rt.NotSupported("ephemeral client secrets would bypass gateway metering"))
 	h.POST("/realtime/sessions", rt.NotSupported("the beta sessions endpoint was removed by OpenAI"))
 	h.POST("/realtime/transcription_sessions", rt.NotSupported("the beta sessions endpoint was removed by OpenAI"))
+	h.POST("/realtime/translations/calls", rt.NotSupported("translation calls (WebRTC) are not relayed; use the WebSocket translation endpoint"))
+	h.POST("/realtime/translations/client_secrets", rt.NotSupported("ephemeral client secrets would bypass gateway metering"))
 }
 
 // realtimeBodyLimit caps call-create bodies before any middleware reads them.

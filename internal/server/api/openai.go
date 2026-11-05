@@ -466,6 +466,10 @@ func shouldUseBinarySpeechStream(genericReq *httpclient.Request) (bool, error) {
 
 // CreateTranscription handles POST /v1/audio/transcriptions (speech-to-text).
 func (handlers *OpenAIHandlers) CreateTranscription(c *gin.Context) {
+	if handlers.serveBailianTranscription(c) { // fork: see bailian_transcription_upload.go
+		return
+	}
+
 	handlers.TranscriptionHandlers.ChatCompletion(c)
 }
 

@@ -283,6 +283,7 @@ func (svc *ChannelService) buildChannelWithOutbounds(c *ent.Channel, apiKeyOverr
 			outbounds[alias.format] = alias.out
 		}
 	}
+	wrapBailianASROutbounds(c, ch, outbounds) // fork: see channel_bailian_asr.go
 
 	if len(outbounds) == 0 {
 		return ch, nil
@@ -465,6 +466,9 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 	}
 	if endpointTransport(ep) == objects.ChannelEndpointTransportWebSocket && !supportsWebSocketTransport(ep.APIFormat) {
 		return nil, fmt.Errorf("websocket transport only supports api_format %q", llm.APIFormatOpenAIResponse.String())
+	}
+	if out, ok, err := bailianASREndpointOutbound(c, ch, ep, baseURL); ok { // fork: see channel_bailian_asr.go
+		return out, err
 	}
 	switch ep.APIFormat {
 	case llm.APIFormatOpenAIRealtime.String(): // fork: see channel_endpoint_realtime.go

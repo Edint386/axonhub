@@ -58,6 +58,13 @@ type Output struct {
 	// (Bailian's session.finished). Dialects that flush pending work on goodbye report it so
 	// the session can stop waiting for that work at teardown.
 	UpstreamFinished bool
+
+	// Discarded, when set, is called by the session if it did not queue every ToUpstream frame
+	// for the upstream (the session was already ending, or the upstream writer failed): the
+	// first sent frames were queued, the rest never reach the upstream. A dialect that bills the
+	// audio it forwards uses it to take that audio back. It is called at most once, from the
+	// goroutine that produced the Output, after the dialect method returned.
+	Discarded func(sent int)
 }
 
 // UsageRecord is one billable unit extracted from the upstream stream.
@@ -92,7 +99,8 @@ type CloseRequest struct {
 // goroutine and UpstreamFrame on the upstream reader goroutine.
 type Dialect interface {
 	// Name returns the dialect name used in logs and metadata ("ga", "bailian", "bailian_asr",
-	// "bailian_asr_legacy", "bailian_paraformer"). Every Bailian dialect name starts with "bailian":
+	// "bailian_asr_legacy", "bailian_paraformer", "bailian_qwen_audio", "bailian_livetranslate").
+	// Every Bailian dialect name starts with "bailian":
 	// Config.SessionDuration uses that prefix for the Bailian session-duration limit.
 	Name() string
 
