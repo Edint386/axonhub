@@ -111,6 +111,12 @@ func (svc *ChannelService) DisableAPIKey(
 		log.Int("error_code", errorCode),
 	)
 
+	status := ch.Status
+	if channelDisabled {
+		status = channel.StatusDisabled
+	}
+	svc.publishCredentialDisabled(ctx, ch, key, errorCode, reason, disabledKey.ExpiresAt, status)
+
 	// GraphQL mutations run inside a caller-owned transaction. Publishing either
 	// the local reload or the cross-instance notification before commit would
 	// reload the old disabled-key snapshot and retain it in cache.
@@ -191,6 +197,7 @@ func (svc *ChannelService) EnableAPIKey(ctx context.Context, channelID int, key 
 		return fmt.Errorf("failed to enable api key: %w", err)
 	}
 
+	svc.publishCredentialEnabled(ctx, ch, []string{key}, newDisabledKeys, credentialTriggerManual)
 	svc.reloadChannelsAfterCommit(ctx)
 
 	return nil
@@ -225,6 +232,7 @@ func (svc *ChannelService) EnableAllAPIKeys(ctx context.Context, channelID int) 
 		log.Int("channel_id", channelID),
 	)
 
+	svc.publishCredentialEnabled(ctx, ch, disabledKeyValues(ch.DisabledAPIKeys), nil, credentialTriggerManual)
 	svc.reloadChannelsAfterCommit(ctx)
 
 	return nil
@@ -254,10 +262,13 @@ func (svc *ChannelService) EnableSelectedAPIKeys(ctx context.Context, channelID 
 	}
 
 	newDisabledKeys := make([]objects.DisabledAPIKey, 0, len(ch.DisabledAPIKeys))
+	enabledKeys := make([]string, 0, len(keys))
 	for _, dk := range ch.DisabledAPIKeys {
 		if _, found := keysToEnable[dk.Key]; !found {
 			newDisabledKeys = append(newDisabledKeys, dk)
+			continue
 		}
+		enabledKeys = append(enabledKeys, dk.Key)
 	}
 
 	if len(newDisabledKeys) == len(ch.DisabledAPIKeys) {
@@ -277,6 +288,7 @@ func (svc *ChannelService) EnableSelectedAPIKeys(ctx context.Context, channelID 
 		log.Int("count", len(keys)),
 	)
 
+	svc.publishCredentialEnabled(ctx, ch, enabledKeys, newDisabledKeys, credentialTriggerManual)
 	svc.reloadChannelsAfterCommit(ctx)
 
 	return nil
@@ -510,6 +522,7 @@ func (svc *ChannelService) cleanupExpiredAutoDisabledChannels(ctx context.Contex
 			log.Int("channel_id", channelID),
 		)
 		recovered = true
+		svc.publishChannelAutoEnabled(ctx, channelID)
 	}
 
 	return recovered
@@ -525,10 +538,16 @@ func (svc *ChannelService) cleanupChannelExpiredDisabledAPIKeys(ctx context.Cont
 		return false, 0, fmt.Errorf("failed to get channel: %w", err)
 	}
 
-	active := lo.Filter(ch.DisabledAPIKeys, func(dk objects.DisabledAPIKey, _ int) bool {
-		return !dk.IsExpired()
-	})
-	removed := len(ch.DisabledAPIKeys) - len(active)
+	expired := make([]objects.DisabledAPIKey, 0)
+	active := make([]objects.DisabledAPIKey, 0, len(ch.DisabledAPIKeys))
+	for _, dk := range ch.DisabledAPIKeys {
+		if dk.IsExpired() {
+			expired = append(expired, dk)
+			continue
+		}
+		active = append(active, dk)
+	}
+	removed := len(expired)
 	if removed == 0 {
 		return false, 0, nil
 	}
@@ -538,6 +557,8 @@ func (svc *ChannelService) cleanupChannelExpiredDisabledAPIKeys(ctx context.Cont
 	if _, err := update.Save(ctx); err != nil {
 		return false, 0, fmt.Errorf("failed to update channel: %w", err)
 	}
+
+	svc.publishCredentialEnabled(ctx, ch, disabledKeyValues(expired), active, credentialTriggerExpired)
 
 	return true, removed, nil
 }

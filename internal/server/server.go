@@ -15,6 +15,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/backup"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/internal/server/dependencies"
+	"github.com/looplj/axonhub/internal/server/events"
 	"github.com/looplj/axonhub/internal/server/gc"
 	"github.com/looplj/axonhub/internal/server/gql"
 	"github.com/looplj/axonhub/internal/server/gql/openapi"
@@ -127,6 +128,7 @@ func Run(opts ...fx.Option) {
 			scheduler.Module,
 			biz.Module,
 			orchestrator.Module,
+			events.Module,
 			plugin.Module,
 			backup.Module,
 			video_storage.Module,

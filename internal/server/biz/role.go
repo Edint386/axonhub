@@ -266,7 +266,7 @@ func (s *RoleService) BulkDeleteRoles(ctx context.Context, ids []int) error {
 func (s *RoleService) revokeRoleInvitations(ctx context.Context, roleIDs ...int) error {
 	client := s.entFromContext(ctx)
 
-	_, err := authz.RunWithSystemBypass(ctx, "revoke-role-invitations", func(ctx context.Context) (int, error) {
+	_, err := authz.RunAsHost(ctx, client, "revoke-role-invitations", func(ctx context.Context) (int, error) {
 		return client.Invitation.Delete().Where(invitation.RoleIDIn(roleIDs...)).Exec(ctx)
 	})
 	if err != nil {
