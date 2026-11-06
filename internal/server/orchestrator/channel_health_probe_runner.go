@@ -11,11 +11,13 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/looplj/axonhub/internal/authz"
+	"github.com/looplj/axonhub/internal/authz/identity"
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/pkg/xerrors"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/internal/server/scheduler"
 	"github.com/looplj/axonhub/llm"
@@ -283,6 +285,13 @@ func (runner *ChannelHealthProbeRunner) RunManual(
 	ctx context.Context,
 	input biz.RunChannelHealthProbeInput,
 ) (*biz.ChannelHealthProbeRunRecord, error) {
+	// Upstream rejects plugin channel tests before any persistence work (tester.go). A manual
+	// probe saves its run before it reaches the tester, so it must reject plugins first too,
+	// or the refusal is stored as an unhealthy run.
+	if identity.IsPlugin(ctx) {
+		return nil, xerrors.ForbiddenError("channel testing is not available to plugins")
+	}
+
 	ctx = contexts.WithSource(ctx, request.SourceTest)
 	input.Stream = runner.probeStreamMode(ctx, make(map[int]*biz.Channel), input.ChannelID.ID, input.ModelID, input.Stream)
 	run, err := runner.service.CreateManualRun(ctx, input, time.Now().UTC())

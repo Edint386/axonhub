@@ -122,7 +122,12 @@ func (svc *ChannelService) DisableAPIKey(
 	// reload the old disabled-key snapshot and retain it in cache.
 	runAfterCommit(ctx, func(afterCommitCtx context.Context) {
 		if channelDisabled {
-			svc.asyncNotifyChannelAutoDisabled(afterCommitCtx, ChannelAutoDisabledEvent{
+			// custom: the callback context still carries the committed transaction, and since
+			// upstream #2900 a settings read on such a context queries that transaction and fails,
+			// which silently dropped the webhook. Keep the context (log fields) but use the database
+			// instead of the finished transaction, as upstream's plugin manager does after commit.
+			notifyCtx := ent.NewTxContext(ent.NewContext(afterCommitCtx, svc.db), nil)
+			svc.asyncNotifyChannelAutoDisabled(notifyCtx, ChannelAutoDisabledEvent{
 				ChannelID: ch.ID, ChannelName: ch.Name, ChannelProvider: ch.Type.String(),
 				ChannelBaseURL: ch.BaseURL, ChannelStatus: channel.StatusDisabled.String(),
 				StatusCode: errorCode, Reason: autoDisabledReason, OccurredAt: autoDisabledAt,

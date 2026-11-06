@@ -154,6 +154,7 @@ func (processor *ChatCompletionOrchestrator) SelectRealtime(ctx context.Context,
 		ModelMapper:           processor.ModelMapper,
 		Proxy:                 processor.proxy,
 		CurrentCandidateIndex: 0,
+		EventBus:              processor.EventBus,
 	}
 	state.AliasFailoverEnabled = retryPolicy.Enabled // fork: see alias_failover.go
 

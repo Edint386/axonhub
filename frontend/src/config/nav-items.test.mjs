@@ -55,6 +55,8 @@ test('flattened nav urls keep the full set of sidebar routes', () => {
     [...NAV_ITEM_URLS].sort(),
     [
       '/',
+      // custom: channel health page (CUSTOM_BRANCH_RULES.md section 5)
+      '/channel-health',
       '/channels',
       '/data-storages',
       '/models',

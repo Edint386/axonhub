@@ -21,6 +21,10 @@ test('channel system settings retain upstream prompts and local status preferenc
   assert.match(dialog, /skipStatusConfirmationDraft/);
   assert.match(dialog, /setSkipStatusConfirmation\(skipStatusConfirmationDraft\)/);
   assert.match(dialog, /skip-status-confirmation/);
+  // Since upstream #2919 the dialog shows one section at a time: the switch is reachable only if
+  // its section is both listed in the section nav and rendered.
+  assert.match(dialog, /key: 'statusConfirmation' as const/);
+  assert.match(dialog, /activeSection === 'statusConfirmation' &&/);
   assert.match(english, /channels\.dialogs\.systemSettings\.statusConfirmation\.skipLabel/);
   assert.match(chinese, /channels\.dialogs\.systemSettings\.statusConfirmation\.skipLabel/);
 });

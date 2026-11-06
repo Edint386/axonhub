@@ -200,9 +200,9 @@ func (svc *ChannelHealthProbeService) ScanPolicy(ctx context.Context) (ActiveHea
 		return defaultActiveHealthProbeScanSetting, nil
 	}
 
-	setting, err := authz.RunWithSystemBypass(ctx, "active-channel-health-probe-policy", func(bypassCtx context.Context) (*SystemChannelSettings, error) {
-		return svc.systemService.ChannelSetting(bypassCtx)
-	})
+	// Settings reads are host reads since upstream #2917, so no bypass is needed (and a bypass
+	// would refuse plugin callers), matching upstream's ChannelTestPrompts.
+	setting, err := svc.systemService.ChannelSetting(ctx)
 	if err != nil {
 		return ActiveHealthProbeScanSetting{}, err
 	}
@@ -411,6 +411,9 @@ func (svc *ChannelHealthProbeService) UpdatePolicy(
 		GateWindowMinutes:   gateWindowMinutes,
 		Models:              slices.Clone(models),
 	}
+	// This write keeps the caller's context (and with it the GraphQL transaction, whose commit
+	// hook drops the settings cache), so it stays a system bypass. Since upstream #2917 that
+	// refuses plugin callers: plugins can read the policy but not change it.
 	err = authz.RunWithSystemBypassVoid(ctx, "update-active-channel-health-probe-policy", func(bypassCtx context.Context) error {
 		return svc.systemService.UpdateChannelSetting(bypassCtx, UpdateSystemChannelSettings{ActiveHealthProbeScan: &policy})
 	})
