@@ -149,7 +149,7 @@ func newRealtimeTestOrchestrator(t *testing.T, client *ent.Client) *ChatCompleti
 		nil,
 		biz.NewLiveStreamRegistry(),
 		NewChannelLimiterManager(),
-		nil,
+		nil, PluginIntegration{},
 	)
 }
 

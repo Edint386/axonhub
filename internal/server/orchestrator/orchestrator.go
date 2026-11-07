@@ -340,7 +340,7 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		applyPassThroughRequestHeaders(outbound),
 		applyResponsesContinuationBody(outbound),
 	)
-	middlewares = append(middlewares, hooks.attemptStage(outbound)...)
+	middlewares = append(middlewares, skipAttemptHooksForBailianASR(hooks.attemptStage(outbound))...) // fork: see plugin_hooks_bailian_asr.go
 	middlewares = append(middlewares,
 		applyOverrideRequestBody(outbound),
 		// applyUserAgentPassThrough runs before header overrides to set the initial

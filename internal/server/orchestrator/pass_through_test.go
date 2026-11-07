@@ -2297,7 +2297,7 @@ func TestApplyPassThroughBodySkipsOpenRouterImageWireFormatConversion(t *testing
 		},
 	}
 
-	processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(ctx, providerRequest)
+	processed, err := applyPassThroughRequestBody(outbound, nil, nil).OnOutboundRawRequest(ctx, providerRequest)
 	require.NoError(t, err)
 	require.False(t, outbound.state.PassThroughApplied)
 	require.Equal(t, providerRequest.Body, processed.Body)
@@ -2329,7 +2329,7 @@ func TestApplyPassThroughBodyPreservesSemanticTransformerBody(t *testing.T) {
 		Body:      []byte(`{"model":"provider-model","messages":[{"role":"user","content":"rewritten"}]}`),
 	}
 
-	processed, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(context.Background(), request)
+	processed, err := applyPassThroughRequestBody(outbound, nil, nil).OnOutboundRawRequest(context.Background(), request)
 	require.NoError(t, err)
 	require.Equal(t, request.Body, processed.Body)
 	require.False(t, outbound.state.PassThroughApplied)

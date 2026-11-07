@@ -215,7 +215,7 @@ func newRealtimeRouteHarness(t *testing.T) *realtimeRouteHarness {
 	models := biz.NewModelService(biz.ModelServiceParams{Ent: h.db, SystemService: h.system, ChannelService: channels})
 	usage := biz.NewUsageLogService(h.db, h.system, channels)
 	selector := orchestrator.NewDefaultSelector(channels, models, h.system)
-	orch := orchestrator.NewChatCompletionOrchestrator(channels, selector, h.requests, httpclient.NewHttpClient(), openai.NewInboundTransformer(), h.system, usage, nil, nil, nil, biz.NewLiveStreamRegistry(), orchestrator.NewChannelLimiterManager(), nil)
+	orch := orchestrator.NewChatCompletionOrchestrator(channels, selector, h.requests, httpclient.NewHttpClient(), openai.NewInboundTransformer(), h.system, usage, nil, nil, nil, biz.NewLiveStreamRegistry(), orchestrator.NewChannelLimiterManager(), nil, orchestrator.PluginIntegration{})
 
 	other := h.db.APIKey.Create().SetName("other").SetKey("ah-other-key").SetUserID(h.key.UserID).SetProjectID(h.key.ProjectID).SetType(apikey.TypeUser).SaveX(h.ctx)
 

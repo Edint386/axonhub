@@ -163,7 +163,7 @@ func newBailianASRHarness(t *testing.T) *bailianASRHarness {
 
 	orch := orchestrator.NewChatCompletionOrchestrator(
 		channelService, nil, requestService, httpclient.NewHttpClient(), inbound, systemService, usageLogService,
-		nil, nil, promptProtection, biz.NewLiveStreamRegistry(), orchestrator.NewChannelLimiterManager(), nil,
+		nil, nil, promptProtection, biz.NewLiveStreamRegistry(), orchestrator.NewChannelLimiterManager(), nil, orchestrator.PluginIntegration{},
 	).WithChannelSelector(&bailianASRSelector{candidates: candidates})
 	orch.PipelineFactory = pipeline.NewFactory(httpclient.NewHttpClient())
 

@@ -138,6 +138,7 @@ func TestIsAliasFailoverError(t *testing.T) {
 		{name: "structured 400 failure matching a channel retry pattern", err: &llm.ResponseError{StatusCode: http.StatusBadRequest, Detail: llm.ErrorDetail{Message: "the model has been decommissioned", Code: "model_decommissioned"}, Cause: llm.ErrEmptyResponse}, ch: chWithPatterns, want: true},
 		{name: "local queue rejection carries a synthetic 429", err: asChannelQueueError(ch, ErrChannelQueueFull), ch: ch, want: false},
 		{name: "local RPM rejection carries a synthetic 429", err: newLocalRPMExhaustedError(ch, 10), ch: ch, want: false},
+		{name: "plugin overload carries a synthetic 429", err: NewPluginOverloadedError(&llm.ResponseError{StatusCode: http.StatusTooManyRequests, Detail: llm.ErrorDetail{Code: "plugin_overloaded"}}), ch: ch, want: false},
 		{name: "circuit breaker skip", err: errSkipCandidateByCircuitBreaker, ch: ch, want: false},
 		{name: "connection reset", err: syscall.ECONNRESET, ch: ch, want: true},
 		{name: "dial timeout hits every target on the host", err: fmt.Errorf("failed to do request: %w", &url.Error{Op: "Post", URL: "https://api.groq.com", Err: os.ErrDeadlineExceeded}), ch: ch, want: false},
@@ -348,4 +349,54 @@ func TestChatCompletionOrchestrator_Process_AliasFailoverKeepsBudgetForSharedErr
 	_, err := orchestrator.Process(ctx, buildTestRequest("general", "Hello!", false))
 	require.Error(t, err)
 	require.Len(t, executor.requests, 1, "a 401 hits every target alike, so it keeps spending the zero same-channel budget")
+}
+
+// overloadingAttemptHook is an attempt-stage plugin hook whose runtime pool is
+// exhausted on its first call.
+type overloadingAttemptHook struct {
+	pipeline.DummyMiddleware
+
+	calls int
+}
+
+func (h *overloadingAttemptHook) OnOutboundRawRequest(_ context.Context, req *httpclient.Request) (*httpclient.Request, error) {
+	h.calls++
+	if h.calls == 1 {
+		return nil, NewPluginOverloadedError(&llm.ResponseError{
+			StatusCode: http.StatusTooManyRequests,
+			Detail:     llm.ErrorDetail{Code: "plugin_overloaded", Message: "plugin at capacity"},
+		})
+	}
+
+	return req, nil
+}
+
+// Upstream #2926: a plugin overload is answered with its 429 and stops every
+// retry and failover. The overload carries a 429, so the alias failover must
+// not treat it as a target rate limit and move on to the next target.
+func TestChatCompletionOrchestrator_Process_AliasFailoverStopsOnPluginOverload(t *testing.T) {
+	ctx, _, orchestrator, executor := newAliasFailoverOrchestrator(t,
+		&biz.RetryPolicy{
+			Enabled:                 true,
+			MaxChannelRetries:       0,
+			MaxSingleChannelRetries: 0,
+			LoadBalancerStrategy:    "adaptive",
+		},
+		[]executorStep{{resp: &httpclient.Response{
+			StatusCode: http.StatusOK,
+			Body:       buildMockOpenAIResponse("chatcmpl-alias", "qwen", "not reached", 10, 20),
+			Headers:    http.Header{"Content-Type": []string{"application/json"}},
+		}}},
+		"llama", "qwen",
+	)
+	hook := &overloadingAttemptHook{}
+	orchestrator.Plugins = PluginIntegration{Hooks: hookProvider{middleware: hook}}
+
+	_, err := orchestrator.Process(ctx, buildTestRequest("general", "Hello!", false))
+
+	var overloaded *PluginOverloadedError
+	require.ErrorAs(t, err, &overloaded)
+	require.Equal(t, http.StatusTooManyRequests, overloaded.Response.StatusCode)
+	require.Equal(t, 1, hook.calls, "the overload must not switch to the next alias target")
+	require.Empty(t, executor.requests)
 }

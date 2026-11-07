@@ -88,9 +88,10 @@ func isAliasFailoverError(err error, ch *biz.Channel) bool {
 		return false
 	}
 
-	// Checked before the status codes: local queue and RPM rejections carry a
-	// synthetic 429.
-	if errors.Is(err, errSkipCandidateByCircuitBreaker) || isChannelQueueError(err) || isLocalRPMExhaustedError(err) {
+	// Checked before the status codes: local admission rejections (channel queue,
+	// local RPM and, since upstream #2926, plugin overload) carry a synthetic 429.
+	// Plugin overload must also stop every failover, as HasMoreChannels does.
+	if errors.Is(err, errSkipCandidateByCircuitBreaker) || isLocalAdmissionError(err) {
 		return false
 	}
 
