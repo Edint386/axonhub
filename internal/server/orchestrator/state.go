@@ -138,6 +138,10 @@ type PersistenceState struct {
 	// (see alias_failover.go). It follows the retry policy's master switch.
 	AliasFailoverEnabled bool
 
+	// PluginOverloaded is set when an onAttempt hook cannot borrow a runtime.
+	// HasMoreChannels returns false while it is set, so the pipeline does not switch channels.
+	PluginOverloaded bool
+
 	// EventBus publishes plugin events for this request. Nil skips publication.
 	// It is copied from the orchestrator; it is not stored on context.Context.
 	EventBus *events.Bus
