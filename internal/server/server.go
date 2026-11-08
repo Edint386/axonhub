@@ -162,6 +162,7 @@ func Run(opts ...fx.Option) {
 				})
 			}),
 			fx.Invoke(SetupRoutes),
+			fx.Invoke(registerPprof),
 		}, opts...)...,
 	)
 	app.Run()
