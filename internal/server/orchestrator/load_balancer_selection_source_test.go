@@ -22,7 +22,7 @@ func TestTrackSelectionSkipsSyntheticProbeTraffic(t *testing.T) {
 
 	t.Run("real traffic is counted", func(t *testing.T) {
 		tracker := &mockSelectionTracker{selections: make(map[int]int)}
-		lb := NewLoadBalancer(&mockRetryPolicyProvider{}, tracker)
+		lb := NewLoadBalancer(nil, tracker)
 
 		lb.TrackSelection(context.Background(), candidate)
 		lb.TrackSelection(contexts.WithSource(context.Background(), entrequest.SourceAPI), candidate)
@@ -33,7 +33,7 @@ func TestTrackSelectionSkipsSyntheticProbeTraffic(t *testing.T) {
 
 	t.Run("probe traffic is refused", func(t *testing.T) {
 		tracker := &mockSelectionTracker{selections: make(map[int]int)}
-		lb := NewLoadBalancer(&mockRetryPolicyProvider{}, tracker)
+		lb := NewLoadBalancer(nil, tracker)
 
 		lb.TrackSelection(contexts.WithSource(context.Background(), entrequest.SourceTest), candidate)
 

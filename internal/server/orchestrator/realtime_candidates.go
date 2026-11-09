@@ -121,8 +121,11 @@ func (processor *ChatCompletionOrchestrator) SelectRealtime(ctx context.Context,
 
 	model, mode, rawHeaders := sel.Model, sel.Mode, sel.Headers
 
-	// Get retry policy from system settings.
-	retryPolicy := processor.SystemService.RetryPolicyOrDefault(ctx)
+	// Mirror Process: take one settings snapshot for the whole request and put it
+	// on the context so shared selectors read the same values.
+	settings := processor.loadRequestSettings(ctx)
+	ctx = withRequestSettings(ctx, settings)
+	retryPolicy := &settings.RetryPolicy
 
 	if log.DebugEnabled(ctx) {
 		log.Debug(ctx, "realtime candidate selection started",
@@ -134,16 +137,15 @@ func (processor *ChatCompletionOrchestrator) SelectRealtime(ctx context.Context,
 	}
 
 	state := &PersistenceState{
-		APIKey:              apiKey,
-		RequestService:      processor.RequestService,
-		UsageLogService:     processor.UsageLogService,
-		SystemService:       processor.SystemService,
-		ChannelService:      processor.ChannelService,
-		QuotaService:        processor.QuotaService,
-		PromptProvider:      processor.PromptProvider,
-		PromptProtecter:     processor.PromptProtecter,
-		RetryPolicyProvider: processor.SystemService,
-		CandidateSelector:   withRealtimeCapableSelector(processor.channelSelector, mode, sel.Intent).withLegacy(sel.Legacy).withTranslation(sel.Translation),
+		APIKey:            apiKey,
+		RequestService:    processor.RequestService,
+		UsageLogService:   processor.UsageLogService,
+		ChannelService:    processor.ChannelService,
+		QuotaService:      processor.QuotaService,
+		PromptProvider:    processor.PromptProvider,
+		PromptProtecter:   processor.PromptProtecter,
+		Settings:          settings,
+		CandidateSelector: withRealtimeCapableSelector(processor.channelSelector, mode, sel.Intent).withLegacy(sel.Legacy).withTranslation(sel.Translation),
 		LoadBalancers: map[string]*LoadBalancer{
 			biz.LoadBalancerStrategyAdaptive:       processor.adaptiveLoadBalancer,
 			biz.LoadBalancerStrategyFailover:       processor.failoverLoadBalancer,
@@ -209,7 +211,7 @@ func selectRealtimeMiddlewares(processor *ChatCompletionOrchestrator, inbound *P
 		enforceQuota(inbound, processor.QuotaService),
 		checkApiKeyModelAccess(inbound),
 		applyModelMapping(inbound),
-		selectCandidates(inbound, processor.quotaProvider, processor.SystemService),
+		selectCandidates(inbound, processor.quotaProvider),
 	}
 }
 

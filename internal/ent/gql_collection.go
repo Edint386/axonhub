@@ -5271,6 +5271,11 @@ func (_q *TraceQuery) collectField(ctx context.Context, oneNode bool, opCtx *gra
 				selectedFields = append(selectedFields, trace.FieldStatus)
 				fieldSeen[trace.FieldStatus] = struct{}{}
 			}
+		case "lastRequestAt":
+			if _, ok := fieldSeen[trace.FieldLastRequestAt]; !ok {
+				selectedFields = append(selectedFields, trace.FieldLastRequestAt)
+				fieldSeen[trace.FieldLastRequestAt] = struct{}{}
+			}
 		case "id":
 		case "__typename":
 		default:

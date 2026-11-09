@@ -205,9 +205,8 @@ func (a *Accounting) OnUsage(ctx context.Context, rec dialect.UsageRecord) {
 		return
 	}
 
-	if err := a.p.RequestService.UpdateRequestChannelID(ctx, req.ID, a.p.Channel.ID); err != nil {
-		log.Debug(ctx, "realtime: failed to set request channel", log.Cause(err))
-	}
+	// The request's terminal update below persists the channel.
+	a.p.RequestService.AssignRequestChannel(ctx, req, a.p.Channel.ID)
 
 	exec, err := a.p.RequestService.CreateRequestExecution(ctx, a.p.Channel, model, req, a.upstreamRequest(summary), a.p.Format, false)
 	if err != nil {
@@ -238,12 +237,12 @@ func (a *Accounting) OnUsage(ctx context.Context, rec dialect.UsageRecord) {
 	}
 
 	if exec != nil {
-		if err := a.p.RequestService.UpdateRequestExecutionFinalized(ctx, exec.ID, requestexecution.StatusCompleted, "", externalID, summary, nil, model); err != nil {
+		if err := a.p.RequestService.UpdateRequestExecutionFinalized(ctx, exec, requestexecution.StatusCompleted, "", externalID, summary, nil, model, nil); err != nil {
 			log.Debug(ctx, "realtime: failed to finalize usage execution", log.Cause(err))
 		}
 	}
 
-	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req.ID, request.StatusCompleted, externalID, summary, nil); err != nil {
+	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req, request.StatusCompleted, externalID, summary, nil); err != nil {
 		log.Debug(ctx, "realtime: failed to finalize usage request", log.Cause(err))
 	}
 
@@ -437,19 +436,18 @@ func (a *Accounting) writeSummaryRow(ctx context.Context, body []byte, status re
 	}
 
 	if a.p.Channel != nil {
-		if err := a.p.RequestService.UpdateRequestChannelID(ctx, req.ID, a.p.Channel.ID); err != nil {
-			log.Debug(ctx, "realtime: failed to set summary channel", log.Cause(err))
-		}
+		// The request's terminal update below persists the channel.
+		a.p.RequestService.AssignRequestChannel(ctx, req, a.p.Channel.ID)
 
 		exec, err := a.p.RequestService.CreateRequestExecution(ctx, a.p.Channel, a.p.ActualModel, req, a.upstreamRequest(body), a.p.Format, false)
 		if err != nil {
 			log.Debug(ctx, "realtime: failed to create summary execution", log.Cause(err))
-		} else if err := a.p.RequestService.UpdateRequestExecutionFinalized(ctx, exec.ID, execStatus, errMsg, a.p.SessionID, json.RawMessage(body), metrics, a.p.ActualModel); err != nil {
+		} else if err := a.p.RequestService.UpdateRequestExecutionFinalized(ctx, exec, execStatus, errMsg, a.p.SessionID, json.RawMessage(body), metrics, a.p.ActualModel, nil); err != nil {
 			log.Debug(ctx, "realtime: failed to finalize summary execution", log.Cause(err))
 		}
 	}
 
-	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req.ID, status, a.p.SessionID, json.RawMessage(body), metrics); err != nil {
+	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req, status, a.p.SessionID, json.RawMessage(body), metrics); err != nil {
 		log.Debug(ctx, "realtime: failed to finalize summary request", log.Cause(err))
 	}
 }

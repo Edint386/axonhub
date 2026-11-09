@@ -22,6 +22,6 @@ func TestResponsesTransportAdaptationHonoursPassThroughBodyBlocked(t *testing.T)
 		}}
 	}
 
-	require.True(t, responsesTransportAdaptationEnabled(t.Context(), newOutbound(false), nil))
-	require.False(t, responsesTransportAdaptationEnabled(t.Context(), newOutbound(true), nil))
+	require.True(t, responsesTransportAdaptationEnabled(newOutbound(false)))
+	require.False(t, responsesTransportAdaptationEnabled(newOutbound(true)))
 }

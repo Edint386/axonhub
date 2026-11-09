@@ -88,6 +88,20 @@ func isAliasFailoverError(err error, ch *biz.Channel) bool {
 		return false
 	}
 
+	// fork: upstream #2609 skips same-channel model iteration on 520 (a dead
+	// Cloudflare edge) and 402 (account exhausted) so the pipeline switches
+	// channels at once. This alias path runs before CanRetry, so mirror that
+	// guard here or these errors would grind every alias target on the dead
+	// channel first (see outbound.go CanRetry). 402 is guarded too: a channel
+	// that lists 402 in RetryableStatusCodes would otherwise reach
+	// isRetryableErrorForChannel below. CanRetry still decides what happens
+	// next; it checks empty-response errors first, so a Responses
+	// response.failed event carrying 402/520 gets its budgeted same-channel retry.
+	switch ExtractStatusCodeFromError(err) {
+	case 520, http.StatusPaymentRequired:
+		return false
+	}
+
 	// Checked before the status codes: local admission rejections (channel queue,
 	// local RPM and, since upstream #2926, plugin overload) carry a synthetic 429.
 	// Plugin overload must also stop every failover, as HasMoreChannels does.

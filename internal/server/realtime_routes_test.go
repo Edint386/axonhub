@@ -339,6 +339,10 @@ func TestRealtimeRoutes_SessionRelayAndAccounting(t *testing.T) {
 	for _, row := range rows {
 		require.Equal(t, "gpt-realtime", row.ModelID)
 		require.Equal(t, "openai/realtime", row.Format)
+		// fork: since upstream #2954 the channel is persisted only by the terminal
+		// update (AssignRequestChannel in realtime/accounting.go).
+		require.NotZero(t, row.ChannelID)
+		require.Equal(t, logs[0].ChannelID, row.ChannelID, "turn and summary rows record the realtime channel")
 	}
 }
 

@@ -104,8 +104,8 @@ func TestChannelQuotaSelector_FiltersExhaustedHighPriorityCandidate(t *testing.T
 	quotaSelector := WithChannelQuotaSelector(inner, quotaService)
 	loadBalanced := WithLoadBalancedSelector(
 		quotaSelector,
-		newTestLoadBalancer(t, &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 2}, &mockStrategy{name: "equal", score: 1}),
-		systemService,
+		newTestLoadBalancer(t, nil, &mockStrategy{name: "equal", score: 1}),
+		systemService.RetryPolicyOrDefault(ctx),
 	)
 
 	got, err := loadBalanced.Select(ctx, &llm.Request{Model: "gpt-4"})
@@ -125,8 +125,8 @@ func TestChannelQuotaSelector_KeepsPriorityOrderWhenQuotaAvailable(t *testing.T)
 
 	loadBalanced := WithLoadBalancedSelector(
 		quotaSelector,
-		newTestLoadBalancer(t, &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 2}, &mockStrategy{name: "equal", score: 1}),
-		&mockSystemService{retryPolicy: &biz.RetryPolicy{Enabled: true, MaxChannelRetries: 2}},
+		newTestLoadBalancer(t, nil, &mockStrategy{name: "equal", score: 1}),
+		&biz.RetryPolicy{Enabled: true, MaxChannelRetries: 2},
 	)
 
 	got, err := loadBalanced.Select(context.Background(), &llm.Request{Model: "gpt-4"})

@@ -110,6 +110,17 @@ func TestIsAliasFailoverError(t *testing.T) {
 			RetryableErrorPatterns: []objects.RetryableErrorPattern{{Pattern: "model_decommissioned"}},
 		},
 	}}
+	// fork: 402 is a 4xx, so it can only reach isRetryableErrorForChannel on a
+	// channel that lists it (or matches it) as retryable; these rows exercise the
+	// 402 guard instead of passing without it.
+	chRetries402 := &biz.Channel{Channel: &ent.Channel{
+		ID:   3,
+		Name: "groq-retries-402",
+		Settings: &objects.ChannelSettings{
+			RetryableStatusCodes:   []int{http.StatusPaymentRequired, http.StatusConflict},
+			RetryableErrorPatterns: []objects.RetryableErrorPattern{{Pattern: "insufficient_balance"}},
+		},
+	}}
 
 	cases := []struct {
 		name string
@@ -121,6 +132,15 @@ func TestIsAliasFailoverError(t *testing.T) {
 		{name: "429 without Retry-After", err: &httpclient.Error{StatusCode: http.StatusTooManyRequests}, ch: ch, want: true},
 		{name: "500", err: &httpclient.Error{StatusCode: http.StatusInternalServerError}, ch: ch, want: true},
 		{name: "503", err: &httpclient.Error{StatusCode: http.StatusServiceUnavailable}, ch: ch, want: true},
+		// fork: upstream #2609 makes 520/402 switch channels at once; the alias
+		// path runs before CanRetry, so it must not switch targets on them.
+		{name: "520 edge error switches channels, not aliases", err: &httpclient.Error{StatusCode: 520}, ch: ch, want: false},
+		{name: "402 balance exhausted switches channels, not aliases", err: &httpclient.Error{StatusCode: http.StatusPaymentRequired}, ch: chRetries402, want: false},
+		{name: "402 matching a channel retry pattern still switches channels", err: &llm.ResponseError{StatusCode: http.StatusPaymentRequired, Detail: llm.ErrorDetail{Message: "credit balance exhausted", Code: "insufficient_balance"}}, ch: chRetries402, want: false},
+		{name: "another 4xx listed by that channel still switches aliases", err: &httpclient.Error{StatusCode: http.StatusConflict}, ch: chRetries402, want: true},
+		// A Responses response.failed event that carries its own 402 is also an
+		// empty-response error; the guard keeps it from switching for free.
+		{name: "402 inside a structured response failure does not switch aliases", err: &llm.ResponseError{StatusCode: http.StatusPaymentRequired, Detail: llm.ErrorDetail{Code: "insufficient_quota"}, Cause: llm.ErrEmptyResponse}, ch: ch, want: false},
 		{name: "404 model not found", err: &httpclient.Error{StatusCode: http.StatusNotFound}, ch: ch, want: true},
 		{name: "413 request too large for the model", err: &httpclient.Error{StatusCode: http.StatusRequestEntityTooLarge}, ch: ch, want: true},
 		{name: "empty response", err: pipeline.ErrEmptyResponse, ch: ch, want: true},
