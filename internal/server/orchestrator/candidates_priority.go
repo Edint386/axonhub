@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"slices"
 
 	"github.com/samber/lo"
 
@@ -124,4 +125,19 @@ func appendDeferredCandidates(result, deferred []*ChannelModelsCandidate, requir
 	}
 
 	return append(result, deferred[:min(requiredCount-len(result), len(deferred))]...)
+}
+
+// orderQuotaFallbackByChannelPriority applies the custom channel priority
+// (higher first within a model priority) to upstream's quota last-resort list
+// (#2974) before quotaFallbackCandidates dedups it and cuts it to the retry
+// budget. Upstream orders that list by model priority only, so a pressured
+// channel with a higher channel priority could be cut while lower ones are
+// tried. The sort is stable, so equal tiers keep upstream's order.
+func orderQuotaFallbackByChannelPriority(candidates []*ChannelModelsCandidate) []*ChannelModelsCandidate {
+	ordered := slices.Clone(candidates)
+	slices.SortStableFunc(ordered, func(a, b *ChannelModelsCandidate) int {
+		return compareCandidatePriorityTiers(candidatePriorityTierOf(a), candidatePriorityTierOf(b))
+	})
+
+	return ordered
 }

@@ -165,6 +165,7 @@ config.schema.json
 *.db-shm
 *.db-wal
 .agent/
+.agents/summary
 .factory
 .omo/
 .omc/
@@ -173,7 +174,11 @@ config.schema.json
 .omx/
 deploy_dev.sh
 
+# mygo update signing key. The public key lives in cmd/axonhub-desktop/mygo.config.ts.
+mygo-update.key
+
 docs/superpowers/
 docs/superpowers/**
 superpowers/
 superpowers/**
+build/**

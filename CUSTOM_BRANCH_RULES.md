@@ -56,7 +56,7 @@
 
 - 不要运行 lint 或构建命令，除非被明确要求。
 - 不要重启开发服务器。
-- 总结类文件放在 `.agent/summary`。
+- 总结类文件放在 `.agents/summary`。
 
 ## 5. custom 挂在上游文件里的钩子（同步时最容易被悄悄冲掉）
 
@@ -94,6 +94,8 @@
 | `frontend/src/features/channels/components/channels-system-settings-dialog.tsx` | “跳过状态确认”开关（本地偏好，`use-channel-status-confirmation-preference`）。上游 #2919 把弹窗改成左侧选分区、一次显示一个分区后，它是单独的 `statusConfirmation` 分区：`SettingsSectionKey`、`sections` 列表和渲染分支三处都要有，少了列表项开关就点不到 | `frontend/src/features/channels/data/channels-system-settings.test.mjs` |
 | `internal/server/biz/channel_apikey.go` `DisableAPIKey`、`EnableAPIKey`、`EnableAllAPIKeys`、`EnableSelectedAPIKeys`、`DeleteDisabledAPIKeys` | 缓存刷新和“渠道被自动禁用”通知等事务提交后再做（`runAfterCommit` / `reloadChannelsAfterCommit`，custom 提交 6cf28c8f；a46b535d 让刷新改用脱离事务的 context），上游用的是立即的 `asyncReloadChannels`；上游 #2912 的插件凭证事件照上游位置发布。通知要用不带已提交事务的 context（那几行标有 `custom:`）：上游 #2900 起，带着已提交事务的 context 读系统设置会去查那个事务并失败，webhook 就悄悄发不出去 | `TestChannelService_DisableAPIKey_DefersReloadUntilCommit`、`TestChannelService_DisableLastAPIKey_ReloadsWithServiceClientAfterCommit`（`channel_auto_disable_test.go`）、`TestDisableAPIKey_AfterCommitWebhookFires`（`channel_apikey_after_commit_fork_test.go`）；三个启用函数和 `DeleteDisabledAPIKeys` 的提交后刷新没有专门的守护测试，手工检查 |
 | `docs/{en,zh}/index.md` API 参考表 | Realtime API 和百炼文件转写两行 | —（没有守护测试，手工检查） |
+| `internal/server/gql/model.resolvers.go` `PreviewChannelModelEntries` | `previewChannelModelEntries(&ch) // fork: see channel_model_preview_fork.go`：上游 #2859 的别名预览改用 `GetModelEntryGroups`，多目标别名的每个目标都显示。上游的 `GetModelEntries` 只留每个别名的第一个目标，和 custom 路由（7dcf5d13）不一致 | `TestPreviewChannelModelEntries_MultiTargetAliasShowsEveryTarget`（`internal/server/gql/channel_model_preview_fork_test.go`） |
+| `internal/server/orchestrator/candidates.go` `Select`（`quotaGate.Filter` 的下一行） | `quotaFallbackCandidates(orderQuotaFallbackByChannelPriority(lastResort), ...) // fork: see candidates_priority.go`：上游 #2974 把额度紧张（sticky-only）的渠道留作最后备用，但只按模型优先级排序；custom 先按渠道优先级（高的在前）排一遍，再交给上游去重、按重试次数截断，免得高优先级的备用渠道被截掉。聊天和实时语音都走这里 | `TestLoadBalancedSelector_quota_fallback_follows_channel_priority`（`internal/server/orchestrator/candidates_quota_priority_fork_test.go`） |
 | `CLAUDE.md`、`AGENTS.md` | 指向本文件的引用行 | — |
 
 实时语音功能的其余代码全是 custom 新文件：`llm/realtime.go`、`llm/transformer/openai/codex/live*.go`、`internal/server/biz/channel_endpoint_realtime*.go`、`internal/server/orchestrator/realtime_candidates*.go`、`internal/server/middleware/realtime_subprotocol*.go`、`internal/server/realtime/**`、`internal/server/api/realtime*.go`、`internal/server/realtime_*.go`（路由、关机、ASR 和各类路由测试）、`internal/server/biz/cost_duration_seconds_fork_test.go`、`internal/server/gql/price_item_code_fork_test.go`（按秒计费的守护测试）、`frontend/src/locales/{en,zh-CN}/realtime.json`、`frontend/src/features/realtime/`、`docs/{en,zh}/api-reference/realtime.md`。
