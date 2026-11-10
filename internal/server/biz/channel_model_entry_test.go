@@ -570,3 +570,91 @@ func TestChannel_GetUnifiedModels_LowercaseModelID(t *testing.T) {
 		})
 	}
 }
+
+// The alias groups used for routing must expose the same names as
+// GetModelEntries (/v1/models), adding only the extra multi-target targets.
+func TestChannel_GetModelEntryGroups_FollowsModelEntrySettings(t *testing.T) {
+	t.Run("lowercase model id routes the advertised lowercase alias", func(t *testing.T) {
+		ch := &Channel{Channel: &ent.Channel{
+			SupportedModels: []string{"Vendor/GPT", "Vendor/Mini"},
+			Settings: &objects.ChannelSettings{
+				LowercaseModelID: true,
+				ModelMappings: []objects.ModelMapping{
+					{From: "MyAlias", To: "Vendor/GPT"},
+					{From: "MyAlias", To: "Vendor/Mini"},
+				},
+			},
+		}}
+		groups := ch.GetModelEntryGroups()
+		require.NotContains(t, groups, "MyAlias")
+		require.Equal(t, []ChannelModelEntry{
+			{RequestModel: "myalias", ActualModel: "Vendor/GPT", Source: "mapping"},
+			{RequestModel: "myalias", ActualModel: "Vendor/Mini", Source: "mapping"},
+		}, groups["myalias"])
+	})
+
+	t.Run("hide original models keeps a hidden supported model hidden", func(t *testing.T) {
+		ch := &Channel{Channel: &ent.Channel{
+			SupportedModels: []string{"a", "b"},
+			Settings: &objects.ChannelSettings{
+				HideOriginalModels: true,
+				ModelMappings:      []objects.ModelMapping{{From: "a", To: "b"}, {From: "x", To: "a"}},
+			},
+		}}
+		groups := ch.GetModelEntryGroups()
+		require.NotContains(t, groups, "a")
+		require.NotContains(t, groups, "b")
+		require.Equal(t, []ChannelModelEntry{{RequestModel: "x", ActualModel: "a", Source: "mapping"}}, groups["x"])
+	})
+
+	t.Run("hide mapped models follows the mapping chain", func(t *testing.T) {
+		ch := &Channel{Channel: &ent.Channel{
+			SupportedModels: []string{"a", "b"},
+			Settings: &objects.ChannelSettings{
+				HideMappedModels: true,
+				ModelMappings:    []objects.ModelMapping{{From: "x", To: "a"}, {From: "a", To: "b"}},
+			},
+		}}
+		groups := ch.GetModelEntryGroups()
+		require.Equal(t, []ChannelModelEntry{{RequestModel: "a", ActualModel: "b", Source: "mapping"}}, groups["a"])
+		require.NotContains(t, groups, "b")
+	})
+
+	t.Run("hide mapped models keeps the extra targets listed and routable", func(t *testing.T) {
+		ch := &Channel{Channel: &ent.Channel{
+			SupportedModels: []string{"a", "b", "c"},
+			Settings: &objects.ChannelSettings{
+				HideMappedModels: true,
+				ModelMappings:    []objects.ModelMapping{{From: "fast", To: "a"}, {From: "fast", To: "b"}},
+			},
+		}}
+		groups := ch.GetModelEntryGroups()
+		require.Len(t, groups["fast"], 2)
+		require.NotContains(t, groups, "a")
+		require.Equal(t, []ChannelModelEntry{{RequestModel: "b", ActualModel: "b", Source: "direct"}}, groups["b"])
+		requireGroupsFollowModelEntries(t, ch)
+	})
+
+	t.Run("every setting keeps routing and the model list in step", func(t *testing.T) {
+		for _, settings := range []*objects.ChannelSettings{
+			{LowercaseModelID: true, ModelMappings: []objects.ModelMapping{{From: "Fast", To: "A"}, {From: "fast", To: "B"}}},
+			{HideOriginalModels: true, ExtraModelPrefix: "p", ModelMappings: []objects.ModelMapping{{From: "A", To: "B"}, {From: "x", To: "A"}, {From: "x", To: "B"}}},
+			{HideMappedModels: true, AutoTrimedModelPrefixes: []string{"v"}, ModelMappings: []objects.ModelMapping{{From: "x", To: "A"}, {From: "A", To: "v/C"}, {From: "x", To: "v/C"}}},
+		} {
+			requireGroupsFollowModelEntries(t, &Channel{Channel: &ent.Channel{SupportedModels: []string{"A", "B", "v/C"}, Settings: settings}})
+		}
+	})
+}
+
+// requireGroupsFollowModelEntries checks that routing groups expose exactly the
+// GetModelEntries names, each led by the same entry.
+func requireGroupsFollowModelEntries(t *testing.T, ch *Channel) {
+	t.Helper()
+	entries := ch.GetModelEntries()
+	groups := ch.GetModelEntryGroups()
+	require.Len(t, groups, len(entries))
+	for key, entry := range entries {
+		require.NotEmpty(t, groups[key], key)
+		require.Equal(t, entry, groups[key][0], key)
+	}
+}

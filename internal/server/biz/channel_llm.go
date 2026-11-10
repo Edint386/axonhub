@@ -1949,42 +1949,50 @@ func (ch *Channel) GetDirectModelEntries() map[string]ChannelModelEntry {
 // GetModelEntryGroups returns every actual target for each request-model alias.
 // Association matching may intentionally keep duplicate aliases instead of
 // collapsing them to the first mapping.
+//
+// It starts from GetModelEntries, so routing exposes exactly the names that
+// /v1/models lists (lowercaseModelId, hideOriginalModels, hideMappedModels and
+// the direct/prefix/auto-trim precedence all apply). The only addition is the
+// extra targets of a multi-target alias: they are appended to an alias that
+// GetModelEntries already exposes as a mapping. Like upstream's
+// GetModelEntries, hideMappedModels hides only the first target's other
+// names, so the extra targets stay listed and routable under their own names.
+// An extra target is any mapping for the exposed alias, even one listed before
+// the mapping GetModelEntries kept; it is still a target the admin configured.
 func (ch *Channel) GetModelEntryGroups() map[string][]ChannelModelEntry {
-	groups := make(map[string][]ChannelModelEntry)
 	entries := ch.GetModelEntries()
+	groups := make(map[string][]ChannelModelEntry, len(entries))
 	for requestModel, entry := range entries {
-		if entry.Source != "mapping" {
-			groups[requestModel] = []ChannelModelEntry{entry}
-		}
+		groups[requestModel] = []ChannelModelEntry{entry}
 	}
 	if ch.Settings == nil {
 		return groups
 	}
-	direct := ch.GetDirectModelEntries()
+
 	for _, mapping := range ch.Settings.ModelMappings {
-		if mapping.From == "" || mapping.To == "" {
+		if mapping.From == "" || mapping.To == "" || !slices.Contains(ch.SupportedModels, mapping.To) {
 			continue
 		}
-		if entry, ok := direct[mapping.From]; ok {
-			groups[mapping.From] = []ChannelModelEntry{entry}
+		key := mapping.From
+		if ch.Settings.LowercaseModelID {
+			key = strings.ToLower(key)
+		}
+		// Only extend an alias that is exposed as a mapping; a direct, prefixed or
+		// auto-trimmed model with the same name keeps precedence, as in GetModelEntries.
+		if exposed, ok := entries[key]; !ok || exposed.Source != "mapping" {
 			continue
 		}
-		for _, model := range ch.SupportedModels {
-			if model == mapping.To {
-				entry := ChannelModelEntry{
-					RequestModel: mapping.From,
-					ActualModel:  mapping.To,
-					Source:       "mapping",
-				}
-				seen := false
-				for _, existing := range groups[mapping.From] {
-					seen = seen || existing.ActualModel == entry.ActualModel
-				}
-				if !seen {
-					groups[mapping.From] = append(groups[mapping.From], entry)
-				}
-			}
+		if slices.ContainsFunc(groups[key], func(existing ChannelModelEntry) bool {
+			return existing.ActualModel == mapping.To
+		}) {
+			continue
 		}
+		groups[key] = append(groups[key], ChannelModelEntry{
+			RequestModel: key,
+			ActualModel:  mapping.To,
+			Source:       "mapping",
+		})
 	}
+
 	return groups
 }
