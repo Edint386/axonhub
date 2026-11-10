@@ -141,6 +141,8 @@ func scanChannelMetricExecutions(ctx context.Context, client *ent.Client, since 
 				requestexecution.CreatedAtGTE(since),
 				requestexecution.ChannelIDNotNil(),
 				requestexecution.StatusIn(statuses...),
+				// fork: health-probe executions are not real traffic (RecordPerformance skips them too).
+				requestexecution.Not(requestexecution.HasRequestWith(request.SourceEQ(request.SourceTest))),
 			).
 			Order(ent.Asc(requestexecution.FieldID)).
 			Limit(channelMetricsLoadBatchSize).

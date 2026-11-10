@@ -13,6 +13,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
+	entrequest "github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
@@ -920,8 +921,12 @@ func secondsToDuration(seconds *int) *time.Duration {
 // trackCurrentChannelSelection records an actual retry attempt. Initial
 // attempts are tracked by LoadBalancedSelector after it assembles the final
 // priority-ordered candidate list.
-func (p *PersistentOutboundTransformer) trackCurrentChannelSelection() {
+func (p *PersistentOutboundTransformer) trackCurrentChannelSelection(ctx context.Context) {
 	if p == nil || p.state == nil || p.state.ChannelService == nil || p.state.CurrentCandidate == nil || p.state.CurrentCandidate.Channel == nil {
+		return
+	}
+	// fork: health-probe retries are not real traffic (TrackSelection skips them too).
+	if contexts.GetSourceOrDefault(ctx, entrequest.DefaultSource) == entrequest.SourceTest {
 		return
 	}
 
@@ -990,7 +995,7 @@ func (p *PersistentOutboundTransformer) NextChannel(ctx context.Context) error {
 	p.state.StreamCompleted = false
 	p.state.OutboundStreamTerminal = streamTerminalNone
 	p.state.CleanEOFCompletionEvidence = false
-	p.trackCurrentChannelSelection()
+	p.trackCurrentChannelSelection(ctx)
 	p.refreshCandidateAPIFormat(ctx, candidate, p.state.CurrentModelIndex, p.state.LlmRequest)
 	p.wrapped = selectOutboundForCandidate(candidate)
 
@@ -1128,7 +1133,7 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 		p.state.CurrentModelIndex++
 		p.refreshCandidateAPIFormat(ctx, candidate, p.state.CurrentModelIndex, p.state.LlmRequest)
 		p.wrapped = selectOutboundForCandidate(candidate)
-		p.trackCurrentChannelSelection()
+		p.trackCurrentChannelSelection(ctx)
 
 		if log.DebugEnabled(ctx) {
 			model := candidate.Models[p.state.CurrentModelIndex].ActualModel
@@ -1144,7 +1149,7 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 		return nil
 	}
 
-	p.trackCurrentChannelSelection()
+	p.trackCurrentChannelSelection(ctx)
 
 	// Otherwise, we're retrying the current (last) model.
 	// It handle the models count less than retry policy.
