@@ -527,7 +527,7 @@
   "quota.label.shared_account_channels_one": "{{count}} 个渠道共享该账号",
   "quota.label.local_quota": "本地配额",
   "quota.label.local_requests": "请求",
-  "quota.label.local_total_tokens": "总 Token",
+  "quota.label.local_total_tokens": "总词元",
   "quota.label.local_cost": "成本",
   "system.tabs.codex": "Codex 兼容",
   "system.codex.title": "Codex 兼容",
