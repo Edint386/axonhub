@@ -8,6 +8,8 @@ package biz
 // channel_bailian_asr_fork_test.go and listed in CUSTOM_BRANCH_RULES.md section 5.
 
 import (
+	"fmt"
+
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/objects"
@@ -21,11 +23,17 @@ import (
 // Bailian channel, so a client resending a request whose job is still running (or done) resumes
 // it on whichever channel the load balancer picks, as long as that channel calls the same
 // DashScope endpoint; per-channel scopes made such a resend pay for the audio again.
-func bailianASRConfig(_ *ent.Channel, ch *Channel, baseURL string) bailianasr.Config {
+// It fails like upstream's getAPIKeyProvider when the channel has no selectable API key.
+func bailianASRConfig(_ *ent.Channel, ch *Channel, baseURL string) (bailianasr.Config, error) {
+	provider, err := getAPIKeyProvider(ch)
+	if err != nil {
+		return bailianasr.Config{}, err
+	}
+
 	return bailianasr.Config{
 		BaseURL:        baseURL,
-		APIKeyProvider: getAPIKeyProvider(ch),
-	}
+		APIKeyProvider: provider,
+	}, nil
 }
 
 // wrapBailianASROutbounds puts bailianasr in front of the Outbounds entries a transcription
@@ -63,7 +71,15 @@ func wrapBailianASROutbounds(c *ent.Channel, ch *Channel, outbounds map[string]t
 			}
 
 			if t.wrapped == nil {
-				t.wrapped = bailianasr.Wrap(t.out, bailianASRConfig(c, ch, t.baseURL))
+				cfg, err := bailianASRConfig(c, ch, t.baseURL)
+				if err != nil {
+					// No selectable API key. The error depends only on the channel, so this
+					// returns before any entry is wrapped; the Bailian builder already refuses
+					// such a channel before reaching this hook.
+					return
+				}
+
+				t.wrapped = bailianasr.Wrap(t.out, cfg)
 			}
 
 			outbounds[format] = t.wrapped
@@ -104,15 +120,27 @@ func bailianASREndpointOutbound(
 		return nil, false, nil
 	}
 
+	// Same contract as upstream's withAPIKey in buildNonDefaultEndpointOutbound: an endpoint
+	// that needs an API key fails closed when the channel has none.
+	provider, err := getAPIKeyProvider(ch)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w for api_format %q", err, ep.APIFormat)
+	}
+
 	inner, err := openai.NewOutboundTransformerWithConfig(&openai.Config{
 		PlatformType:   openai.PlatformOpenAI,
 		BaseURL:        baseURL,
-		APIKeyProvider: getAPIKeyProvider(ch),
+		APIKeyProvider: provider,
 		EndpointPath:   ep.Path,
 	})
 	if err != nil {
 		return nil, true, err
 	}
 
-	return bailianasr.Wrap(inner, bailianASRConfig(c, ch, baseURL)), true, nil
+	cfg, err := bailianASRConfig(c, ch, baseURL)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w for api_format %q", err, ep.APIFormat)
+	}
+
+	return bailianasr.Wrap(inner, cfg), true, nil
 }

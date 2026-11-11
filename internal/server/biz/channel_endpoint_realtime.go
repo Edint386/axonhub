@@ -176,7 +176,12 @@ func (ch *Channel) RealtimeCredential(ctx context.Context) (RealtimeCredential, 
 		return RealtimeCredential{}, fmt.Errorf("realtime: channel %s has no enabled api key", ch.Name)
 	}
 
-	key := getAPIKeyProvider(ch).Get(ctx)
+	provider, err := getAPIKeyProvider(ch)
+	if err != nil {
+		return RealtimeCredential{}, fmt.Errorf("realtime: %w", err)
+	}
+
+	key := provider.Get(ctx)
 	if key == "" {
 		return RealtimeCredential{}, fmt.Errorf("realtime: channel %s returned an empty api key", ch.Name)
 	}

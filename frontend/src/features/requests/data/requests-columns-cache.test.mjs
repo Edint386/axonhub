@@ -9,7 +9,7 @@ function read(relativePath) {
   return readFileSync(join(srcRoot, relativePath), 'utf8');
 }
 
-test('request cache columns keep the split layout, mobile defaults and cache-hit color tiers', () => {
+test('request cache columns keep the split layout, mobile defaults and a coloured hit rate', () => {
   const columns = read('features/requests/components/requests-columns.tsx');
 
   assert.match(columns, /DEFAULT_HIDDEN_COLUMN_IDS/);
@@ -20,14 +20,12 @@ test('request cache columns keep the split layout, mobile defaults and cache-hit
   assert.match(columns, /id:\s*'writeCache'/);
   assert.match(columns, /const cachedTokens = usageLog\.promptCachedTokens/);
   assert.match(columns, /const writeCachedTokens = usageLog\.promptWriteCachedTokens/);
-  // Local customization: tiered hit-rate colors, repeatedly dropped by upstream merges.
-  assert.match(columns, /function getCacheHitRateColor\(rate: number\): string/);
-  assert.match(columns, /rate >= 98[\s\S]*rate >= 90[\s\S]*rate >= 75[\s\S]*rate >= 50[\s\S]*rate >= 20/);
-  assert.match(columns, /const isLowHitRate = hitRate < 80 && promptTokens >= 40000/);
-  assert.match(columns, /isLowHitRate\s*\?\s*'font-medium text-red-600 dark:text-red-400'\s*:\s*getCacheHitRateColor\(hitRate\)/);
-  assert.match(columns, /className=\{hitRateClassName\}/);
+  // The custom hard-coded hit-rate tiers were retired when upstream #2883 added
+  // configurable metric colours (2026-11-12); the hit rate must stay coloured.
+  assert.match(columns, /const hitRateColor = metricTone\('cacheHitRate', hitRate/);
+  assert.match(columns, /className=\{hitRateColor\}/);
   assert.match(columns, /requests\.columns\.cacheHitRate/);
-  // The grey fallback is upstream's binary behaviour — it must not come back on the hit-rate line.
+  // The old grey-unless-low fallback must not come back on the hit-rate line.
   assert.doesNotMatch(columns, /isLowHitRate\s*\?\s*'font-medium text-red-600 dark:text-red-400'\s*:\s*'text-muted-foreground'/);
 });
 

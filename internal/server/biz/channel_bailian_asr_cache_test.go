@@ -31,8 +31,10 @@ func TestBailianASR_ChannelsShareTheJobCache(t *testing.T) {
 	secondChannel, err := svc.buildChannelWithOutbounds(second)
 	require.NoError(t, err)
 
-	firstConfig := bailianASRConfig(first, firstChannel, baseURL)
-	secondConfig := bailianASRConfig(second, secondChannel, baseURL)
+	firstConfig, err := bailianASRConfig(first, firstChannel, baseURL)
+	require.NoError(t, err)
+	secondConfig, err := bailianASRConfig(second, secondChannel, baseURL)
+	require.NoError(t, err)
 
 	require.Empty(t, firstConfig.CacheScope)
 	require.Equal(t, firstConfig.CacheScope, secondConfig.CacheScope)

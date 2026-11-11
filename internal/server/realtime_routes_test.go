@@ -204,7 +204,10 @@ func newRealtimeRouteHarness(t *testing.T) *realtimeRouteHarness {
 
 	// The codex harness pins an empty channel list; build a real channel service (it loads the
 	// enabled channels at construction) and an orchestrator on top of it for the realtime routes.
+	modelCache := biz.NewModelCacheService(biz.ModelCacheServiceParams{Ent: h.db})
+	t.Cleanup(modelCache.Stop)
 	channels := biz.NewChannelService(biz.ChannelServiceParams{
+		ModelCache:    modelCache,
 		CacheConfig:   xcache.Config{Mode: xcache.ModeMemory},
 		Ent:           h.db,
 		SystemService: h.system,
@@ -212,7 +215,7 @@ func newRealtimeRouteHarness(t *testing.T) *realtimeRouteHarness {
 	})
 	t.Cleanup(channels.Stop)
 
-	models := biz.NewModelService(biz.ModelServiceParams{Ent: h.db, SystemService: h.system, ChannelService: channels})
+	models := biz.NewModelService(biz.ModelServiceParams{ModelCache: modelCache, Ent: h.db, SystemService: h.system, ChannelService: channels})
 	usage := biz.NewUsageLogService(h.db, h.system, channels)
 	selector := orchestrator.NewDefaultSelector(channels, models, h.system)
 	orch := orchestrator.NewChatCompletionOrchestrator(channels, selector, h.requests, httpclient.NewHttpClient(), openai.NewInboundTransformer(), h.system, usage, nil, nil, nil, biz.NewLiveStreamRegistry(), orchestrator.NewChannelLimiterManager(), nil, orchestrator.PluginIntegration{})

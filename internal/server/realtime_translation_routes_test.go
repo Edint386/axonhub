@@ -185,7 +185,10 @@ func newTranslationRouteHarness(t *testing.T) *translationRouteHarness {
 		SetDefaultTestModel("qwen3.8-omni-flash-realtime").
 		SaveX(h.ctx)
 
+	modelCache := biz.NewModelCacheService(biz.ModelCacheServiceParams{Ent: h.db})
+	t.Cleanup(modelCache.Stop)
 	channels := biz.NewChannelService(biz.ChannelServiceParams{
+		ModelCache:    modelCache,
 		CacheConfig:   xcache.Config{Mode: xcache.ModeMemory},
 		Ent:           h.db,
 		SystemService: h.system,
@@ -193,7 +196,7 @@ func newTranslationRouteHarness(t *testing.T) *translationRouteHarness {
 	})
 	t.Cleanup(channels.Stop)
 
-	models := biz.NewModelService(biz.ModelServiceParams{Ent: h.db, SystemService: h.system, ChannelService: channels})
+	models := biz.NewModelService(biz.ModelServiceParams{ModelCache: modelCache, Ent: h.db, SystemService: h.system, ChannelService: channels})
 	usage := biz.NewUsageLogService(h.db, h.system, channels)
 	selector := orchestrator.NewDefaultSelector(channels, models, h.system)
 	orch := orchestrator.NewChatCompletionOrchestrator(channels, selector, h.requests, httpclient.NewHttpClient(), openai.NewInboundTransformer(), h.system, usage, nil, nil, nil, biz.NewLiveStreamRegistry(), orchestrator.NewChannelLimiterManager(), nil, orchestrator.PluginIntegration{})

@@ -124,7 +124,10 @@ func newRealtimeTestOrchestrator(t *testing.T, client *ent.Client) *ChatCompleti
 	t.Helper()
 
 	systemService := newTestSystemService(client)
+	modelCache := biz.NewModelCacheService(biz.ModelCacheServiceParams{Ent: client})
+	t.Cleanup(modelCache.Stop)
 	channelService := biz.NewChannelService(biz.ChannelServiceParams{
+		ModelCache:    modelCache,
 		CacheConfig:   xcache.Config{Mode: xcache.ModeMemory},
 		Ent:           client,
 		SystemService: systemService,
