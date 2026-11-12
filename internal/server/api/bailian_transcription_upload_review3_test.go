@@ -189,7 +189,7 @@ func (w *recordingWriter) WriteString(s string) (int, error) {
 }
 
 // Unwrap lets http.ResponseController reach the connection, as the production middleware
-// writer (middleware.responseHeadersWriter) does.
+// writer (middleware.realtimeResponseHeadersWriter) does.
 func (w *recordingWriter) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }

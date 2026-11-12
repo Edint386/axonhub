@@ -59,7 +59,7 @@ func registerRealtimeRoutes(server *Server, handlers Handlers, services Services
 		middleware.WithRealtimeSubprotocolAuth(),
 		middleware.WithAPIKeyConfig(services.AuthService, nil),
 		middleware.WithSource(request.SourceAPI),
-		middleware.WithResponseHeaders(services.RequestService),
+		middleware.WithRealtimeResponseHeaders(services.RequestService),
 		middleware.WithThread(server.Config.Trace, services.ThreadService),
 		middleware.WithTrace(server.Config.Trace, services.TraceService),
 	}
@@ -77,7 +77,7 @@ func registerRealtimeRoutes(server *Server, handlers Handlers, services Services
 			middleware.WithRealtimeSubprotocolAuth(),
 			middleware.WithStrictAPIKeyConfig(services.AuthService, nil),
 			middleware.WithSource(request.SourceAPI),
-			middleware.WithResponseHeaders(services.RequestService),
+			middleware.WithRealtimeResponseHeaders(services.RequestService),
 			middleware.WithThread(server.Config.Trace, services.ThreadService),
 			middleware.WithTrace(server.Config.Trace, services.TraceService),
 		}

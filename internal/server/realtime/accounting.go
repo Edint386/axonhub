@@ -242,7 +242,7 @@ func (a *Accounting) OnUsage(ctx context.Context, rec dialect.UsageRecord) {
 		}
 	}
 
-	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req, request.StatusCompleted, externalID, summary, nil); err != nil {
+	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req, request.StatusCompleted, externalID, summary, nil, nil); err != nil {
 		log.Debug(ctx, "realtime: failed to finalize usage request", log.Cause(err))
 	}
 
@@ -447,7 +447,7 @@ func (a *Accounting) writeSummaryRow(ctx context.Context, body []byte, status re
 		}
 	}
 
-	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req, status, a.p.SessionID, json.RawMessage(body), metrics); err != nil {
+	if err := a.p.RequestService.UpdateRequestFinalized(ctx, req, status, a.p.SessionID, json.RawMessage(body), metrics, nil); err != nil {
 		log.Debug(ctx, "realtime: failed to finalize summary request", log.Cause(err))
 	}
 }
