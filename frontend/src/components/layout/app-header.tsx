@@ -34,6 +34,8 @@ export function AppHeader({ sidebarData }: { sidebarData: SidebarData }) {
     onSuccess: () => {
       void queryClient.refetchQueries({ queryKey: ['provider-quotas'] });
       void queryClient.refetchQueries({ queryKey: ['channelQuotaUsage'] });
+      void queryClient.invalidateQueries({ queryKey: ['channels'] });
+      void queryClient.invalidateQueries({ queryKey: ['channelDisabledAPIKeys'] });
       toast.success(t('system.providerQuota.refresh.success'));
     },
     onError: (error: any) => {

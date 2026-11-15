@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -54,11 +53,26 @@ func (svc *ChannelService) DisableAPIKey(
 		return !dk.IsExpired()
 	})
 
-	disabled := lo.ContainsBy(activeDisabledKeys, func(dk objects.DisabledAPIKey) bool {
-		return dk.Key == key
-	})
+	// An explicit disable request owns the record from now on. An existing
+	// quota-owned record is replaced with the requested reason/error/expiry so
+	// a manual, plugin or HTTP-error-rule action transfers ownership away from
+	// the quota reconciler; any other existing record keeps this call
+	// idempotent.
+	var existing *objects.DisabledAPIKey
 
-	if disabled {
+	remainingDisabledKeys := make([]objects.DisabledAPIKey, 0, len(activeDisabledKeys))
+	for _, dk := range activeDisabledKeys {
+		if dk.Key == key {
+			candidate := dk
+			existing = &candidate
+
+			continue
+		}
+
+		remainingDisabledKeys = append(remainingDisabledKeys, dk)
+	}
+
+	if existing != nil && !existing.QuotaDisabled {
 		// 已禁用，忽略
 		return nil
 	}
@@ -74,7 +88,7 @@ func (svc *ChannelService) DisableAPIKey(
 		disabledKey.ExpiresAt = expiresAt[0]
 	}
 
-	newDisabledKeys := append(activeDisabledKeys, disabledKey)
+	newDisabledKeys := append(remainingDisabledKeys, disabledKey)
 
 	// 计算 enabled 凭证
 	enabledKeys := ch.Credentials.GetEnabledCredentialRefs(newDisabledKeys)
@@ -85,11 +99,15 @@ func (svc *ChannelService) DisableAPIKey(
 
 	// 如果没有可用 key 了，禁用整个 channel
 	channelDisabled := len(enabledKeys) == 0
+	// Taking over the last key of a channel an operator already disabled must not
+	// restamp the auto-disable markers: they are what allows a later recovery to
+	// enable the channel and report it as enabled.
+	autoDisable := channelDisabled && (ch.Status == channel.StatusEnabled || ch.AutoDisabledAt != nil)
 	var (
 		autoDisabledAt     time.Time
 		autoDisabledReason string
 	)
-	if channelDisabled {
+	if autoDisable {
 		autoDisabledAt = time.Now()
 		autoDisabledReason = fmt.Sprintf("%s (last error: %d)", allKeysDisabledErrorPrefix, errorCode)
 		update.SetStatus(channel.StatusDisabled)
@@ -121,19 +139,23 @@ func (svc *ChannelService) DisableAPIKey(
 	// the local reload or the cross-instance notification before commit would
 	// reload the old disabled-key snapshot and retain it in cache.
 	runAfterCommit(ctx, func(afterCommitCtx context.Context) {
-		if channelDisabled {
+		if autoDisable {
 			// custom: the callback context still carries the committed transaction, and since
 			// upstream #2900 a settings read on such a context queries that transaction and fails,
 			// which silently dropped the webhook. Keep the context (log fields) but use the database
 			// instead of the finished transaction, as upstream's plugin manager does after commit.
 			notifyCtx := ent.NewTxContext(ent.NewContext(afterCommitCtx, svc.db), nil)
 			svc.asyncNotifyChannelAutoDisabled(notifyCtx, ChannelAutoDisabledEvent{
-				ChannelID: ch.ID, ChannelName: ch.Name, ChannelProvider: ch.Type.String(),
-				ChannelBaseURL: ch.BaseURL, ChannelStatus: channel.StatusDisabled.String(),
-				StatusCode: errorCode, Reason: autoDisabledReason, OccurredAt: autoDisabledAt,
+				ChannelID:       ch.ID,
+				ChannelName:     ch.Name,
+				ChannelProvider: ch.Type.String(),
+				ChannelBaseURL:  ch.BaseURL,
+				ChannelStatus:   channel.StatusDisabled.String(),
+				StatusCode:      errorCode,
+				Reason:          autoDisabledReason,
+				OccurredAt:      autoDisabledAt,
 			})
-		}
-		if channelDisabled {
+
 			// Synchronously reload the local cache to immediately stop selecting this channel.
 			// This matches the behavior of markChannelUnavailable.
 			// Do not reuse the transaction-bearing callback context after commit:
@@ -420,8 +442,9 @@ func applyRecoveredChannelStatus(
 	credentials objects.ChannelCredentials,
 	disabledKeys []objects.DisabledAPIKey,
 ) *ent.ChannelUpdateOne {
-	if ch.Status != channel.StatusDisabled || ch.ErrorMessage == nil ||
-		!strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix) ||
+	// AutoDisabledAt is the marker of this package's own all-keys auto-disable;
+	// a manual channel disable clears it and must survive a credential recovery.
+	if !channelIsAllKeysDisabled(ch) ||
 		len(credentials.GetEnabledCredentialRefs(disabledKeys)) == 0 {
 		return update
 	}
