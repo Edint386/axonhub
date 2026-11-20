@@ -378,8 +378,11 @@ type FastestModel struct {
 }
 
 type FetchModelsPayload struct {
-	Models []*biz.ModelIdentify `json:"models"`
-	Error  *string              `json:"error,omitempty"`
+	Models                    []*biz.ModelIdentify     `json:"models"`
+	Error                     *string                  `json:"error,omitempty"`
+	Fallback                  bool                     `json:"fallback"`
+	CodexCatalogVersion       *biz.CodexCatalogVersion `json:"codexCatalogVersion,omitempty"`
+	CodexCatalogSkippedReason *string                  `json:"codexCatalogSkippedReason,omitempty"`
 }
 
 type GetCacheDiagnosticsInput struct {
@@ -533,9 +536,12 @@ type SignInPayload struct {
 }
 
 type SyncChannelModelsPayload struct {
-	ChannelID       objects.GUID `json:"channelID"`
-	SupportedModels []string     `json:"supportedModels"`
-	ManualModels    []string     `json:"manualModels"`
+	ChannelID                 objects.GUID             `json:"channelID"`
+	SupportedModels           []string                 `json:"supportedModels"`
+	ManualModels              []string                 `json:"manualModels"`
+	Fallback                  bool                     `json:"fallback"`
+	CodexCatalogVersion       *biz.CodexCatalogVersion `json:"codexCatalogVersion,omitempty"`
+	CodexCatalogSkippedReason *string                  `json:"codexCatalogSkippedReason,omitempty"`
 }
 
 type SystemModelSettingOnboarding struct {
