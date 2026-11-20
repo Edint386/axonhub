@@ -34,7 +34,7 @@
   "modelTrace.result.showLess": "Show less",
   "modelTrace.result.lowConfidence": "The top probability is below 60%, so this is uncertain. Try running the check again.",
   "modelTrace.result.partial": "Only {{used}} valid answers (target {{target}}), so the result is less certain.",
-  "modelTrace.result.footer": "Based on {{used}} valid answers; with that many, the author's cross-validated accuracy is {{accuracy}}. Bank date {{date}}. For reference only, not proof.",
+  "modelTrace.result.footer": "Based on {{used}} valid answers, scored with the lm-detector shared detector (bank date {{date}}). Closed-set result, for reference only, not proof.",
   "modelTrace.verdict.match": "Matches {{subject}}: the answers look most like {{model}} ({{probability}}).",
   "modelTrace.verdict.sameFamily": "Same family, different version: {{subject}} is {{claimed}}, but the answers look most like {{model}} ({{probability}}).",
   "modelTrace.verdict.differentFamily": "Different family: {{subject}} is {{claimedFamily}}'s {{claimed}}, but the answers look most like {{family}}'s {{model}} ({{probability}}).",
@@ -55,5 +55,7 @@
   "modelTrace.probe.unfinished": "No end marker arrived, but nearly all numbers are there, so it counts as complete.",
   "modelTrace.probe.stoppedEarly": "The model kept writing numbers well past the asked-for count, so the request was stopped early.",
   "modelTrace.run.rateLimitedOut": "The channel kept rate limiting, so the check stopped early. Try again later.",
-  "modelTrace.verdict.sameFamilyUnsure": "Same family ({{family}}), but the version is unclear: the closest, {{model}}, is only {{probability}}."
+  "modelTrace.verdict.sameFamilyUnsure": "Same family ({{family}}), but the version is unclear: the closest, {{model}}, is only {{probability}}.",
+  "modelTrace.creditAnd": " and ",
+  "modelTrace.errors.notModel": "The answers do not look like a language model's number choices (they look generated or shuffled by a program), so no ranking is given."
 }

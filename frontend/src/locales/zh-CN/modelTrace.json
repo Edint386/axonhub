@@ -34,7 +34,7 @@
   "modelTrace.result.showLess": "收起",
   "modelTrace.result.lowConfidence": "最高的概率不到 60%，把握不大，可以再测一次看看。",
   "modelTrace.result.partial": "只拿到 {{used}} 份有效回答（目标 {{target}} 份），结果的把握会低一些。",
-  "modelTrace.result.footer": "用了 {{used}} 份有效回答；按这个数量，原作者交叉验证的准确率是 {{accuracy}}。指纹库日期 {{date}}。结果只是参考，不能当作证据。",
+  "modelTrace.result.footer": "用了 {{used}} 份有效回答，按 lm-detector 的检测参数评分（指纹库日期 {{date}}）。这是库内封闭集结果，只是参考，不能当作证据。",
   "modelTrace.verdict.match": "和{{subject}}一致：回答最像 {{model}}（{{probability}}）。",
   "modelTrace.verdict.sameFamily": "家族对得上，版本对不上：{{subject}}是 {{claimed}}，回答最像 {{model}}（{{probability}}）。",
   "modelTrace.verdict.differentFamily": "家族对不上：{{subject}}是 {{claimedFamily}} 的 {{claimed}}，回答却最像 {{family}} 的 {{model}}（{{probability}}）。",
@@ -55,5 +55,7 @@
   "modelTrace.probe.unfinished": "没收到结束标记，但数字基本写全了，按完整回答计入。",
   "modelTrace.probe.stoppedEarly": "模型写的数字明显超出要求，已提前停止请求。",
   "modelTrace.run.rateLimitedOut": "渠道一直在限流，检测提前结束了，请稍后再试。",
-  "modelTrace.verdict.sameFamilyUnsure": "家族对得上（{{family}}），但具体版本拿不准：最像的 {{model}} 也只有 {{probability}}。"
+  "modelTrace.verdict.sameFamilyUnsure": "家族对得上（{{family}}），但具体版本拿不准：最像的 {{model}} 也只有 {{probability}}。",
+  "modelTrace.creditAnd": " 和 ",
+  "modelTrace.errors.notModel": "这些回答的数字变化方式不像语言模型写的（更像程序生成或打乱的），所以没有给出排名。"
 }

@@ -5,6 +5,19 @@ import { runProbes } from './runner.ts';
 
 const goodAnswer = (count) => Array.from({ length: count }, (_, index) => (index * 37) % 355 + 1).join(', ');
 
+// Official challenge templates may be ZH / EN / JA / KO / FR; pull the asked-for count from any of them.
+function expectedCountFromPrompt(prompt) {
+  const match =
+    prompt.match(/ (\d+) 个 1 到 355/) ||
+    prompt.match(/ (\d+) integers from 1 to 355/) ||
+    prompt.match(/1 から 355 まで（両端を含む）の整数を (\d+) 個/) ||
+    prompt.match(/정수 (\d+)개를 고르세요/) ||
+    prompt.match(/ (\d+) entiers compris entre 1 et 355/);
+  const count = Number(match?.[1]);
+  if (!Number.isFinite(count)) throw new Error(`cannot read expected count from prompt: ${prompt.slice(0, 80)}`);
+  return count;
+}
+
 // A fake sender that answers each prompt as `plan` says, in call order, after a tick.
 function fakeSender(plan) {
   const calls = [];
@@ -18,7 +31,7 @@ function fakeSender(plan) {
     return new Promise((resolve, reject) => {
       const finish = () => {
         inFlight -= 1;
-        const count = Number(prompt.match(/ (\d+) 个 1 到 355/)[1]);
+        const count = expectedCountFromPrompt(prompt);
         if (step === 'fail') reject(new Error('502 upstream error'));
         else if (step === '429') reject(Object.assign(new Error('429 rate limited'), { status: 429 }));
         else if (step === 'short') resolve({ text: '1, 2, 3', finished: true });
@@ -159,7 +172,7 @@ test('reports streaming progress', async () => {
   assert.equal(snapshots.at(-1).filter((attempt) => attempt.status === 'accepted').length, 3);
 });
 
-test('challenges use distinct lengths in ModelTrace range without crypto.randomUUID', () => {
+test('challenges use distinct lengths in the official range without crypto.randomUUID', () => {
   const saved = crypto.randomUUID;
   try {
     // Plain-HTTP pages have no randomUUID.
@@ -169,7 +182,7 @@ test('challenges use distinct lengths in ModelTrace range without crypto.randomU
     assert.equal(new Set(lengths).size, 6);
     assert.ok(lengths.every((length) => length >= 292 && length <= 332));
     assert.equal(new Set(challenges.map((challenge) => challenge.id)).size, 6);
-    for (const challenge of challenges) assert.ok(challenge.prompt.includes(` ${challenge.expected_count} 个 1 到 355（含端点）的整数。`));
+    for (const challenge of challenges) assert.equal(expectedCountFromPrompt(challenge.prompt), challenge.expected_count);
   } finally {
     Object.defineProperty(crypto, 'randomUUID', { value: saved, configurable: true });
   }

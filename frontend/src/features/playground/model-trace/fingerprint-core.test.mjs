@@ -1,44 +1,37 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { analyzeGlobalOutputs, minimumNumbers, parseNumbers } from './fingerprint-core.ts';
+import { decodeDetectorSnapshot } from './detector.ts';
+import { analyzeFingerprint, minimumNumbers, parseNumbers } from './fingerprint-core.ts';
 
-const bank = JSON.parse(readFileSync(join(import.meta.dirname, 'unified_bank.json'), 'utf8'));
-// Outputs of the original ModelTrace static/fingerprint-core.js on reference answers.
-const parity = JSON.parse(readFileSync(join(import.meta.dirname, 'testdata', 'parity.json'), 'utf8'));
+const dir = import.meta.dirname;
+const bundle = JSON.parse(readFileSync(join(dir, 'data', 'bundle.json'), 'utf8'));
+const compressed = readFileSync(join(dir, 'data', 'shared_detector.bin.zst'));
+const fixture = JSON.parse(readFileSync(join(dir, 'testdata', 'fixture.json'), 'utf8'));
+const loaded = await decodeDetectorSnapshot(bundle, compressed);
+const { bank, detector } = loaded;
 
-function assertClose(actual, expected, path) {
-  if (typeof expected === 'number') {
-    assert.ok(Math.abs(actual - expected) <= 1e-12 * Math.max(1, Math.abs(expected)), `${path}: ${actual} != ${expected}`);
-    return;
-  }
-  if (Array.isArray(expected)) {
-    assert.equal(actual.length, expected.length, `${path}: length`);
-    expected.forEach((item, index) => assertClose(actual[index], item, `${path}[${index}]`));
-    return;
-  }
-  if (expected && typeof expected === 'object') {
-    for (const key of Object.keys(expected)) {
-      if (key === 'method') continue; // the port labels the method in English
-      assertClose(actual[key], expected[key], `${path}.${key}`);
-    }
-    return;
-  }
-  assert.equal(actual, expected, path);
-}
+test('loads the lm-detector snapshot and not the old ModelTrace bank', () => {
+  assert.equal(bundle.schema, 'lmfpd-data-v1');
+  assert.equal(bundle.detector_schema, 'shared-detector-v2');
+  assert.equal(bank.models.length, 75);
+  assert.ok(bank.models.some((model) => model.id === 'claude-opus-4.7'));
+  assert.equal(existsSync(join(dir, 'unified_bank.json')), false);
+  assert.equal(existsSync(join(dir, 'testdata', 'parity.json')), false);
+  assert.equal(existsSync(join(dir, 'testdata', 'make-parity.mjs')), false);
+});
 
-for (const sample of parity.cases) {
-  test(`matches the original ModelTrace scoring: ${sample.name}`, () => {
-    assertClose(analyzeGlobalOutputs(sample.outputs, bank), sample.expected, 'result');
-  });
-}
-
-test('the bank and fixtures cover the same models', () => {
-  const ids = bank.models.map((model) => model.id).sort();
-  for (const sample of parity.cases) {
-    assert.deepEqual(sample.expected.results.map((item) => item.model).sort(), ids);
-  }
+test('a known reference answer set ranks its model and family', () => {
+  const result = analyzeFingerprint(fixture.outputs, bank, detector);
+  assert.equal(result.used_outputs, 3);
+  assert.equal(result.method, 'shared-detector-v2');
+  assert.notEqual(result.decision, 'not_model');
+  assert.equal(result.prediction, fixture.source.model);
+  assert.equal(result.family_prediction, fixture.source.family);
+  assert.ok(result.probability != null && result.probability > 0.5, `probability ${result.probability}`);
+  assert.ok(result.family_probability > 0.8, `family probability ${result.family_probability}`);
+  assert.equal(result.results[0].model, fixture.source.model);
 });
 
 test('parseNumbers keeps the longest in-range run and splits on words', () => {
@@ -47,12 +40,22 @@ test('parseNumbers keeps the longest in-range run and splits on words', () => {
   assert.deepEqual(parseNumbers('no numbers'), []);
 });
 
-test('minimumNumbers follows ModelTrace (55% of the request, at least 80)', () => {
+test('minimumNumbers follows the shared 55% / at-least-80 rule', () => {
   assert.equal(minimumNumbers(300), 165);
   assert.equal(minimumNumbers(100), 80);
   assert.equal(minimumNumbers(0), 80);
 });
 
 test('rejects a set with no usable answer', () => {
-  assert.throws(() => analyzeGlobalOutputs([{ text: '1, 2, 3', expected_count: 300 }], bank));
+  assert.throws(() => analyzeFingerprint([{ text: '1, 2, 3', expected_count: 300 }], bank, detector));
+});
+
+test('does not rank answers that do not look like a language model', () => {
+  const outputs = [0, 1, 2].map(() => ({
+    text: Array.from({ length: 300 }, (_, index) => 1 + (index % 355)).join(', '),
+    expected_count: 300,
+  }));
+  const result = analyzeFingerprint(outputs, bank, detector);
+  assert.equal(result.decision, 'not_model');
+  assert.equal(result.results.length, 0);
 });

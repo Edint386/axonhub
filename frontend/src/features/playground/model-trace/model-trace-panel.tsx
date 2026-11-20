@@ -13,11 +13,12 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAllChannelSummarys } from '@/features/channels/data/channels';
 import type { PlaygroundModelSource } from '../selection';
 import { generateChallenges } from './challenges';
-import { analyzeGlobalOutputs, type FingerprintBank, type FingerprintResult } from './fingerprint-core';
+import { loadDetector } from './detector-load';
+import type { LoadedDetector } from './detector';
+import { analyzeFingerprint, type FingerprintBank, type FingerprintResult } from './fingerprint-core';
 import { findBankModel, judgeClaim, type ClaimVerdict } from './model-match';
 import { MAX_RATE_LIMIT_RETRIES, runProbes, type ProbeAttempt, type ProbeStatus } from './runner';
 import { sendPlaygroundProbe } from './transport';
-import bankUrl from './unified_bank.json?url';
 
 export type PlaygroundMode = 'chat' | 'trace';
 
@@ -28,22 +29,6 @@ const MAX_REQUESTS = 6;
 const HISTORY_LIMIT = 10;
 const LOW_CONFIDENCE = 0.6;
 const TOP_CANDIDATES = 5;
-
-let bankPromise: Promise<FingerprintBank> | undefined;
-
-// The bank is ~550 KB, so it is fetched only when the check view is first opened.
-function loadBank(): Promise<FingerprintBank> {
-  bankPromise ??= fetch(bankUrl)
-    .then(async (response) => {
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      return (await response.json()) as FingerprintBank;
-    })
-    .catch((error: unknown) => {
-      bankPromise = undefined;
-      throw error;
-    });
-  return bankPromise;
-}
 
 interface TraceTarget {
   modelSource: PlaygroundModelSource;
@@ -63,10 +48,16 @@ interface TraceRun {
   result?: FingerprintResult;
   verdict?: ClaimVerdict;
   noValidAnswers?: boolean;
+  notModel?: boolean;
 }
 
-function percent(value: number): string {
+function percent(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—';
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function isLowConfidence(result: FingerprintResult): boolean {
+  return result.probability == null || result.probability < LOW_CONFIDENCE;
 }
 
 function channelLabel(target: TraceTarget, gatewayLabel: string): string {
@@ -151,11 +142,11 @@ function VerdictBanner({ verdict, result, mapped }: { verdict: ClaimVerdict; res
   const view = (() => {
     switch (verdict.kind) {
       case 'match':
-        return result.probability < LOW_CONFIDENCE
+        return isLowConfidence(result)
           ? { tone: 'warn', Icon: AlertTriangle, text: t('modelTrace.verdict.matchUnsure', { ...top, subject }) }
           : { tone: 'good', Icon: CheckCircle2, text: t('modelTrace.verdict.match', { ...top, subject }) };
       case 'same-family':
-        return result.probability < LOW_CONFIDENCE
+        return isLowConfidence(result)
           ? {
               tone: 'info',
               Icon: Info,
@@ -201,14 +192,15 @@ function VerdictBanner({ verdict, result, mapped }: { verdict: ClaimVerdict; res
   );
 }
 
-function ProbabilityRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+function ProbabilityRow({ label, value, highlight }: { label: string; value: number | null; highlight?: boolean }) {
+  const width = value == null ? 0 : Math.max(value * 100, 0.5);
   return (
     <div className='grid grid-cols-[minmax(0,10rem)_1fr_3.5rem] items-center gap-3 text-xs'>
       <span className={cn('truncate', highlight && 'font-semibold')} title={label}>
         {label}
       </span>
       <div className='bg-muted h-2 overflow-hidden rounded-full'>
-        <div className={cn('h-full rounded-full', highlight ? 'bg-primary' : 'bg-primary/40')} style={{ width: `${Math.max(value * 100, 0.5)}%` }} />
+        <div className={cn('h-full rounded-full', highlight ? 'bg-primary' : 'bg-primary/40')} style={{ width: `${width}%` }} />
       </div>
       <span className='text-right tabular-nums'>{percent(value)}</span>
     </div>
@@ -219,13 +211,17 @@ function ResultView({ run, bank }: { run: TraceRun; bank?: FingerprintBank }) {
   const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const { result, verdict } = run;
-  if (!result || !verdict) return null;
+  if (!result) return null;
+  if (run.notModel || result.decision === 'not_model') {
+    return <p className='text-destructive text-sm'>{t('modelTrace.errors.notModel')}</p>;
+  }
+  if (!verdict) return null;
   const candidates = showAll ? result.results : result.results.slice(0, TOP_CANDIDATES);
 
   return (
     <div className='space-y-4'>
       <VerdictBanner verdict={verdict} result={result} mapped={!!run.target.actualModel} />
-      {result.probability < LOW_CONFIDENCE && verdict.kind !== 'match' && verdict.kind !== 'same-family' && (
+      {isLowConfidence(result) && verdict.kind !== 'match' && verdict.kind !== 'same-family' && (
         <p className='text-muted-foreground text-xs'>{t('modelTrace.result.lowConfidence')}</p>
       )}
       {result.used_outputs < TARGET_ANSWERS && (
@@ -259,7 +255,6 @@ function ResultView({ run, bank }: { run: TraceRun; bank?: FingerprintBank }) {
       <p className='text-muted-foreground text-xs leading-relaxed'>
         {t('modelTrace.result.footer', {
           used: result.used_outputs,
-          accuracy: percent(result.calibration.cv_accuracy),
           date: bank?.built_at?.slice(0, 10) ?? '-',
         })}
       </p>
@@ -274,14 +269,13 @@ interface ModelTracePanelProps {
   model: string;
 }
 
-// Runs ModelTrace (https://github.com/xqy2006/ModelTrace) against the channel and model picked in the
-// playground sidebar. Requests go through the playground chat endpoint, so they are routed, logged and
-// billed like playground chats.
+// Runs the playground model check against the channel and model picked in the sidebar.
+// Prompts go through /admin/playground/chat; answers are scored in the browser with lm-detector.
 export function ModelTracePanel({ hidden, modelSource, channelId, model }: ModelTracePanelProps) {
   const { t } = useTranslation();
   const projectId = useSelectedProjectId();
   const { data: channelsData } = useAllChannelSummarys(projectId, { enabled: !hidden });
-  const [bank, setBank] = useState<FingerprintBank>();
+  const [detector, setDetector] = useState<LoadedDetector>();
   const [bankError, setBankError] = useState<string>();
   const [runs, setRuns] = useState<TraceRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<number>();
@@ -289,12 +283,12 @@ export function ModelTracePanel({ hidden, modelSource, channelId, model }: Model
   const nextRunIdRef = useRef(1);
 
   useEffect(() => {
-    if (hidden || bank) return;
+    if (hidden || detector) return;
     let cancelled = false;
-    loadBank()
+    loadDetector()
       .then((loaded) => {
         if (cancelled) return;
-        setBank(loaded);
+        setDetector(loaded);
         setBankError(undefined);
       })
       .catch((error: unknown) => {
@@ -303,7 +297,7 @@ export function ModelTracePanel({ hidden, modelSource, channelId, model }: Model
     return () => {
       cancelled = true;
     };
-  }, [hidden, bank]);
+  }, [hidden, detector]);
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
@@ -323,6 +317,7 @@ export function ModelTracePanel({ hidden, modelSource, channelId, model }: Model
     };
   }, [channelId, channelsData, model, modelSource]);
 
+  const bank = detector?.bank;
   const covered = useMemo(() => (bank && target ? !!findBankModel(claimedModel(target), bank.models) : undefined), [bank, target]);
 
   const running = runs.some((run) => run.status === 'running');
@@ -332,10 +327,10 @@ export function ModelTracePanel({ hidden, modelSource, channelId, model }: Model
     if (!target || controllerRef.current) return;
     const controller = new AbortController();
     controllerRef.current = controller;
-    let loadedBank: FingerprintBank;
+    let loaded: LoadedDetector;
     try {
-      loadedBank = bank ?? (await loadBank());
-      setBank(loadedBank);
+      loaded = detector ?? (await loadDetector());
+      setDetector(loaded);
       setBankError(undefined);
     } catch (error) {
       controllerRef.current = null;
@@ -389,9 +384,17 @@ export function ModelTracePanel({ hidden, modelSource, channelId, model }: Model
       update({ attempts, status, noValidAnswers: status === 'done' });
       return;
     }
-    const result = analyzeGlobalOutputs(outputs, loadedBank);
-    update({ attempts, status, result, verdict: judgeClaim(claimedModel(runTarget), result, loadedBank.models) });
-  }, [bank, projectId, t, target]);
+    const result = analyzeFingerprint(outputs, loaded.bank, loaded.detector);
+    if (result.decision === 'not_model') {
+      update({ attempts, status, result, notModel: true });
+      return;
+    }
+    if (!result.prediction) {
+      update({ attempts, status, noValidAnswers: status === 'done' });
+      return;
+    }
+    update({ attempts, status, result, verdict: judgeClaim(claimedModel(runTarget), result, loaded.bank.models) });
+  }, [detector, projectId, t, target]);
 
   const stop = useCallback(() => controllerRef.current?.abort(), []);
 
@@ -544,6 +547,10 @@ export function ModelTracePanel({ hidden, modelSource, channelId, model }: Model
             {t('modelTrace.credit')}{' '}
             <a className='underline' href='https://github.com/xqy2006/ModelTrace' target='_blank' rel='noreferrer'>
               ModelTrace
+            </a>
+            {t('modelTrace.creditAnd')}
+            <a className='underline' href='https://github.com/Ikaleio/lm-detector' target='_blank' rel='noreferrer'>
+              lm-detector
             </a>{' '}
             (MIT)
           </p>
