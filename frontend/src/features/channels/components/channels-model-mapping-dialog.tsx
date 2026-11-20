@@ -520,7 +520,6 @@ export function ChannelsModelMappingDialog({ open, onOpenChange, currentRow }: P
                       ) : (
                         <ModelMappingGraph mappings={modelMappings} supportedModels={currentRow.supportedModels} onChange={updateMappings} />
                       )}
-                      </div>
                     </CardContent>
                   </Card>
                 </div>
