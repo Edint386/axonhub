@@ -229,6 +229,7 @@ type ChannelSettings {
   bodyOverrideOperations: [OverrideOperation!]! @goField(forceResolver: true)
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
+  syncModelPrices: Boolean
   rateLimit: ChannelRateLimit
   quota: APIKeyQuota
   """IANA timezone used by calendar-period channel quotas. Empty means the system timezone."""
@@ -339,6 +340,7 @@ input ChannelSettingsInput {
   bodyOverrideOperations: [OverrideOperationInput!]
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
+  syncModelPrices: Boolean
   rateLimit: ChannelRateLimitInput
   quota: APIKeyQuotaInput
   quotaTimezone: String
@@ -371,6 +373,7 @@ input UpdateChannelSettingsInput {
   bodyOverrideOperations: [OverrideOperationInput!]
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
+  syncModelPrices: Boolean
   rateLimit: ChannelRateLimitInput
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
@@ -795,6 +798,7 @@ type FetchModelsPayload {
 
 type ModelIdentify {
   id: String!
+  pricing: ModelPrice
 }
 
 type ModelIdentityWithStatus {

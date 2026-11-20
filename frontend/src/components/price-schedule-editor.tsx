@@ -20,7 +20,8 @@ const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 60 }, (_, i) => i);
 
-type PricingMode = 'flat_fee' | 'usage_per_unit' | 'usage_tiered' | 'usage_volume';
+// An empty mode marks cache-write items whose 5m/1h variants carry the rates (no aggregate).
+type PricingMode = '' | 'flat_fee' | 'usage_per_unit' | 'usage_tiered' | 'usage_volume';
 // custom: realtime per-second billing (duration_seconds), see CUSTOM_BRANCH_RULES.md section 5.
 const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens', 'duration_seconds'] as const;
 
@@ -33,7 +34,7 @@ type ScheduleFormValues = {
       items: Array<{
         itemCode: (typeof priceItemCodes)[number];
         pricing: {
-          mode: PricingMode;
+          mode?: PricingMode | null;
           flatFee?: string | null;
           usagePerUnit?: string | null;
           usageTiered?: {
@@ -57,7 +58,7 @@ type ScheduleFormValues = {
           items: Array<{
             itemCode: (typeof priceItemCodes)[number];
             pricing: {
-              mode: PricingMode;
+              mode?: PricingMode | null;
               flatFee?: string | null;
               usagePerUnit?: string | null;
               usageTiered?: {
