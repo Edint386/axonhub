@@ -97,6 +97,16 @@ func flashCallError(ctx context.Context, err error, sent bool) error {
 				"not resumed and Bailian may bill it, so the gateway does not send the audio again", ctxErr), "", cause)
 	}
 
+	// custom: the #2905 idle watchdog cancels only the child stream context with
+	// ErrStreamIdleTimeout; the parent request context stays live. Treat that cut like a
+	// request deadline (channel-neutral bailian_task_unfinished / 504), not answer-lost / 502.
+	// See CUSTOM_BRANCH_RULES.md section 5.
+	if errors.Is(err, httpclient.ErrStreamIdleTimeout) {
+		return newResponseError(http.StatusGatewayTimeout, "bailian_task_unfinished",
+			fmt.Sprintf("Bailian was still transcribing when the request ended (%v); a qwen-audio-3.1-asr-flash call is "+
+				"not resumed and Bailian may bill it, so the gateway does not send the audio again", err), "", cause)
+	}
+
 	return flashAnswerLostError(err.Error(), cause)
 }
 

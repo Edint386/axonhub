@@ -350,3 +350,19 @@ func TestAsyncJob_LostSubmitAnswerBlocksAnIdenticalResend(t *testing.T) {
 	require.Contains(t, string(result.Response.Body), paraformerTxt)
 	require.Equal(t, 2, fake.snapshot().submitCalls)
 }
+
+// TestFlashCallError_StreamIdleTimeoutIsChannelNeutral guards the flash classification hook:
+// the #2905 idle watchdog cancels only the child stream context, so the parent is still live
+// and the cut must be bailian_task_unfinished (504, channel-neutral), not answer-lost (502).
+func TestFlashCallError_StreamIdleTimeoutIsChannelNeutral(t *testing.T) {
+	parent := t.Context()
+	require.NoError(t, parent.Err(), "the parent request context is still live")
+
+	err := flashCallError(parent, httpclient.ErrStreamIdleTimeout, true)
+	require.ErrorIs(t, err, pipeline.ErrNoRetry)
+	require.ErrorIs(t, err, httpclient.ErrStreamIdleTimeout)
+	require.Equal(t, "bailian_task_unfinished", responseError(t, err).Detail.Code)
+	require.Equal(t, http.StatusGatewayTimeout, responseError(t, err).StatusCode)
+	require.True(t, IsChannelNeutralFailure(err), "an idle-watchdog cut says nothing about the channel")
+	require.NotEqual(t, "bailian_flash_answer_lost", responseError(t, err).Detail.Code)
+}

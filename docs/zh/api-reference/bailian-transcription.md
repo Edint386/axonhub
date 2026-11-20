@@ -60,8 +60,8 @@ with open("meeting.mp3", "rb") as f:
 异步模型会把文件传到百炼的临时存储、提交任务、轮询直到出结果，全部在一次 HTTP 请求里完成。
 
 - 超过约 10 分钟的音频建议用 `stream=true`：百炼一接收音频，SSE 响应就开始，网关会一直发 `: keep-alive` 直到结果出来。不用流式时客户端到最后才收到内容，所以超时时间要覆盖整个任务。
-- 每个任务都必须在服务器的 `llm_request_timeout`（默认 600 秒）内完成。百炼通常几分钟处理完一个文件，但不保证；几小时的文件请调大 `llm_request_timeout`（比如 `1800s`）。
-- 流水线的单次超时（`non_stream_response_timeout` / `stream_first_event_timeout`）对这些模型（异步任务、`-message` 和比较慢的 `qwen-audio-3.1-asr-flash`）不生效，只受请求总超时限制。
+- `stream=true` 的任务（文档建议的长音频路径，以及 flash、异步和 `-message` 的流式调用）受服务器的 `llm_stream_request_timeout`（默认已经是 1800 秒）限制。调大 `llm_request_timeout` 并不能延长这类任务。非流式任务（包括上面的 Python 示例，它没有传 `stream=true`）仍使用 `llm_request_timeout`（默认 600 秒）。百炼通常几分钟处理完一个文件，但不保证；几小时的文件如果走流式路径，请调大 `llm_stream_request_timeout`。
+- 流水线的单次超时（`non_stream_response_timeout` / `stream_first_event_timeout`）对这些模型（异步任务、`-message` 和比较慢的 `qwen-audio-3.1-asr-flash`）不生效，只受请求总超时（`llm_stream_request_timeout` 或 `llm_request_timeout`）限制。
 
 ## 大文件
 
@@ -77,7 +77,7 @@ with open("meeting.mp3", "rb") as f:
 
 百炼的任务一提交就会计费，所以网关自己绝不会把同一个任务提交两次：任务一旦提交，出错时直接返回给客户端，不重试、不换渠道、不换模型。提交之前的失败照常重试。
 
-如果请求在任务完成之前就结束了（比如到了 `llm_request_timeout`），任务仍会在百炼那边继续跑。30 分钟内用同一个 API Key 把同样的请求（同一个文件、模型和参数）再发一次，会接着用那个任务，不会再花钱；落到任何使用同一百炼地址的渠道都可以。用链接（URL）给的音频不适用，每次都会新建任务。如果提交后没收到百炼的答复（`502 bailian_submit_unconfirmed`），10 分钟内同样的上传会被拒绝（`409 bailian_submit_pending`），因为第一次的任务可能还在跑。所以客户端应该设置较长的超时，并关掉自动重试（OpenAI SDK 里设 `max_retries=0`）。
+如果请求在任务完成之前就结束了（客户端传了 `stream=true` 时，比如到了 `llm_stream_request_timeout`；非流式时则是 `llm_request_timeout`），任务仍会在百炼那边继续跑。30 分钟内用同一个 API Key 把同样的请求（同一个文件、模型和参数）再发一次，会接着用那个任务，不会再花钱；落到任何使用同一百炼地址的渠道都可以。用链接（URL）给的音频不适用，每次都会新建任务。如果提交后没收到百炼的答复（`502 bailian_submit_unconfirmed`），10 分钟内同样的上传会被拒绝（`409 bailian_submit_pending`），因为第一次的任务可能还在跑。所以客户端应该设置较长的超时，并关掉自动重试（OpenAI SDK 里设 `max_retries=0`）。
 
 转写任务不影响渠道的延迟评分，所以长任务不会把聊天流量挤离百炼渠道。
 

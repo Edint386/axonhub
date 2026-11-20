@@ -75,12 +75,16 @@ the transcript is ready, all inside one HTTP request.
   Bailian has accepted the audio, and the gateway sends `: keep-alive` comments until the
   transcript arrives. Without streaming the client sees nothing until the end, so its timeout
   must cover the whole job.
-- Every job must finish within the server's `llm_request_timeout` (default 600 s). Bailian usually
-  finishes a file in minutes but does not guarantee it; for multi-hour files raise
-  `llm_request_timeout` (for example to `1800s`).
+- A `stream=true` job (the recommended path for long audio, and also flash, async and `-message`
+  streams) is bounded by the server's `llm_stream_request_timeout` (default already 1800 s).
+  Raising `llm_request_timeout` does not extend it. A non-streaming job, including the Python
+  sample above, still uses `llm_request_timeout` (default 600 s). Bailian usually finishes a
+  file in minutes but does not guarantee it; for multi-hour files on the streaming path raise
+  `llm_stream_request_timeout`.
 - The pipeline's per-attempt response timeouts (`non_stream_response_timeout` /
   `stream_first_event_timeout`) do not apply to these models (async jobs, `-message` and the
-  slow `qwen-audio-3.1-asr-flash`); only the request timeout bounds them.
+  slow `qwen-audio-3.1-asr-flash`); only the request total (`llm_stream_request_timeout` or
+  `llm_request_timeout`) bounds them.
 
 ## Large files
 
@@ -110,7 +114,8 @@ A Bailian job is billed once it has been submitted, so the gateway never submits
 itself: once a task exists, a failure is returned to the client without a retry, channel switch or
 model fallback. Failures before the submit are retried as usual.
 
-If a request ends before its task has finished (for example at `llm_request_timeout`), the task
+If a request ends before its task has finished (for example at `llm_stream_request_timeout` when
+the client sent `stream=true`, or at `llm_request_timeout` when it did not), the task
 keeps running at Bailian. Sending the same request again (same file, model and options, with the
 same API key) within 30 minutes picks up that task instead of paying again, on any channel that
 uses the same Bailian endpoint. This does not apply to audio given by URL, which always starts a

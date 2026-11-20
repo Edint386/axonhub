@@ -167,7 +167,7 @@ func streamingRequest(stream bool) func(context.Context, *httpclient.Request) (*
 
 // TestProcess_LongRunningJobIgnoresResponseTimeouts guards
 //
-//	streamFirstEventTimeout, nonStreamTimeout = jobResponseTimeouts(...) // fork: see no_retry_fork.go
+//	ctx, streamFirstEventTimeout, nonStreamTimeout = jobResponseTimeouts(...) // fork: see no_retry_fork.go
 //
 // in processRequest: a provider request marked MetadataLongRunningJob is not cut off by the
 // per-attempt response timeouts, while every other request still is.
@@ -192,6 +192,47 @@ func TestProcess_LongRunningJobIgnoresResponseTimeouts(t *testing.T) {
 			_, err = p.Process(context.Background(), &httpclient.Request{})
 			require.Error(t, err)
 			require.True(t, isResponseTimeoutError(err), "unmarked requests keep the timeouts: %v", err)
+		})
+	}
+}
+
+// TestProcess_LongRunningJobClearsStreamIdleTimeout guards the same hook: a MetadataLongRunningJob
+// attempt also disables the #2905 stream idle watchdog (WithStreamIdleTimeout 0), even when the
+// incoming request context carries the 600s server default. Unmarked streams still arm it.
+func TestProcess_LongRunningJobClearsStreamIdleTimeout(t *testing.T) {
+	watchdogArmed := func(ctx context.Context) bool {
+		streamCtx, _, stop := httpclient.NewStreamIdleContext(ctx)
+		stop()
+		return streamCtx != ctx
+	}
+
+	for _, longRunning := range []bool{true, false} {
+		t.Run(fmt.Sprintf("longRunning=%v", longRunning), func(t *testing.T) {
+			var armed *bool
+			executor := &mockExecutor{
+				doStream: func(ctx context.Context, _ *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
+					v := watchdogArmed(ctx)
+					armed = &v
+					return streams.SliceStream([]*httpclient.StreamEvent{{Type: "ok"}}), nil
+				},
+			}
+
+			inbound := &mockInbound{transformRequest: streamingRequest(true)}
+			p := NewFactory(executor).Pipeline(inbound, slowJobOutbound(longRunning))
+
+			ctx := httpclient.WithStreamIdleTimeout(context.Background(), 600*time.Second)
+			result, err := p.Process(ctx, &httpclient.Request{})
+			require.NoError(t, err)
+			require.NotNil(t, armed, "DoStream must run so the watchdog can be inspected")
+			if result.EventStream != nil {
+				require.NoError(t, result.EventStream.Close())
+			}
+
+			if longRunning {
+				require.False(t, *armed, "a long-running job must not arm the stream idle watchdog")
+			} else {
+				require.True(t, *armed, "unmarked streams must still use the configured idle timeout")
+			}
 		})
 	}
 }

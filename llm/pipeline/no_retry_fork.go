@@ -6,6 +6,7 @@ package pipeline
 // CUSTOM_BRANCH_RULES.md section 5.
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -23,7 +24,8 @@ var ErrNoRetry = errors.New("the attempt committed billed upstream work and must
 // its executor runs a whole long job inside one attempt (upload, submit and polling, a streamed
 // audio task, or a synchronous call that answers only after minutes, such as a transcription
 // that takes about twice the audio length). Such an attempt is not bounded by the per-attempt
-// response timeouts (stream_first_event_timeout, non_stream_response_timeout): cutting it off
+// response timeouts (stream_first_event_timeout, non_stream_response_timeout) or by the #2905
+// stream idle watchdog (llm_stream_idle_timeout / WithStreamIdleTimeout): cutting it off
 // would abandon a running, billed job and retry it elsewhere. The request context still bounds
 // it.
 const MetadataLongRunningJob = "axonhub_long_running_job"
@@ -34,11 +36,14 @@ func isNoRetryError(err error) bool {
 }
 
 // jobResponseTimeouts drops both response timeouts for a long-running job attempt and keeps
-// them for every other request.
-func jobResponseTimeouts(req *httpclient.Request, streamFirstEventTimeout, nonStreamTimeout time.Duration) (time.Duration, time.Duration) {
+// them for every other request. It also clears the #2905 stream idle watchdog on the context
+// that reaches HttpClient.DoStream (WithStreamIdleTimeout 0). Clearing it is harmless for
+// async/-message jobs, which never start the watchdog.
+func jobResponseTimeouts(ctx context.Context, req *httpclient.Request, streamFirstEventTimeout, nonStreamTimeout time.Duration) (context.Context, time.Duration, time.Duration) {
 	if req != nil && req.Metadata[MetadataLongRunningJob] == "true" {
-		return 0, 0
+		// custom: also disable llm_stream_idle_timeout / WithStreamIdleTimeout, see CUSTOM_BRANCH_RULES.md section 5.
+		return httpclient.WithStreamIdleTimeout(ctx, 0), 0, 0
 	}
 
-	return streamFirstEventTimeout, nonStreamTimeout
+	return ctx, streamFirstEventTimeout, nonStreamTimeout
 }
