@@ -38,7 +38,7 @@ test('the playground page mounts the ModelTrace check view (custom hook in index
 test('checks still send requests the way playground chat does', () => {
   const page = read('features/playground/index.tsx');
   const sync = 'upstream changed how playground chat calls the backend; sync model-trace/transport.ts';
-  assert.match(page, /api: '\/admin\/playground\/chat'/, sync);
+  assert.match(page, /api: appPath\('\/admin\/playground\/chat'\)/, sync);
   assert.match(page, /'X-Project-ID': selectedProjectId \|\| ''/, sync);
   assert.match(page, /headers\['X-Channel-ID'\] = selectedChannelRef\.current/, sync);
   assert.match(page, /const token = await ensureFreshAccessToken\(\);/, sync);

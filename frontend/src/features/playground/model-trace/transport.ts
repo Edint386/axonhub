@@ -3,6 +3,15 @@
 
 export const PLAYGROUND_CHAT_API = '/admin/playground/chat';
 
+// Same prefix as appPath() in lib/app-path.ts. This file is imported by node tests, so it cannot use the @/ alias.
+function playgroundChatUrl(): string {
+  const basePath = typeof document === 'undefined'
+    ? ''
+    : (document.querySelector<HTMLMetaElement>('meta[name="axonhub-base-path"]')?.content ?? '');
+  return `${basePath}${PLAYGROUND_CHAT_API}`;
+}
+
+
 export interface ProbeTarget {
   projectId?: string | null;
   // Set to pin the request to one channel (the playground's "channel" model source).
@@ -152,7 +161,7 @@ export async function sendPlaygroundProbe({ prompt, target, getToken, signal, on
   if (token) headers.Authorization = `Bearer ${token}`;
   if (target.channelId) headers['X-Channel-ID'] = target.channelId;
 
-  const response = await fetchImpl(PLAYGROUND_CHAT_API, {
+  const response = await fetchImpl(playgroundChatUrl(), {
     method: 'POST',
     credentials: 'include',
     headers,
