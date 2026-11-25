@@ -124,6 +124,7 @@ export function mergeChannelSettingsForUpdate(
     transformOptions: pick('transformOptions', existing?.transformOptions ?? undefined),
     passThroughUserAgent: pick('passThroughUserAgent', existing?.passThroughUserAgent ?? null),
     passThroughBody: pick('passThroughBody', existing?.passThroughBody ?? null),
+    preferResponsesWebSocket: pick('preferResponsesWebSocket', existing?.preferResponsesWebSocket ?? undefined),
     rateLimit: pick('rateLimit', existing?.rateLimit ?? null),
     // Leave an unloaded quota undefined so it is omitted and the backend keeps
     // the stored value; only an explicit patch value of null clears it.

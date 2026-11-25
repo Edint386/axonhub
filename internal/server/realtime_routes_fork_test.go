@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -48,4 +49,16 @@ func TestSetupRoutes_RegistersRealtimeRoutes(t *testing.T) {
 	for key, found := range want {
 		require.True(t, found, "route %s is missing: the registerRealtimeRoutes fork hook in routes.go was dropped", key)
 	}
+}
+
+func TestRealtimeRoutes_IncludeServerPluginMiddleware(t *testing.T) {
+	src, err := os.ReadFile("realtime_routes.go")
+	require.NoError(t, err)
+	code := string(src)
+
+	// Upstream #3069 added WithServerPluginMiddleware to apiMiddlewares and to
+	// the Codex common list (including Responses WebSocket). The custom
+	// realtime stacks copy those lists and must keep the same hook.
+	require.Contains(t, code, "middleware.WithAPIKeyConfig(services.AuthService, nil),\n\t\tmiddleware.WithServerPluginMiddleware(services.PluginManager),")
+	require.Contains(t, code, "middleware.WithStrictAPIKeyConfig(services.AuthService, nil),\n\t\t\tmiddleware.WithServerPluginMiddleware(services.PluginManager),")
 }

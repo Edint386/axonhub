@@ -233,6 +233,7 @@ type ChannelSettings {
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
   syncModelPrices: Boolean
+  preferResponsesWebSocket: Boolean
   rateLimit: ChannelRateLimit
   quota: APIKeyQuota
   """IANA timezone used by calendar-period channel quotas. Empty means the system timezone."""
@@ -362,6 +363,7 @@ input ChannelSettingsInput {
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
   syncModelPrices: Boolean
+  preferResponsesWebSocket: Boolean
   rateLimit: ChannelRateLimitInput
   quota: APIKeyQuotaInput
   quotaTimezone: String
@@ -395,6 +397,7 @@ input UpdateChannelSettingsInput {
   passThroughUserAgent: Boolean
   passThroughBody: Boolean
   syncModelPrices: Boolean
+  preferResponsesWebSocket: Boolean
   rateLimit: ChannelRateLimitInput
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
@@ -427,6 +430,7 @@ type ChannelRateLimit {
 }
 
 type ChannelCredentials {
+  isOAuth: Boolean!
   apiKey: String
   apiKeys: [String!]
   vertexApiKeys: [VertexAPIKey!]
@@ -804,6 +808,7 @@ type ChannelQuotaUsage {
 }
 
 input FetchModelsInput {
+  proxy: ProxyConfigInput
   channelType: String!
   baseURL: String!
   apiKey: String
@@ -816,8 +821,15 @@ type FetchModelsPayload {
   models: [ModelIdentify!]!
   error: String
   fallback: Boolean!
+  fallbackReason: ModelCatalogFallbackReason
   codexCatalogVersion: CodexCatalogVersion
   codexCatalogSkippedReason: String
+}
+
+enum ModelCatalogFallbackReason {
+  NO_CREDENTIALS
+  AUTHORIZATION
+  UNAVAILABLE
 }
 
 type CodexCatalogVersion {

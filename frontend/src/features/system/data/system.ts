@@ -1943,6 +1943,7 @@ export function useUpdateCatalogSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalogSettings'] });
       queryClient.invalidateQueries({ queryKey: ['providers-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['catalog-import'] });
       toast.success(i18n.t('common.success.systemUpdated'));
     },
     onError: () => {

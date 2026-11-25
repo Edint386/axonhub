@@ -31,7 +31,6 @@ import (
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/role"
-	"github.com/looplj/axonhub/internal/ent/system"
 	"github.com/looplj/axonhub/internal/ent/thread"
 	"github.com/looplj/axonhub/internal/ent/trace"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
@@ -138,14 +137,12 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
 	})
 	gqlSrv.Use(&loggingTracer{})
 	gqlSrv.AroundOperations(apiKeyReadOnly)
-	gqlSrv.Use(entgql.Transactioner{
-		TxOpener: deps.Ent,
-		// TestChannel performs long-running parallel provider requests whose database
-		// operations do not require one transaction. BulkImportChannels manages one
-		// transaction per row to preserve its partial-success behavior.
-		SkipTxFunc: skipGraphqlTransaction,
-	})
+	gqlSrv.Use(graphqlTransactions(deps.Ent))
 	gqlSrv.SetErrorPresenter(presentGraphqlError)
+
+	if deps.PluginManager != nil {
+		deps.PluginManager.SetGraphQLExecutor(newTaskGraphQLExecutor(schema, deps.Ent))
+	}
 
 	return &GraphqlHandler{
 		Graphql:       gqlSrv,
@@ -194,20 +191,46 @@ func newSchemaFromDeps(deps Dependencies) graphql.ExecutableSchema {
 	)
 }
 
-var (
-	skipTestChannelTransaction        = entgql.SkipOperations("TestChannel", "TestChannelAPIKeys")
-	skipActiveChannelProbeTransaction = entgql.SkipOperations("RunChannelHealthProbe")
-	skipBulkImportTransaction         = entgql.SkipIfHasFields("bulkImportChannels")
-	// checkProviderQuotas and resetChannelQuotaNow resolve into the quota
-	// service, whose channel writes go through its own client and would block
-	// on row locks the enclosing transaction holds. The reconciler uses its own
-	// client, so matching the selected fields keeps a client-chosen operation
-	// name from opting unrelated mutations in or out.
-	skipQuotaMutationsTransaction = entgql.SkipIfHasFields("checkProviderQuotas", "resetChannelQuotaNow")
-)
+// entgql's field skipper inspects only direct selections. Both transaction hooks
+// must use the same active root fields, including fragments and variable directives.
+type operationTransactions struct{ entgql.Transactioner }
 
-func skipGraphqlTransaction(op *ast.OperationDefinition) bool {
-	return skipTestChannelTransaction(op) || skipActiveChannelProbeTransaction(op) || skipBulkImportTransaction(op) || skipQuotaMutationsTransaction(op)
+func graphqlTransactions(db *ent.Client) operationTransactions {
+	return operationTransactions{entgql.Transactioner{TxOpener: db}}
+}
+
+func skipGraphqlTransaction(oc *graphql.OperationContext) bool {
+	op := oc.Operation
+	if op == nil || op.Operation != ast.Mutation {
+		return true
+	}
+	if op.Name == "TestChannel" || op.Name == "TestChannelAPIKeys" || op.Name == "RunChannelHealthProbe" {
+		return true
+	}
+	for _, f := range graphql.CollectFields(oc, op.SelectionSet, []string{"Mutation"}) {
+		switch f.Name {
+		case "bulkImportChannels", "applyCatalogImport", "checkProviderQuotas", "resetChannelQuotaNow", "runChannelHealthProbe":
+			return true
+		case "runPluginTask", "enablePlugin", "installPlugin", "installPluginFromMarket", "pluginTableOperation":
+			// Plugin tasks and storage operations manage their own transactions.
+			return true
+		}
+	}
+	return false
+}
+
+func (t operationTransactions) MutateOperationContext(ctx context.Context, oc *graphql.OperationContext) *gqlerror.Error {
+	if skipGraphqlTransaction(oc) {
+		return nil
+	}
+	return t.Transactioner.MutateOperationContext(ctx, oc)
+}
+
+func (t operationTransactions) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
+	if skipGraphqlTransaction(graphql.GetOperationContext(ctx)) {
+		return next(ctx)
+	}
+	return t.Transactioner.InterceptResponse(ctx, next)
 }
 
 func presentGraphqlError(ctx context.Context, err error) *gqlerror.Error {
@@ -254,18 +277,24 @@ func newPluginGraphqlHandler(schema graphql.ExecutableSchema, client *ent.Client
 	srv := handler.New(schema)
 	srv.AddTransport(transport.POST{})
 	srv.SetQueryCache(lru.New[*ast.QueryDocument](1024))
-	srv.Use(extension.FixedComplexityLimit(pluginGraphqlComplexityLimit))
-	srv.Use(&loggingTracer{})
-	srv.AroundOperations(rejectPluginGraphqlOperation)
-	srv.Use(entgql.Transactioner{
-		TxOpener:   client,
-		SkipTxFunc: skipGraphqlTransaction,
-	})
-	srv.SetErrorPresenter(presentGraphqlError)
+	configurePluginGraphQL(srv, client)
 	return &pluginGraphqlHTTPHandler{
 		handler: srv,
 		manager: manager,
 	}
+}
+
+func configurePluginGraphQL(srv interface {
+	Use(graphql.HandlerExtension)
+	AroundOperations(graphql.OperationMiddleware)
+	SetErrorPresenter(graphql.ErrorPresenterFunc)
+}, client *ent.Client,
+) {
+	srv.Use(extension.FixedComplexityLimit(pluginGraphqlComplexityLimit))
+	srv.Use(&loggingTracer{})
+	srv.AroundOperations(rejectPluginGraphqlOperation)
+	srv.Use(graphqlTransactions(client))
+	srv.SetErrorPresenter(presentGraphqlError)
 }
 
 // apiKeyReadOnly keeps service-account API keys read-only on the admin GraphQL
@@ -298,7 +327,6 @@ var guidTypeToNodeType = map[string]string{
 	ent.TypeRequest:                 request.Table,
 	ent.TypeRequestExecution:        requestexecution.Table,
 	ent.TypeRole:                    role.Table,
-	ent.TypeSystem:                  system.Table,
 	ent.TypeUsageLog:                usagelog.Table,
 	ent.TypeProject:                 project.Table,
 	ent.TypeUserProject:             userproject.Table,

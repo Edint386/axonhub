@@ -13,8 +13,8 @@ import {
 } from '@tabler/icons-react';
 import { BarChart3 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { usePermissions } from '@/hooks/usePermissions';
 import { useAuthStore } from '@/stores/authStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -149,11 +149,15 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                 {apiKey.status === 'archived' ? <IconCheck className='mr-2 h-4 w-4' /> : <IconArchive className='mr-2 h-4 w-4' />}
                 {apiKey.status === 'archived' ? t('common.buttons.restore') : t('common.buttons.archive')}
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleRotate(apiKey)}>
-                <IconRefresh className='mr-2 h-4 w-4' />
-                {t('apikeys.dialogs.rotate.title')}
-              </DropdownMenuItem>
+              {apiKey.key && apiKey.type !== 'noauth' && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleRotate(apiKey)}>
+                    <IconRefresh className='mr-2 h-4 w-4' />
+                    {t('apikeys.dialogs.rotate.title')}
+                  </DropdownMenuItem>
+                </>
+              )}
             </>
           )}
         </DropdownMenuContent>

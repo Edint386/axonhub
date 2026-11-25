@@ -166,6 +166,7 @@ config.schema.json
 *.db-wal
 .agent/
 .agents/summary
+/.agents/local/
 .factory
 .omo/
 .omc/

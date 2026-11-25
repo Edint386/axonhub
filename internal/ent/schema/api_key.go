@@ -51,7 +51,8 @@ func (APIKey) Fields() []ent.Field {
 			),
 		field.String("key").
 			Annotations(
-				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput),
+				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput, entgql.SkipWhereInput),
+				entgql.Directives(forceResolver()),
 			),
 		field.String("name").
 			Annotations(entgql.OrderField("NAME")),
